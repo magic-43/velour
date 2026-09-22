@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --color-gold: #c9a96e;
+  --color-gold-light: #e0c08a;
+  --color-ink: #090909;
+  --color-ink-light: #0d0c0a;
+  --color-border-subtle: #2a2a2a;
+  --color-paper: #f0ece4;
+  --color-muted: #888888;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Modern Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 10px;
+  transition: background 0.3s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c9a96e;
+}
+
+/* Hide scrollbar for elements with .no-scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Fade-up animations */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-1 { animation: fadeUp 0.5s ease forwards; animation-delay: 0.05s; opacity: 0; }
+.fade-2 { animation: fadeUp 0.5s ease forwards; animation-delay: 0.15s; opacity: 0; }
+.fade-3 { animation: fadeUp 0.5s ease forwards; animation-delay: 0.25s; opacity: 0; }
+.fade-4 { animation: fadeUp 0.5s ease forwards; animation-delay: 0.35s; opacity: 0; }
+
+/* Custom Apple Emoji Picker Overrides (in all areas) */
+aside.EmojiPickerReact.epr-main {
+  border: none !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  width: 100% !important;
+  box-shadow: none !important;
+}
+
+/* Remove category text label under the filter options (e.g. "Smileys & People") in all areas */
+aside.EmojiPickerReact .epr-emoji-category-label,
+aside.EmojiPickerReact h2.epr-emoji-category-label {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+aside.EmojiPickerReact {
+  --epr-category-label-height: 0px !important;
+  --epr-category-label-padding: 0px !important;
+  --epr-picker-border-radius: 0px !important;
+  --epr-bg-color: transparent !important;
+}
+
