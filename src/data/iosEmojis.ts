@@ -92,4 +92,75 @@ export const IOS_EMOJIS: IOSEmoji[] = [
   { char: '🦋', code: '1f98b', name: 'Butterfly', category: 'animals' },
   { char: '🌸', code: '1f338', name: 'Cherry Blossom', category: 'animals' },
   { char: '🌺', code: '1f33a', name: 'Hibiscus', category: 'animals' },
+
+  // Extra smileys & gestures
+  { char: '😢', code: '1f622', name: 'Crying Face', category: 'smileys' },
+  { char: '🤔', code: '1f914', name: 'Thinking Face', category: 'smileys' },
+  { char: '😴', code: '1f634', name: 'Sleeping Face', category: 'smileys' },
+  { char: '🤯', code: '1f92f', name: 'Exploding Head', category: 'smileys' },
+  { char: '🥵', code: '1f975', name: 'Hot Face', category: 'smileys' },
+  { char: '🥶', code: '1f976', name: 'Cold Face', category: 'smileys' },
+  { char: '😡', code: '1f621', name: 'Enraged Face', category: 'smileys' },
+  { char: '🤮', code: '1f92e', name: 'Vomiting Face', category: 'smileys' },
+  { char: '👎', code: '1f44e', name: 'Thumbs Down', category: 'gestures' },
+  { char: '🤞', code: '1f91e', name: 'Crossed Fingers', category: 'gestures' },
+  { char: '🤙', code: '1f919', name: 'Call Me Hand', category: 'gestures' },
+  { char: '👊', code: '1f44a', name: 'Oncoming Fist', category: 'gestures' },
+  { char: '👋', code: '1f44b', name: 'Waving Hand', category: 'gestures' },
+  { char: '🎯', code: '1f3af', name: 'Direct Hit', category: 'party' },
+  { char: '🚀', code: '1f680', name: 'Rocket', category: 'party' },
+  { char: '🏆', code: '1f3c6', name: 'Trophy', category: 'party' },
+  { char: '🥇', code: '1f947', name: '1st Place Medal', category: 'party' },
 ];
+
+export const EMOJI_CHAR_TO_CODE = new Map<string, string>([
+  ['❤️', '2764-fe0f'],
+  ['🔥', '1f525'],
+  ['👍', '1f44d'],
+  ['👎', '1f44e'],
+  ['🥰', '1f970'],
+  ['👏', '1f44f'],
+  ['😂', '1f602'],
+  ['😄', '1f604'],
+  ['🎉', '1f389'],
+  ['😮', '1f62e'],
+  ['😢', '1f622'],
+  ['💯', '1f4af'],
+  ['🤔', '1f914'],
+  ['🙏', '1f64f'],
+  ['👀', '1f440'],
+  ['✨', '2728'],
+  ['⚡', '26a1'],
+  ['🤩', '1f929'],
+  ['😍', '1f60d'],
+  ['😭', '1f62d'],
+  ['😎', '1f60e'],
+  ['🤤', '1f924'],
+  ['😏', '1f60f'],
+  ['🥳', '1f973'],
+  ['🥺', '1f97a'],
+  ['😜', '1f61c'],
+  ['🤫', '1f92b'],
+  ['💀', '1f480'],
+  ['🤡', '1f921'],
+  ['😈', '1f608'],
+  ['🫠', '1fae0'],
+  ['🙌', '1f64c'],
+  ['🫶', '1faf6'],
+  ['✌️', '270c-fe0f'],
+  ['💖', '1f496'],
+  ['💔', '1f494'],
+]);
+
+// Auto-populate all emojis from the list
+IOS_EMOJIS.forEach((item) => {
+  if (!EMOJI_CHAR_TO_CODE.has(item.char)) {
+    EMOJI_CHAR_TO_CODE.set(item.char, item.code);
+  }
+});
+
+export function getAppleEmojiUrlByChar(char: string): string | null {
+  const code = EMOJI_CHAR_TO_CODE.get(char);
+  return code ? getAppleEmojiUrl(code) : null;
+}
+

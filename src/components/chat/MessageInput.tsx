@@ -3,42 +3,179 @@ import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload } from 'lucide-react';
 import type { EmojiClickData } from 'emoji-picker-react';
 import EmojiKeyboardDrawer from './EmojiKeyboardDrawer';
 import VaultMediaPickerModal from './VaultMediaPickerModal';
+import ChatMediaEditorModal, { type ChatMediaSendData } from './ChatMediaEditorModal';
 import { useAuth } from '../../lib/AuthContext';
-import { encodeVaultMediaMessage, uploadVaultMedia, type VaultItem } from '../../lib/creatorVault';
+import { encodeVaultMediaMessage, uploadVaultMedia, generateBlurredThumbnail, type VaultItem } from '../../lib/creatorVault';
+import { uploadPublicFile } from '../../lib/r2';
+import { getCleanMessagePreview } from '../../lib/messageUtils';
 
 interface Props {
   onSend: (text: string) => void;
+  onSendMedia?: (optimisticContent: string, uploadFn: () => Promise<string | null>) => void;
+  onTyping?: (isTyping: boolean) => void;
   disabled?: boolean;
-  replyTo?: { senderName: string; content: string } | null;
+  replyTo?: {
+    senderName: string;
+    content: string;
+    messageType?: string;
+    thumbnailUrl?: string | null;
+  } | null;
   onCancelReply?: () => void;
 }
 
-export default function MessageInput({ onSend, disabled, replyTo, onCancelReply }: Props) {
+export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, replyTo, onCancelReply }: Props) {
   const { isCreator, profile } = useAuth();
   const [value, setValue] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showVaultPicker, setShowVaultPicker] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [selectedEditorFiles, setSelectedEditorFiles] = useState<File[]>([]);
+  const [showEditorModal, setShowEditorModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDeviceFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile) return;
-    try {
-      const item = await uploadVaultMedia(file, profile.id);
-      onSend(encodeVaultMediaMessage('', {
-        mediaUrl: item.mediaUrl,
-        mediaType: item.mediaType,
-        title: item.title,
-        durationSecs: item.durationSecs,
-      }));
-    } catch (err) {
-      console.error('Device upload failed:', err);
-      alert('Failed to upload file.');
-    } finally {
-      e.target.value = '';
-      setShowAttachmentMenu(false);
+  const handleDeviceFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setSelectedEditorFiles(files);
+    setShowEditorModal(true);
+    e.target.value = '';
+    setShowAttachmentMenu(false);
+  };
+
+  const handleEditorSend = (data: ChatMediaSendData) => {
+    if (data.items.length === 0) return;
+
+    const batchId =
+      data.items.length > 1
+        ? `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        : data.batchId;
+    const finalPrice = data.isLocked ? Math.max(5, data.price ?? 25) : undefined;
+
+    // 1. Build optimistic media payload immediately using local preview URLs
+    const optimisticItems = data.items.map((it) => ({
+      mediaUrl: it.previewUrl,
+      mediaType: it.mediaType,
+      title: it.caption,
+      thumbnailUrl: it.thumbnailUrl || it.previewUrl,
+      blurredThumbnailUrl: it.thumbnailUrl || it.previewUrl,
+    }));
+
+    const firstOptItem = optimisticItems[0];
+    const optimisticContent = encodeVaultMediaMessage(data.caption || '', {
+      mediaUrl: firstOptItem.mediaUrl,
+      mediaType: firstOptItem.mediaType,
+      title: firstOptItem.title,
+      thumbnailUrl: firstOptItem.thumbnailUrl,
+      blurredThumbnailUrl: firstOptItem.blurredThumbnailUrl,
+      price: finalPrice,
+      isLocked: data.isLocked,
+      batchId,
+      items: optimisticItems,
+    });
+
+    // 2. Define background upload worker that returns the confirmed DB content
+    const creatorId = profile?.id || 'creator';
+    const uploadFn = async (): Promise<string | null> => {
+      try {
+        const uploadedItems: Array<{
+          mediaUrl: string;
+          mediaType: 'image' | 'video';
+          thumbnailUrl?: string | null;
+          blurredThumbnailUrl?: string | null;
+          title?: string;
+          durationSecs?: number;
+        }> = [];
+
+        for (const item of data.items) {
+          let fileToUpload: File;
+
+          if (item.mediaType === 'image' && item.bakedBlob) {
+            fileToUpload = new File(
+              [item.bakedBlob],
+              `chat_img_${Date.now()}.webp`,
+              { type: 'image/webp' }
+            );
+          } else {
+            fileToUpload = item.file;
+          }
+
+          // Upload main media
+          const vaultItem = await uploadVaultMedia(
+            fileToUpload,
+            creatorId,
+            item.caption || fileToUpload.name,
+            finalPrice
+          );
+
+          // Upload video thumbnail to get a persistent URL
+          let persistentThumbUrl: string | null = vaultItem.thumbnailUrl ?? null;
+          if (item.mediaType === 'video' && item.thumbnailFile) {
+            try {
+              const thumbKey = `vault/${creatorId}/thumb_${Date.now()}.jpg`;
+              persistentThumbUrl = await uploadPublicFile(item.thumbnailFile, thumbKey);
+            } catch (thumbErr) {
+              console.warn('Could not upload video thumbnail:', thumbErr);
+            }
+          }
+
+          // Generate blurred thumbnail for locked content
+          let blurredThumbUrl: string | null = null;
+          if (data.isLocked) {
+            try {
+              const sourceForBlur =
+                item.mediaType === 'image' && item.bakedBlob
+                  ? item.bakedBlob
+                  : persistentThumbUrl || vaultItem.mediaUrl;
+              blurredThumbUrl = await generateBlurredThumbnail(sourceForBlur);
+            } catch (blurErr) {
+              console.warn('Could not generate blurred thumbnail:', blurErr);
+              blurredThumbUrl = persistentThumbUrl;
+            }
+          }
+
+          uploadedItems.push({
+            mediaUrl: vaultItem.mediaUrl,
+            mediaType: item.mediaType,
+            thumbnailUrl: persistentThumbUrl,
+            blurredThumbnailUrl: blurredThumbUrl ?? persistentThumbUrl,
+            title: item.caption || vaultItem.title,
+            durationSecs: vaultItem.durationSecs,
+          });
+        }
+
+        const firstItem = uploadedItems[0];
+        return encodeVaultMediaMessage(data.caption || '', {
+          mediaUrl: firstItem.mediaUrl,
+          mediaType: firstItem.mediaType,
+          title: firstItem.title,
+          thumbnailUrl: firstItem.thumbnailUrl,
+          blurredThumbnailUrl: firstItem.blurredThumbnailUrl,
+          price: finalPrice,
+          isLocked: data.isLocked,
+          durationSecs: firstItem.durationSecs,
+          batchId,
+          items: uploadedItems.map((it) => ({
+            mediaUrl: it.mediaUrl,
+            mediaType: it.mediaType,
+            title: it.title,
+            thumbnailUrl: it.thumbnailUrl,
+            blurredThumbnailUrl: it.blurredThumbnailUrl,
+            durationSecs: it.durationSecs,
+          })),
+        });
+      } catch (err) {
+        console.error('Background media upload failed:', err);
+        return null;
+      }
+    };
+
+    if (onSendMedia) {
+      onSendMedia(optimisticContent, uploadFn);
+    } else {
+      uploadFn().then((finalContent) => {
+        if (finalContent) onSend(finalContent);
+      });
     }
   };
 
@@ -98,21 +235,32 @@ export default function MessageInput({ onSend, disabled, replyTo, onCancelReply 
 
   const hasText = value.trim().length > 0;
 
+  const cleanReply = replyTo
+    ? getCleanMessagePreview(replyTo.content, replyTo.messageType)
+    : null;
+  const replyThumbnail = replyTo?.thumbnailUrl || cleanReply?.thumbnailUrl;
+
   return (
     <div className="relative border-t border-border-subtle/50 bg-[#141416] select-none safe-area-bottom">
       {/* Reply preview */}
-      {replyTo && (
-        <div className="flex items-start gap-2 pt-2 px-3 pl-4 border-l-2 border-gold/60 mx-3 mt-2 bg-white/5 rounded-r-xl py-1.5">
+      {replyTo && cleanReply && (
+        <div className="flex items-center gap-3 px-3 py-2 border-l-2 border-gold mx-3 mt-2 bg-white/5 rounded-r-xl">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-gold font-medium truncate">{replyTo.senderName}</p>
-            <p className="text-xs text-muted truncate">{replyTo.content}</p>
+            <p className="text-[0.72rem] text-gold font-semibold truncate">{replyTo.senderName}</p>
+            <p className="text-xs text-paper/80 truncate mt-0.5">{cleanReply.text}</p>
           </div>
+          {replyThumbnail && (
+            <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-neutral-900">
+              <img src={replyThumbnail} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
           {onCancelReply && (
             <button
               onClick={onCancelReply}
-              className="text-muted hover:text-paper transition-colors shrink-0 p-1"
+              className="text-muted hover:text-paper transition-colors shrink-0 p-1 rounded-full hover:bg-white/10"
+              aria-label="Cancel reply"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           )}
         </div>
@@ -125,7 +273,10 @@ export default function MessageInput({ onSend, disabled, replyTo, onCancelReply 
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              onTyping?.(e.target.value.length > 0);
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Message…"
             rows={1}
@@ -194,6 +345,7 @@ export default function MessageInput({ onSend, disabled, replyTo, onCancelReply 
         ref={fileInputRef}
         onChange={handleDeviceFileSelect}
         accept="video/*,image/*"
+        multiple
         className="hidden"
       />
 
@@ -231,6 +383,20 @@ export default function MessageInput({ onSend, disabled, replyTo, onCancelReply 
         onClose={() => setShowVaultPicker(false)}
         onSelect={handleVaultSelect}
       />
+
+      {/* Story Canvas Media Editor Modal for Chat Attachments */}
+      {showEditorModal && (
+        <ChatMediaEditorModal
+          isOpen={showEditorModal}
+          initialFiles={selectedEditorFiles}
+          isCreator={Boolean(isCreator)}
+          onClose={() => {
+            setShowEditorModal(false);
+            setSelectedEditorFiles([]);
+          }}
+          onSend={handleEditorSend}
+        />
+      )}
 
       {/* Sub-Input Emoji Layer (Image 4) - Rendered directly below the input area */}
       {showEmojiPicker && (

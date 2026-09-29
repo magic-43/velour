@@ -32,6 +32,8 @@ export interface CreatorProfile {
     username: string;
     display_name: string | null;
     avatar_url: string | null;
+    last_seen_at?: string | null;
+    role?: UserRole | string;
   };
 }
 
@@ -56,6 +58,7 @@ export interface Story {
   audience_type?: StoryAudienceType;
   audience_user_ids?: string[];
   is_hd?: boolean;
+  is_unavailable?: boolean;
 }
 
 export interface StoryWithCreator extends Story {
@@ -118,7 +121,8 @@ export interface ConversationWithParticipants extends Conversation {
 }
 
 export type MessageType = 'text' | 'attachment' | 'voice_note' | 'system';
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+/** DB values: 'sent' | 'delivered' | 'read'. 'sending' is frontend-only for optimistic UI. */
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 export interface Message {
   id: string;

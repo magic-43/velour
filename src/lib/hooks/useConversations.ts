@@ -47,7 +47,7 @@ export function useConversations() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetch();
@@ -55,7 +55,7 @@ export function useConversations() {
 
   // Realtime subscription — re-fetch on any conversation change
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const channelId = `conversations:${user.id}:${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
@@ -70,7 +70,7 @@ export function useConversations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetch]);
+  }, [user?.id, fetch]);
 
   // Helper: safely returns the "other participant" in a conversation
   const getOtherParticipant = useCallback((conv: ConversationWithParticipants) => {

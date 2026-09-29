@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Key, Wallet, Bookmark, Compass,
   Bell, Shield, Mail, LogOut, ChevronRight,
@@ -13,21 +13,43 @@ import AccountSwitcherModal from '../components/profile/AccountSwitcherModal';
 import CreatorVaultView from '../components/profile/CreatorVaultView';
 import StoryArchiveView from '../components/profile/StoryArchiveView';
 import FollowersListView from '../components/profile/FollowersListView';
+import FanVaultView from '../components/profile/FanVaultView';
+import FanSavedStoriesView from '../components/profile/FanSavedStoriesView';
+import FanFollowingView from '../components/profile/FanFollowingView';
+import CreatorStudioProfile from '../components/profile/CreatorStudioProfile';
 import { getVaultItems } from '../lib/creatorVault';
 
-type SubView = 'none' | 'vault' | 'saved' | 'archive' | 'followers';
+type SubView = 'none' | 'vault' | 'saved' | 'archive' | 'followers' | 'following';
 
 export default function Profile() {
   const { profile, signOut, isCreator, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [subView, setSubView] = useState<SubView>('none');
+  const rawTab = searchParams.get('tab') || searchParams.get('view');
+  const validTabs: SubView[] = ['vault', 'saved', 'archive', 'followers', 'following'];
+  const subView: SubView = (rawTab && validTabs.includes(rawTab as SubView))
+    ? (rawTab as SubView)
+    : 'none';
+
+  const setSubView = (view: SubView) => {
+    if (view === 'none') {
+      if (window.history.state && window.history.state.idx > 0) {
+        navigate(-1);
+      } else {
+        setSearchParams({}, { replace: true });
+      }
+    } else {
+      setSearchParams({ tab: view });
+    }
+  };
   const [vaultCount, setVaultCount] = useState<number>(0);
   const [followingCount, setFollowingCount] = useState<number>(0);
   const [followersCount, setFollowersCount] = useState<number>(0);
   const [archiveCount, setArchiveCount] = useState<number>(0);
   const [savedCount, setSavedCount] = useState<number>(0);
+  const [totalViews, setTotalViews] = useState<number>(0);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [switcherOpen, setSwitcherOpen] = useState<boolean>(false);
 
@@ -67,17 +89,36 @@ export default function Profile() {
             .in('creator_profile_id', targetIds);
 
           if (typeof sCount === 'number') setArchiveCount(sCount);
+
+          // 5. Total story views
+          const { data: viewsData } = await supabase
+            .from('stories')
+            .select('view_count')
+            .in('creator_profile_id', targetIds);
+
+          if (viewsData) {
+            const sum = viewsData.reduce((acc, curr) => acc + (curr.view_count || 0), 0);
+            setTotalViews(sum);
+          }
         } else {
-          // Vault items (verified attachment unlocks for fans)
+          // 1. Vault items (verified attachment unlocks for fans + local unlocks)
           const { count: vCount } = await supabase
             .from('attachment_unlocks')
             .select('*', { count: 'exact', head: true })
             .eq('fan_id', currentUserId)
             .eq('status', 'verified');
 
-          if (typeof vCount === 'number') setVaultCount(vCount);
+          let localVaultCount = 0;
+          try {
+            const raw = localStorage.getItem(`velour_unlocked_media_${currentUserId}`);
+            if (raw) localVaultCount = JSON.parse(raw).length;
+          } catch {
+            localVaultCount = 0;
+          }
 
-          // Following / connected conversations for fans
+          setVaultCount(Math.max(vCount || 0, localVaultCount));
+
+          // 2. Following / connected conversations for fans
           const { count: fCount } = await supabase
             .from('conversations')
             .select('*', { count: 'exact', head: true })
@@ -85,7 +126,24 @@ export default function Profile() {
 
           if (typeof fCount === 'number') setFollowingCount(fCount);
 
-          setSavedCount(0);
+          // 3. Saved stories count from localStorage & Supabase reactions
+          const localKey = `saved_stories_${currentUserId}`;
+          let localSavedIds: string[] = [];
+          try {
+            localSavedIds = JSON.parse(localStorage.getItem(localKey) || '[]');
+          } catch {
+            localSavedIds = [];
+          }
+
+          const { data: dbReactions } = await supabase
+            .from('story_reactions')
+            .select('story_id')
+            .eq('user_id', currentUserId)
+            .eq('reaction_type', 'bookmark');
+
+          const dbSavedIds = (dbReactions || []).map((r) => r.story_id);
+          const allSavedIds = Array.from(new Set([...localSavedIds, ...dbSavedIds]));
+          setSavedCount(allSavedIds.length);
         }
       } catch (err) {
         console.error('Error fetching profile stats:', err);
@@ -150,53 +208,10 @@ export default function Profile() {
     }
 
     return (
-      <div className="px-4 sm:px-5 pt-0 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
-        {/* Header matching Stories/Home page */}
-        <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSubView('none')}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink-light text-muted hover:text-paper transition-colors cursor-pointer"
-              aria-label="Back to profile"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <h3 className="text-sm font-medium text-muted tracking-wide uppercase">The Vault</h3>
-          </div>
-          {vaultCount > 0 && (
-            <span className="text-[11px] text-muted tracking-tight">
-              {vaultCount} {vaultCount === 1 ? 'item' : 'items'}
-            </span>
-          )}
-        </div>
-
-        {vaultCount === 0 ? (
-          <div className="py-20 flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-muted mb-3.5">
-              <Key size={22} strokeWidth={1.5} />
-            </div>
-            <h4 className="font-medium text-sm text-paper mb-1">
-              Your Vault is empty
-            </h4>
-            <p className="text-muted text-xs max-w-xs mb-5 leading-relaxed">
-              Exclusive photos, videos, and private collections unlocked in chats will be archived here.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/explore')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gold hover:bg-gold-light text-ink text-xs font-semibold tracking-wide transition-all shadow-sm cursor-pointer"
-            >
-              <Compass size={14} />
-              <span>Discover Creators</span>
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {/* Real items will render here when attachments phase lands */}
-          </div>
-        )}
-      </div>
+      <FanVaultView
+        onBack={() => setSubView('none')}
+        onCountChange={(c) => setVaultCount(c)}
+      />
     );
   }
 
@@ -210,53 +225,40 @@ export default function Profile() {
     return <FollowersListView onBack={() => setSubView('none')} />;
   }
 
-  // ── SUBVIEW: Saved Stories ──────────────────────────────────────────────────
+  // ── SUBVIEW: Following List (Fans) ──────────────────────────────────────────
+  if (subView === 'following') {
+    return <FanFollowingView onBack={() => setSubView('none')} />;
+  }
+
+  // ── SUBVIEW: Saved Stories (Fans) ───────────────────────────────────────────
   if (subView === 'saved') {
     return (
-      <div className="px-4 sm:px-5 pt-0 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
-        {/* Header matching Stories/Home page */}
-        <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSubView('none')}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink-light text-muted hover:text-paper transition-colors cursor-pointer"
-              aria-label="Back to profile"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <h3 className="text-sm font-medium text-muted tracking-wide uppercase">Saved Stories</h3>
-          </div>
-          {savedCount > 0 && (
-            <span className="text-[11px] text-muted tracking-tight">
-              {savedCount} {savedCount === 1 ? 'story' : 'stories'}
-            </span>
-          )}
-        </div>
-
-        <div className="py-20 flex flex-col items-center justify-center text-center">
-          <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-muted mb-3.5">
-            <Bookmark size={22} strokeWidth={1.5} />
-          </div>
-          <h4 className="font-medium text-sm text-paper mb-1">
-            No saved stories yet
-          </h4>
-          <p className="text-muted text-xs max-w-xs mb-5 leading-relaxed">
-            Bookmark memorable creator moments from the feed to preserve and replay them anytime.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gold hover:bg-gold-light text-ink text-xs font-semibold tracking-wide transition-all shadow-sm cursor-pointer"
-          >
-            <span>Browse Stories</span>
-          </button>
-        </div>
-      </div>
+      <FanSavedStoriesView
+        onBack={() => setSubView('none')}
+        onCountChange={(c) => setSavedCount(c)}
+      />
     );
   }
 
-  // ── MAIN TELEGRAM-STYLE PROFILE VIEW ─────────────────────────────────────────
+  // ── CREATOR STUDIO PROFILE VIEW (Snapchat / Creator Studio Style) ───────────
+  if (isCreator) {
+    return (
+      <CreatorStudioProfile
+        profile={profile}
+        followersCount={followersCount}
+        archiveCount={archiveCount}
+        vaultCount={vaultCount}
+        totalViews={totalViews}
+        onPhotoUpload={handlePhotoUpload}
+        fileInputRef={fileInputRef}
+        onOpenVault={() => setSubView('vault')}
+        onOpenArchive={() => setSubView('archive')}
+        onOpenFollowers={() => setSubView('followers')}
+      />
+    );
+  }
+
+  // ── MAIN TELEGRAM-STYLE FAN PROFILE VIEW ────────────────────────────────────
   return (
     <div className="px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
       <input
@@ -383,7 +385,7 @@ export default function Profile() {
               icon={<Compass size={15} />}
               label="Following"
               badge={followingCount > 0 ? `${followingCount}` : undefined}
-              onClick={() => navigate('/explore')}
+              onClick={() => setSubView('following')}
             />
           </>
         )}
@@ -414,7 +416,7 @@ export default function Profile() {
               <Check size={12} /> Set
             </span>
           ) : 'Not set'}
-          onClick={() => navigate('/settings/account')}
+          onClick={() => navigate('/settings/recovery-email')}
         />
       </div>
 

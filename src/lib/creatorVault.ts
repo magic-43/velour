@@ -14,6 +14,18 @@ export interface VaultItem {
   createdAt: string;
 }
 
+export interface VaultMediaItemPayload {
+  id?: string;
+  mediaUrl: string;
+  mediaType: 'video' | 'image';
+  title?: string;
+  thumbnailUrl?: string | null;
+  blurredThumbnailUrl?: string | null;
+  durationSecs?: number;
+  fileName?: string;
+  fileSize?: number;
+}
+
 export interface VaultMediaPayload {
   version: 1;
   type: 'vault_media';
@@ -21,9 +33,12 @@ export interface VaultMediaPayload {
   mediaType: 'video' | 'image';
   title?: string;
   thumbnailUrl?: string | null;
+  blurredThumbnailUrl?: string | null;
   price?: number;
   isLocked?: boolean;
   durationSecs?: number;
+  batchId?: string;
+  items?: VaultMediaItemPayload[];
 }
 
 const STORAGE_PREFIX = 'velour:vault:';
@@ -145,12 +160,30 @@ export function encodeVaultMediaMessage(
     type: 'vault_media',
     ...payload,
   };
-  const prefix = text?.trim() ? `${text.trim()}\n` : '';
-  return `${prefix}<!--vault-media:${JSON.stringify(data)}-->`;
+
+  const isLocked = Boolean(payload.isLocked);
+  const price = payload.price || 10;
+  const itemCount = payload.items && payload.items.length > 1 ? payload.items.length : 1;
+  const isVideo = payload.mediaType === 'video';
+
+  const cleanText = text?.trim() || '';
+  return cleanText
+    ? `${cleanText}\n<!--vault-media:${JSON.stringify(data)}-->`
+    : `<!--vault-media:${JSON.stringify(data)}-->`;
+}
+
+function isSystemGeneratedMediaLabel(str: string): boolean {
+  const s = str.trim();
+  if (!s) return true;
+  if (s === '📷 Photo' || s === '🎥 Video' || s === 'Photo' || s === 'Video') return true;
+  if (/^📷\s*Photos\s*\(\d+\)$/.test(s)) return true;
+  if (/^🔒\s*Locked\s*(Photo|Video|Bundle).*$/i.test(s)) return true;
+  return false;
 }
 
 /**
  * Decodes message content to detect if it contains a shared vault media attachment.
+ * Supports complete JSON comments, prepended text, and truncated previews from Postgres left(100).
  */
 export function parseVaultMediaMessage(content: string | null | undefined): {
   isVaultMedia: boolean;
@@ -158,14 +191,87 @@ export function parseVaultMediaMessage(content: string | null | undefined): {
   media: VaultMediaPayload | null;
 } {
   if (!content) return { isVaultMedia: false, text: '', media: null };
-  const match = content.match(/<!--vault-media:(.*?)-->/);
-  if (!match) return { isVaultMedia: false, text: content, media: null };
 
-  try {
-    const media = JSON.parse(match[1]) as VaultMediaPayload;
-    const text = content.replace(/<!--vault-media:.*?-->/, '').trim();
-    return { isVaultMedia: true, text, media };
-  } catch {
-    return { isVaultMedia: false, text: content, media: null };
+  // 1. Complete comment match
+  const match = content.match(/<!--vault-media:(.*?)-->/);
+  if (match) {
+    try {
+      const media = JSON.parse(match[1]) as VaultMediaPayload;
+      const rawText = content.replace(/<!--vault-media:[\s\S]*?-->/, '').trim();
+      const text = isSystemGeneratedMediaLabel(rawText) ? '' : rawText;
+      return { isVaultMedia: true, text, media };
+    } catch {
+      // Fall through to regex-based extraction
+    }
   }
+
+  // 2. Truncated comment match (e.g. from Postgres left(100))
+  if (content.includes('<!--vault-media:')) {
+    const isLockedMatch = content.match(/"isLocked"\s*:\s*(true|false)/);
+    const priceMatch = content.match(/"price"\s*:\s*(\d+)/);
+    const typeMatch = content.match(/"mediaType"\s*:\s*"([^"]+)"/);
+    const titleMatch = content.match(/"title"\s*:\s*"([^"]+)"/);
+    const mediaUrlMatch = content.match(/"mediaUrl"\s*:\s*"([^"]+)"/);
+
+    const isLocked = isLockedMatch ? isLockedMatch[1] === 'true' : false;
+    const price = priceMatch ? parseInt(priceMatch[1], 10) : undefined;
+    const mediaType = (typeMatch && typeMatch[1] === 'video') ? 'video' : 'image';
+    const rawText = content.replace(/<!--[\s\S]*$/, '').trim();
+    const text = isSystemGeneratedMediaLabel(rawText) ? '' : rawText;
+
+    return {
+      isVaultMedia: true,
+      text,
+      media: {
+        version: 1,
+        type: 'vault_media',
+        mediaUrl: mediaUrlMatch ? mediaUrlMatch[1] : '',
+        mediaType,
+        title: titleMatch ? titleMatch[1] : undefined,
+        isLocked,
+        price,
+      },
+    };
+  }
+
+  return { isVaultMedia: false, text: content, media: null };
+}
+
+/**
+ * Generates a blurred thumbnail data URL from an image file or video frame.
+ */
+export async function generateBlurredThumbnail(
+  fileOrUrl: File | Blob | string,
+  blurRadius = 24
+): Promise<string> {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return resolve('');
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    const url = typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl);
+
+    img.onload = () => {
+      if (typeof fileOrUrl !== 'string') {
+        URL.revokeObjectURL(url);
+      }
+      ctx.filter = `blur(${blurRadius}px)`;
+      ctx.drawImage(img, -10, -10, 180, 180);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+
+    img.onerror = () => {
+      if (typeof fileOrUrl !== 'string') {
+        URL.revokeObjectURL(url);
+      }
+      resolve('');
+    };
+
+    img.src = url;
+  });
 }

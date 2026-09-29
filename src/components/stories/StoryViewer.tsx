@@ -405,14 +405,14 @@ export default function StoryViewer({
           )}
 
           {/* Buffering Spinner: Subtle glowing gold ring */}
-          {((currentStory.media_type === 'image' && !imageLoaded) || isVideoBuffering) && !loadTimeout && !loadError && (
+          {!currentStory?.is_unavailable && ((currentStory.media_type === 'image' && !imageLoaded) || isVideoBuffering) && !loadTimeout && !loadError && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="w-12 h-12 rounded-full border-[2.5px] border-white/20 border-t-gold animate-spin backdrop-blur-[2px] bg-black/30 shadow-xl" />
             </div>
           )}
 
           {/* Timeout or Error: Poor Connection Retry UI */}
-          {(loadTimeout || loadError) && (
+          {!currentStory?.is_unavailable && (loadTimeout || loadError) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 z-25 p-6 text-center animate-fade-in">
               <p className="text-paper text-sm font-medium drop-shadow">
                 {loadError ? 'Failed to load story' : 'Poor network connection'}

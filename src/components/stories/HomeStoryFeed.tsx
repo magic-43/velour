@@ -469,8 +469,8 @@ export default function HomeStoryFeed({
       };
     }
 
-    // Photo Timer Gating: Only tick after imageLoaded is true
-    if (!imageLoaded) return;
+    // Photo Timer Gating: Only tick after imageLoaded is true (or if story is unavailable)
+    if (!imageLoaded && !mediaStory?.is_unavailable) return;
 
     const startedAt = performance.now() - (progressRef.current / 100) * imageDuration;
     imageTimerRef.current = window.setInterval(() => {
@@ -491,7 +491,7 @@ export default function HomeStoryFeed({
         window.clearInterval(imageTimerRef.current);
       }
     };
-  }, [currentSessionIndex, currentSlideIndex, currentSlide, isTransition, mediaStory?.media_type, isPaused, isMuted, imageLoaded]);
+  }, [currentSessionIndex, currentSlideIndex, currentSlide, isTransition, mediaStory?.media_type, mediaStory?.is_unavailable, isPaused, isMuted, imageLoaded]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1057,13 +1057,15 @@ export default function HomeStoryFeed({
               </div>
               <div className="flex items-center gap-1.5">
                 <p className="text-[0.72rem] text-white/75 truncate">
-                  {isOwner
+                  {mediaStory?.is_unavailable
+                    ? 'Unavailable'
+                    : isOwner
                     ? 'Your story'
                     : mediaStory?.media_type === 'video'
                     ? 'Video story'
                     : 'Photo story'}
                 </p>
-                {mediaStory?.is_hd && (
+                {mediaStory?.is_hd && !mediaStory?.is_unavailable && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-white/20 border border-white/30 text-white shadow-sm leading-none">
                     HD
                   </span>
@@ -1189,6 +1191,12 @@ export default function HomeStoryFeed({
                 </p>
               )}
             </div>
+          ) : mediaStory?.is_unavailable ? (
+            <div className="relative w-full h-full flex flex-col items-center justify-center bg-black px-6 text-center select-none">
+              <p className="text-white/60 text-sm font-medium tracking-wide">
+                Story not available
+              </p>
+            </div>
           ) : mediaStory?.media_type === 'video' ? (
             videoErrored ? (
               mediaStory.thumbnail_url ? (
@@ -1260,6 +1268,7 @@ export default function HomeStoryFeed({
 
           {/* Buffering Spinner: Subtle glowing gold ring */}
           {!isTransition &&
+            !mediaStory?.is_unavailable &&
             ((mediaStory?.media_type === 'image' && !imageLoaded) || isVideoBuffering) &&
             !loadTimeout &&
             !videoErrored && (
@@ -1269,7 +1278,7 @@ export default function HomeStoryFeed({
             )}
 
           {/* Timeout or Error: Poor Connection Retry UI */}
-          {!isTransition && (loadTimeout || videoErrored) && (
+          {!isTransition && !mediaStory?.is_unavailable && (loadTimeout || videoErrored) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 z-[25] p-6 text-center animate-fade-in">
               <p className="text-white text-sm font-medium drop-shadow">
                 {videoErrored ? 'Failed to load video' : 'Poor network connection'}
@@ -1300,8 +1309,12 @@ export default function HomeStoryFeed({
         </div>
 
         {/* Ambient Overlay Gradients */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_28%),rgba(0,0,0,0.12)] z-[1]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 z-[1]" />
+        {!mediaStory?.is_unavailable && (
+          <>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_28%),rgba(0,0,0,0.12)] z-[1]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 z-[1]" />
+          </>
+        )}
 
         {/* Tap zones: left 1/3 prev, right 1/3 next, center 1/3 pause/double-tap heart */}
         <button
@@ -1338,7 +1351,7 @@ export default function HomeStoryFeed({
         ))}
 
         {/* Bottom Section: Caption & Social Reply Bar (matching media_1789906282506.png) */}
-        {!isTransition && (
+        {!isTransition && !mediaStory?.is_unavailable && (
           <div className="absolute inset-x-0 bottom-0 z-[10] p-4 sm:p-5 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] flex flex-col gap-2.5 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-auto">
             {/* Story Caption (Centered above reply bar as in Instagram/WhatsApp stories) */}
             {mediaStory?.caption && (

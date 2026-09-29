@@ -21,7 +21,13 @@ export default function Wallet() {
         <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-6 flex items-center gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/me');
+              }
+            }}
             className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors cursor-pointer"
             aria-label="Back"
           >

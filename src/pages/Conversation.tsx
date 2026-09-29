@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ConversationList from '../components/chat/ConversationList';
 import ChatWindow from '../components/chat/ChatWindow';
@@ -19,6 +19,17 @@ export default function Conversation() {
   const [directConv, setDirectConv] = useState<ConversationWithParticipants | null>(null);
   const [directLoading, setDirectLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+
+  // Reset refs when conversationId changes
+  const prevConvIdRef = useRef<string | undefined>(conversationId);
+  const lastOtherRef = useRef<ReturnType<typeof getOtherParticipant> | null>(null);
+
+  if (prevConvIdRef.current !== conversationId) {
+    prevConvIdRef.current = conversationId;
+    lastOtherRef.current = null;
+    setDirectConv(null);
+    setNotFound(false);
+  }
 
   // Find the conversation to get the other participant's info
   const conv = conversations.find(c => c.id === conversationId);
@@ -75,10 +86,27 @@ export default function Conversation() {
     };
   }, [conversationId, conv, refresh]);
 
-  if (!conversationId) return null;
-
   const activeConv = conv || directConv;
-  const other = activeConv ? getOtherParticipant(activeConv) : null;
+  const other = useMemo(() => {
+    return activeConv ? getOtherParticipant(activeConv) : null;
+  }, [
+    activeConv?.id,
+    activeConv?.fan_id,
+    activeConv?.creator_profile_id,
+    activeConv?.fan?.avatar_url,
+    activeConv?.creator_profile?.avatar_url,
+    activeConv?.fan?.display_name,
+    activeConv?.creator_profile?.display_name,
+    activeConv?.fan?.last_seen_at,
+    getOtherParticipant,
+  ]);
+
+  if (other) {
+    lastOtherRef.current = other;
+  }
+  const effectiveOther = other || lastOtherRef.current;
+
+  if (!conversationId) return null;
 
   return (
     <div className="flex flex-1 h-full overflow-hidden">
@@ -89,11 +117,17 @@ export default function Conversation() {
 
       {/* Right panel — chat window */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {other ? (
+        {effectiveOther ? (
           <ChatWindow
             conversationId={conversationId}
-            other={other}
-            onBack={() => navigate('/messages')}
+            other={effectiveOther}
+            onBack={() => {
+              if (window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/messages');
+              }
+            }}
           />
         ) : notFound ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-ink">
@@ -103,10 +137,16 @@ export default function Conversation() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/messages')}
+              onClick={() => {
+                if (window.history.state && window.history.state.idx > 0) {
+                  navigate(-1);
+                } else {
+                  navigate('/messages');
+                }
+              }}
               className="px-5 py-2.5 bg-gold text-ink text-xs font-semibold uppercase tracking-wider rounded-full hover:bg-gold-light transition-colors"
             >
-              Back to Messages
+              Back
             </button>
           </div>
         ) : (

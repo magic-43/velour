@@ -22,6 +22,7 @@ body,
 html,
 body {
   overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -29,6 +30,7 @@ body {
   color: var(--color-paper);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -webkit-touch-callout: none;
 }
 
 input,
@@ -76,6 +78,27 @@ select {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Typing indicator dot bounce */
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
+  30%           { transform: translateY(-5px);  opacity: 1;   }
+}
+
+/* Flash highlight when jumping to a replied-to message */
+@keyframes replyHighlight {
+  0% {
+    background-color: rgba(201, 169, 110, 0.35);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.reply-highlight {
+  animation: replyHighlight 1.5s ease-out;
+  border-radius: 1rem;
 }
 
 .fade-1 { animation: fadeUp 0.5s ease forwards; animation-delay: 0.05s; opacity: 0; }

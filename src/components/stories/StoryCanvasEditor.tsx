@@ -21,6 +21,7 @@ import {
   Minus,
   Plus,
   Maximize2,
+  Lock,
 } from 'lucide-react';
 import StickerModal, { MiniAnalogClock } from './StickerModal';
 
@@ -77,6 +78,10 @@ interface StoryCanvasEditorProps {
   onClose: () => void;
   onCropModeChange?: (isCrop: boolean) => void;
   onOverlayEditingChange?: (isEditing: boolean) => void;
+  isLockable?: boolean;
+  isLocked?: boolean;
+  lockPrice?: number;
+  onToggleLock?: () => void;
 }
 
 const COLOR_PALETTE = [
@@ -205,6 +210,10 @@ export default function StoryCanvasEditor({
   onClose,
   onCropModeChange,
   onOverlayEditingChange,
+  isLockable,
+  isLocked,
+  lockPrice,
+  onToggleLock,
 }: StoryCanvasEditorProps) {
   const mediaContainerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -1188,7 +1197,23 @@ export default function StoryCanvasEditor({
             <Pencil size={18} />
           </button>
 
-          {/* 5. Download Copy (Desktop only) */}
+          {/* 5. Lock (Paywall) Option for Chat Attachments */}
+          {isLockable && (
+            <button
+              type="button"
+              onClick={onToggleLock}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-all shadow-md ${
+                isLocked
+                  ? 'bg-gold text-ink font-bold shadow-lg scale-105 ring-2 ring-gold/50'
+                  : 'bg-black/50 text-white/90 hover:bg-black/70 hover:scale-105 active:scale-95'
+              }`}
+              title={isLocked ? `Locked ($${lockPrice || 0})` : 'Lock content (Paywall)'}
+            >
+              <Lock size={18} strokeWidth={2.4} />
+            </button>
+          )}
+
+          {/* 6. Download Copy (Desktop only) */}
           <button
             type="button"
             onClick={onDownload}

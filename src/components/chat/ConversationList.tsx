@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
+import { Search, X, Check, CheckCheck, Lock, Camera, Video } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useConversations } from '../../lib/hooks/useConversations';
-import { formatStoryPreviewText } from '../../lib/storyReplies';
+import { useIsOtherTyping } from '../../lib/hooks/useIsOtherTyping';
+import { parseConversationPreview } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
 import type { ConversationWithParticipants } from '../../types';
 
@@ -129,82 +130,197 @@ export default function ConversationList() {
             </p>
           </div>
         ) : (
-          filtered.map(conv => {
-            const other = getOtherParticipant(conv);
-            const unread = getUnread(conv);
-            const isActive = conv.id === activeId;
-            const isFromMe = conv.last_message_sender_id === user?.id;
-            const previewInfo = formatStoryPreviewText(conv.last_message_preview);
-
-            return (
-              <button
-                key={conv.id}
-                onClick={() => openConversation(conv)}
-                className={`w-full text-left flex items-center gap-3 p-2.5 transition-colors rounded-xl border border-transparent
-                  ${isActive ? 'bg-ink-light border-border-subtle' : 'hover:bg-ink-light/40'}`}
-              >
-                {/* Avatar */}
-                <div className="relative shrink-0">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-ink border border-border-subtle">
-                    {other?.avatar_url
-                      ? <img src={other.avatar_url} alt={other.name || 'User'} className="w-full h-full object-cover" />
-                      : <span className="w-full h-full flex items-center justify-center text-gold font-serif text-lg">
-                          {(other?.name || '?').charAt(0).toUpperCase()}
-                        </span>
-                    }
-                  </div>
-                  {isOnline(other.last_seen_at) && (
-                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-ink" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex justify-between items-center mb-0.5">
-                    <p className="text-[0.9rem] font-medium text-paper truncate">{other?.name || 'User'}</p>
-                    <p className="text-[0.62rem] text-muted shrink-0 ml-1">
-                      {formatMessageTime(conv.last_message_at)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {/* Preview */}
-                    <div className={`text-[0.75rem] truncate flex-1 flex items-center gap-1.5 min-w-0 ${
-                      unread > 0 ? 'text-paper font-medium' : isActive ? 'text-gold' : 'text-muted'
-                    }`}>
-                      {isFromMe && <span className="text-muted shrink-0">You: </span>}
-                      {previewInfo.isStory && (
-                        <StoryStatusIcon size={13} className="text-emerald-400 shrink-0 inline" />
-                      )}
-                      <span className="truncate">{previewInfo.text}</span>
-                    </div>
-
-                    {/* Read receipt on own last message (no unread) */}
-                    {isFromMe && unread === 0 && conv.last_message_preview && (
-                      <ReadReceiptMini conversationId={conv.id} />
-                    )}
-
-                    {/* Unread badge */}
-                    {unread > 0 && (
-                      <span className="shrink-0 min-w-5 h-5 px-1 rounded-full bg-gold text-ink text-[0.6rem] font-bold flex items-center justify-center">
-                        {unread > 9 ? '9+' : unread}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })
+          filtered.map(conv => (
+            <ConversationRow
+              key={conv.id}
+              conv={conv}
+              isActive={conv.id === activeId}
+              user={user}
+              getOtherParticipant={getOtherParticipant}
+              getUnread={getUnread}
+              onOpen={openConversation}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-// Mini read receipt for the conversation list row
-// We just show a double tick if the other person has read our last message
-function ReadReceiptMini({ conversationId }: { conversationId: string }) {
-  // In Phase 5 placeholder — real implementation uses messages hook
-  // We'll rely on the last_message_sender_id + status coming from the conv query in Phase 6
-  return null;
+// ── ConversationRow ───────────────────────────────────────────────────────────
+// Extracted so useIsOtherTyping can be called as a hook per row.
+
+interface RowProps {
+  conv: ConversationWithParticipants;
+  isActive: boolean;
+  user: { id: string } | null;
+  getOtherParticipant: (conv: ConversationWithParticipants) => {
+    id: string; name: string; username: string; avatar_url: string | null; last_seen_at: string | null;
+  };
+  getUnread: (conv: ConversationWithParticipants) => number;
+  onOpen: (conv: ConversationWithParticipants) => void;
+}
+
+function parseReactionPreview(text: string | null): { isReaction: boolean; emoji?: string; detail?: string } {
+  if (!text) return { isReaction: false };
+  const match = text.match(/^([\p{Emoji_Presentation}\p{Extended_Pictographic}❤️🔥👍👎🥰👏😄🎉😮😢💯🤔🙏👀✨⚡🤩]+)\s+Reacted to:(.*)$/u);
+  if (match) {
+    return {
+      isReaction: true,
+      emoji: match[1],
+      detail: match[2].trim(),
+    };
+  }
+  return { isReaction: false };
+}
+
+function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread, onOpen }: RowProps) {
+  const other = getOtherParticipant(conv);
+  const unread = getUnread(conv);
+  const isFromMe = conv.last_message_sender_id === user?.id;
+  const preview = parseConversationPreview(conv.last_message_preview);
+  const otherIsTyping = useIsOtherTyping(conv.id);
+
+  return (
+    <button
+      onClick={() => onOpen(conv)}
+      className={`w-full text-left flex items-center gap-3 p-2.5 transition-colors rounded-xl border border-transparent
+        ${isActive ? 'bg-ink-light border-border-subtle' : 'hover:bg-ink-light/40'}`}
+    >
+      {/* Avatar */}
+      <div className="relative shrink-0">
+        <div className="w-12 h-12 rounded-full overflow-hidden bg-ink border border-border-subtle">
+          {other?.avatar_url
+            ? <img src={other.avatar_url} alt={other.name || 'User'} className="w-full h-full object-cover" />
+            : <span className="w-full h-full flex items-center justify-center text-gold font-serif text-lg">
+                {(other?.name || '?').charAt(0).toUpperCase()}
+              </span>
+          }
+        </div>
+        {isOnline(other.last_seen_at) && (
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-ink" />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        <div className="flex justify-between items-center mb-0.5">
+          <p className="text-[0.9rem] font-medium text-paper truncate">{other?.name || 'User'}</p>
+          <p className="text-[0.62rem] text-muted shrink-0 ml-1">
+            {formatMessageTime(conv.last_message_at)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {/* Preview — replaced by typing dots when other person is typing */}
+          <div className={`text-[0.75rem] truncate flex-1 flex items-center gap-1.5 min-w-0 ${
+            otherIsTyping ? 'text-gold' : unread > 0 ? 'text-paper font-medium' : isActive ? 'text-gold' : 'text-muted'
+          }`}>
+            {otherIsTyping ? (
+              <TypingDots />
+            ) : preview.type === 'reaction' ? (
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="text-sm shrink-0 leading-none">{preview.badge}</span>
+                <span className="text-gold font-medium shrink-0">
+                  {isFromMe ? 'You reacted' : 'Reacted'}
+                </span>
+                {preview.detail && (
+                  <span className="truncate text-paper/70 font-normal">{preview.detail}</span>
+                )}
+              </span>
+            ) : preview.type === 'locked' ? (
+              <span className="flex items-center gap-1.5 truncate">
+                {isFromMe && <span className="text-muted shrink-0">You: </span>}
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/20 text-gold border border-gold/40 text-[0.66rem] font-bold shrink-0">
+                  <Lock size={10} className="shrink-0 text-gold" strokeWidth={2.4} />
+                  <span>{preview.badge}</span>
+                </span>
+                <span className="truncate text-paper/90 font-medium">
+                  {preview.text}
+                </span>
+                {preview.detail && (
+                  <span className="truncate text-muted text-xs font-normal">
+                    • {preview.detail}
+                  </span>
+                )}
+              </span>
+            ) : preview.type === 'media' ? (
+              <span className="flex items-center gap-1.5 truncate">
+                {isFromMe && <span className="text-muted shrink-0">You: </span>}
+                {preview.mediaType === 'video' ? (
+                  <Video size={13} className="text-gold shrink-0" />
+                ) : (
+                  <Camera size={13} className="text-gold shrink-0" />
+                )}
+                <span className="truncate text-paper/85">{preview.text}</span>
+              </span>
+            ) : preview.type === 'story' ? (
+              <>
+                {isFromMe && <span className="text-muted shrink-0">You: </span>}
+                <StoryStatusIcon size={13} className="text-emerald-400 shrink-0 inline" />
+                <span className="truncate">{preview.text}</span>
+              </>
+            ) : (
+              <>
+                {isFromMe && <span className="text-muted shrink-0">You: </span>}
+                <span className="truncate">{preview.text}</span>
+              </>
+            )}
+          </div>
+
+          {/* Read receipt — hidden while the other person is typing */}
+          {!otherIsTyping && isFromMe && conv.last_message_preview && (
+            <ReadReceiptMini
+              isRead={
+                conv.fan_id === user?.id
+                  ? (conv.creator_unread ?? 0) === 0
+                  : (conv.fan_unread ?? 0) === 0
+              }
+            />
+          )}
+
+          {/* Unread badge / reaction indicator */}
+          {unread > 0 && preview.type === 'reaction' ? (
+            <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold/20 border border-gold/40 text-gold text-[0.68rem] font-bold">
+              <span>{preview.badge}</span>
+              <span>{unread}</span>
+            </span>
+          ) : unread > 0 && preview.type === 'locked' && !isFromMe ? (
+            <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold text-ink text-[0.65rem] font-bold shadow-md shadow-gold/20">
+              <Lock size={10} strokeWidth={2.6} />
+              <span>{unread}</span>
+            </span>
+          ) : unread > 0 ? (
+            <span className="shrink-0 min-w-5 h-5 px-1 rounded-full bg-gold text-ink text-[0.6rem] font-bold flex items-center justify-center">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Three tiny bouncing dots shown in place of the message preview
+function TypingDots() {
+  return (
+    <span className="flex items-center gap-[3px]">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className="w-1 h-1 rounded-full bg-gold"
+          style={{ animation: `typing-bounce 1.2s ease-in-out infinite`, animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+// Mini read receipt for the conversation list row.
+// isRead=true  → other person has read it  → gold double-tick ✓✓
+// isRead=false → sent/delivered, not yet read → grey single tick ✓
+function ReadReceiptMini({ isRead }: { isRead: boolean }) {
+  return isRead
+    ? <CheckCheck size={12} className="text-gold shrink-0" />
+    : <Check size={12} className="text-muted shrink-0" />;
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Subtle luxury inner circle accent -->
+    <path
+        android:fillColor="#18181c"
+        android:strokeColor="#C6A85E"
+        android:strokeWidth="1.6"
+        android:pathData="M54,54 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0" />
+
+    <!-- Iconic Velour Gold Serif 'V' -->
+    <path
+        android:fillColor="#C6A85E"
+        android:pathData="M43,40 L51,40 L51,42.5 L49,42.5 L54.5,60 L57.5,60 L63.5,42.5 L61.5,42.5 L61.5,40 L67,40 L67,42.5 L65,42.5 L57.5,65 L53,65 L44.5,42.5 L43,42.5 Z" />
+</vector>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -42,6 +42,7 @@ export default function Explore() {
   const { user, isCreator } = useAuth();
   const { activeCreatorProfile } = useCreatorProfiles();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [creators, setCreators] = useState<CreatorProfile[]>([]);
   const [clients, setClients] = useState<Profile[]>([]);
@@ -52,16 +53,38 @@ export default function Explore() {
     isCreator ? 'clients' : 'creators'
   );
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [discoverSearch, setDiscoverSearch] = useState('');
-  const [selectedDiscoverCreatorId, setSelectedDiscoverCreatorId] = useState<string | null>(null);
+  const [discoverSearch, setDiscoverSearch] = useState(() => searchParams.get('q') || '');
+  const selectedDiscoverCreatorId = searchParams.get('creator');
+
+  const setSelectedDiscoverCreatorId = (id: string | null) => {
+    if (id) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('creator', id);
+        return next;
+      });
+    } else {
+      if (window.history.state && window.history.state.idx > 0) {
+        navigate(-1);
+      } else {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('creator');
+          return next;
+        });
+      }
+    }
+  };
   const [messagingClientId, setMessagingClientId] = useState<string | null>(null);
 
   const filterMenuRef = useRef<HTMLDivElement>(null);
 
-  // Sync default filter if isCreator becomes true on auth resolution
+  // Sync default filter if isCreator becomes true or false on auth resolution
   useEffect(() => {
     if (isCreator) {
       setDiscoveryFilter('clients');
+    } else {
+      setDiscoveryFilter('creators');
     }
   }, [isCreator]);
 
@@ -80,7 +103,7 @@ export default function Explore() {
     setLoading(true);
     const { data, error } = await supabase
       .from('creator_profiles')
-      .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url)')
+      .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, role, last_seen_at)')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -140,27 +163,35 @@ export default function Explore() {
     };
   }, [fetchCreators, fetchClients, isCreator]);
 
-  // Combine items into a unified list based on active filter
+  // Combine items into a unified list based on role and active filter
   const items: DiscoveryItem[] = useMemo(() => {
     const list: DiscoveryItem[] = [];
 
-    if (discoveryFilter === 'clients' || discoveryFilter === 'all') {
+    // Clients/Fans: ONLY visible to creators who explicitly filter by 'clients' or 'all'
+    if (isCreator && (discoveryFilter === 'clients' || discoveryFilter === 'all')) {
       clients.forEach((c) => {
-        list.push({
-          id: c.id,
-          type: 'client',
-          name: c.display_name || c.username,
-          username: c.username,
-          avatar_url: c.avatar_url,
-          bio: c.bio,
-          last_seen_at: c.last_seen_at,
-          client: c,
-        });
+        // Exclude any admin users
+        if (c.role !== 'admin') {
+          list.push({
+            id: c.id,
+            type: 'client',
+            name: c.display_name || c.username,
+            username: c.username,
+            avatar_url: c.avatar_url,
+            bio: c.bio,
+            last_seen_at: c.last_seen_at,
+            client: c,
+          });
+        }
       });
     }
 
-    if (discoveryFilter === 'creators' || discoveryFilter === 'all') {
+    // Creators: Fans ONLY see creators; creators can also see creators when filtered
+    if (!isCreator || discoveryFilter === 'creators' || discoveryFilter === 'all') {
       creators.forEach((cr) => {
+        // Never show admin profiles as creators in Discover
+        if (cr.owner?.role === 'admin' || cr.owner?.username === 'admin') return;
+
         const avatar = cr.avatar_url || cr.owner?.avatar_url || null;
         list.push({
           id: cr.id,
@@ -169,13 +200,14 @@ export default function Explore() {
           username: cr.owner?.username || cr.display_name.toLowerCase().replace(/\s+/g, ''),
           avatar_url: avatar,
           bio: cr.bio,
+          last_seen_at: cr.owner?.last_seen_at,
           creator: cr,
         });
       });
     }
 
     return list;
-  }, [discoveryFilter, clients, creators]);
+  }, [isCreator, discoveryFilter, clients, creators]);
 
   // Filter items by search query
   const filteredItems = useMemo(() => {
@@ -319,11 +351,16 @@ export default function Explore() {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-ink">
       {selectedDiscoverCreatorId ? (
-        <CreatorProfilePanel
-          creatorId={selectedDiscoverCreatorId}
-          onBack={() => setSelectedDiscoverCreatorId(null)}
-          onMessage={handleMessageCreator}
-        />
+        <div
+          key={selectedDiscoverCreatorId}
+          className="flex-1 min-h-0 w-full overflow-y-auto overscroll-y-contain"
+        >
+          <CreatorProfilePanel
+            creatorId={selectedDiscoverCreatorId}
+            onBack={() => setSelectedDiscoverCreatorId(null)}
+            onMessage={handleMessageCreator}
+          />
+        </div>
       ) : (
         <>
           {/* Top Header: Discover | Sort */}
@@ -333,50 +370,50 @@ export default function Explore() {
               Discover
             </h1>
 
-            {/* Sort / Filter capsule button on the right */}
-            <div className="relative" ref={filterMenuRef}>
-              <button
-                type="button"
-                onClick={() => setShowFilterDropdown((prev) => !prev)}
-                className="px-4 py-1.5 rounded-full bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white text-sm font-medium transition-colors active:scale-95"
-              >
-                {isCreator
-                  ? (discoveryFilter === 'all'
-                      ? 'All'
-                      : discoveryFilter === 'creators'
-                      ? 'Creators'
-                      : 'Sort')
-                  : 'Sort'}
-              </button>
+            {/* Sort / Filter capsule button on the right (Creators only) */}
+            {isCreator && (
+              <div className="relative" ref={filterMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowFilterDropdown((prev) => !prev)}
+                  className="px-4 py-1.5 rounded-full bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white text-sm font-medium transition-colors active:scale-95"
+                >
+                  {discoveryFilter === 'all'
+                    ? 'All'
+                    : discoveryFilter === 'creators'
+                    ? 'Creators'
+                    : 'Clients'}
+                </button>
 
-              {/* Dropdown Menu */}
-              {showFilterDropdown && (
-                <div className="absolute right-0 mt-2 w-36 rounded-xl border border-zinc-800 bg-[#1c1c1e] p-1 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {[
-                    { key: 'clients', label: 'Clients' },
-                    { key: 'creators', label: 'Creators' },
-                    { key: 'all', label: 'All' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => {
-                        setDiscoveryFilter(opt.key as 'clients' | 'creators' | 'all');
-                        setShowFilterDropdown(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                        discoveryFilter === opt.key
-                          ? 'bg-white/15 text-white font-semibold'
-                          : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <span>{opt.label}</span>
-                      {discoveryFilter === opt.key && <Check size={13} className="text-white" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {/* Dropdown Menu */}
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-36 rounded-xl border border-zinc-800 bg-[#1c1c1e] p-1 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                    {[
+                      { key: 'clients', label: 'Clients' },
+                      { key: 'creators', label: 'Creators' },
+                      { key: 'all', label: 'All' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          setDiscoveryFilter(opt.key as 'clients' | 'creators' | 'all');
+                          setShowFilterDropdown(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                          discoveryFilter === opt.key
+                            ? 'bg-white/15 text-white font-semibold'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {discoveryFilter === opt.key && <Check size={13} className="text-white" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Search Bar */}
@@ -387,7 +424,15 @@ export default function Explore() {
                 type="text"
                 value={discoverSearch}
                 onChange={(event) => setDiscoverSearch(event.target.value)}
-                placeholder="Search"
+                placeholder={
+                  isCreator
+                    ? (discoveryFilter === 'clients'
+                        ? 'Search clients...'
+                        : discoveryFilter === 'creators'
+                        ? 'Search creators...'
+                        : 'Search...')
+                    : 'Search creators...'
+                }
                 className="w-full bg-[#1c1c1e] text-white rounded-xl py-2 pl-10 pr-9 text-sm focus:outline-none placeholder-zinc-500 transition-colors"
               />
               {discoverSearch && (
@@ -412,9 +457,15 @@ export default function Explore() {
             ) : filteredItems.length === 0 ? (
               <div className="h-[40vh] flex items-center justify-center text-center px-6">
                 <div>
-                  <p className="text-base font-medium text-paper mb-1">No contacts found</p>
+                  <p className="text-base font-medium text-paper mb-1">
+                    {isCreator
+                      ? (discoveryFilter === 'clients' ? 'No clients found' : 'No contacts found')
+                      : 'No creators found'}
+                  </p>
                   <p className="text-xs text-zinc-500">
-                    {discoverSearch ? 'Try a different search term.' : 'No profiles match the selected view.'}
+                    {discoverSearch
+                      ? 'Try a different search term.'
+                      : (isCreator ? 'No profiles match the selected view.' : 'No creators available at the moment.')}
                   </p>
                 </div>
               </div>

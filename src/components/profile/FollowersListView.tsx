@@ -196,7 +196,7 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
             return (
               <div
                 key={fan.id}
-                onClick={() => navigate('/messages', { state: { conversationId } })}
+                onClick={() => navigate(`/messages/${conversationId}`)}
                 className="flex items-center gap-3.5 px-2 sm:px-3 hover:bg-ink-light/50 active:bg-ink-light/80 transition-colors cursor-pointer group rounded-xl"
               >
                 {/* Avatar */}

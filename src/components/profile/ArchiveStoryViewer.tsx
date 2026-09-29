@@ -2,18 +2,20 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Volume2, VolumeX,
   Play, Pause, RotateCcw, Film, Trash2, Eye, Calendar,
-  Check, Loader2
+  Check, Loader2, Bookmark
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { addVaultItem } from '../../lib/creatorVault';
-import type { Story } from '../../types';
+import type { Story, StoryWithCreator } from '../../types';
 
 interface ArchiveStoryViewerProps {
-  stories: Story[];
+  stories: (Story | StoryWithCreator)[];
   initialIndex: number;
   onClose: () => void;
   onStoryDeleted?: (storyId: string) => void;
+  isFanSavedView?: boolean;
+  onRemoveBookmark?: (storyId: string) => void;
 }
 
 const DEFAULT_IMAGE_DURATION = 5500; // 5.5s per photo
@@ -23,6 +25,8 @@ export default function ArchiveStoryViewer({
   initialIndex,
   onClose,
   onStoryDeleted,
+  isFanSavedView,
+  onRemoveBookmark,
 }: ArchiveStoryViewerProps) {
   const { profile } = useAuth();
 
@@ -216,11 +220,16 @@ export default function ArchiveStoryViewer({
 
   if (!currentStory) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const currentStoryWithCreator = currentStory as any;
+  const storyCreator = currentStoryWithCreator.creator_profile || currentStoryWithCreator.creator;
+
   const creatorName =
+    (isFanSavedView && (storyCreator?.display_name || storyCreator?.name)) ||
     profile?.display_name ||
     profile?.username ||
     'Creator';
-  const avatarUrl = profile?.avatar_url;
+  const avatarUrl = (isFanSavedView && storyCreator?.avatar_url) ? storyCreator.avatar_url : profile?.avatar_url;
 
   return (
     <div
@@ -304,7 +313,7 @@ export default function ArchiveStoryViewer({
                   {creatorName}
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-gold/20 text-gold border border-gold/30 font-medium">
-                  Archive
+                  {isFanSavedView ? 'Saved' : 'Archive'}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-[11px] text-muted drop-shadow mt-0.5">
@@ -421,50 +430,68 @@ export default function ArchiveStoryViewer({
               <span>{currentStory.view_count || 0} views</span>
             </div>
 
-            {/* Creator Actions */}
-            <div className="flex items-center gap-1.5">
-              {/* Republish to Story */}
+            {/* Creator Actions vs Fan Saved Action */}
+            {isFanSavedView ? (
               <button
                 type="button"
-                onClick={handleRepublish}
-                disabled={isRepublishing}
-                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-paper border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                title="Republish to active 24h stories"
+                onClick={() => {
+                  if (onRemoveBookmark) {
+                    onRemoveBookmark(currentStory.id);
+                    setActionToast('Removed from Saved Stories');
+                    setTimeout(() => setActionToast(null), 2000);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-gold/15 hover:bg-gold/25 text-gold border border-gold/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Remove from saved stories"
               >
-                {isRepublishing ? (
-                  <Loader2 size={13} className="animate-spin text-gold" />
-                ) : (
-                  <RotateCcw size={13} className="text-gold" />
-                )}
-                <span className="hidden sm:inline">Republish</span>
+                <Bookmark size={13} className="fill-gold" />
+                <span>Saved</span>
               </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                {/* Republish to Story */}
+                <button
+                  type="button"
+                  onClick={handleRepublish}
+                  disabled={isRepublishing}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-paper border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Republish to active 24h stories"
+                >
+                  {isRepublishing ? (
+                    <Loader2 size={13} className="animate-spin text-gold" />
+                  ) : (
+                    <RotateCcw size={13} className="text-gold" />
+                  )}
+                  <span className="hidden sm:inline">Republish</span>
+                </button>
 
-              {/* Save to Media Library */}
-              <button
-                type="button"
-                onClick={handleSaveToLibrary}
-                disabled={isSaving}
-                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-paper border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                title="Save into Media Library"
-              >
-                {isSaving ? (
-                  <Loader2 size={13} className="animate-spin text-gold" />
-                ) : (
-                  <Film size={13} className="text-gold" />
-                )}
-                <span className="hidden sm:inline">Save to Library</span>
-              </button>
+                {/* Save to Media Library */}
+                <button
+                  type="button"
+                  onClick={handleSaveToLibrary}
+                  disabled={isSaving}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-paper border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Save into Media Library"
+                >
+                  {isSaving ? (
+                    <Loader2 size={13} className="animate-spin text-gold" />
+                  ) : (
+                    <Film size={13} className="text-gold" />
+                  )}
+                  <span className="hidden sm:inline">Save to Library</span>
+                </button>
 
-              {/* Delete from Archive */}
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-muted hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-colors cursor-pointer"
-                title="Delete from archive"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+                {/* Delete from Archive */}
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-1.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-muted hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-colors cursor-pointer"
+                  title="Delete from archive"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

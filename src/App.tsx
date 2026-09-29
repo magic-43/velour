@@ -16,6 +16,8 @@ import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import PublicProfile from './pages/PublicProfile';
+import { useAndroidBackButton } from './lib/useAndroidBackButton';
 
 // ─── Guards ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,8 @@ function Spinner() {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 function AppRoutes() {
+  useAndroidBackButton();
+
   return (
     <Routes>
       {/* ── Guest only ── */}
@@ -99,6 +103,8 @@ function AppRoutes() {
         <Route path="/messages/:conversationId" element={<Conversation />} />
         <Route path="/wallet"                element={<Wallet />} />
         <Route path="/me"                    element={<Profile />} />
+        <Route path="/profile/:username"     element={<PublicProfile />} />
+        <Route path="/creator/:creatorId"    element={<PublicProfile />} />
         <Route path="/settings"              element={<Settings />} />
         <Route path="/settings/:section"     element={<Settings />} />
       </Route>
