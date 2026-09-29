@@ -13,6 +13,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import type { Profile, CreatorProfile } from '../../types';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface ShareProfileModalProps {
   isOpen: boolean;
@@ -30,6 +31,17 @@ export default function ShareProfileModal({
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setShowQr(false);
+    return true;
+  }, showQr && isOpen, 110);
+
+  useBackHandler(() => {
+    onClose();
+    return true;
+  }, isOpen, 100);
 
   if (!isOpen) return null;
 

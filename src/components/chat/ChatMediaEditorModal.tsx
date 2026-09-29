@@ -14,6 +14,7 @@ import {
 import StoryCanvasEditor, { type StoryMediaItem } from '../stories/StoryCanvasEditor';
 import { captureVideoThumbnail } from '../../lib/videoThumbnail';
 import { useAuth } from '../../lib/AuthContext';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 // Raw unprocessed item passed to parent for background upload
 export interface ChatMediaSendItem {
@@ -74,6 +75,28 @@ export default function ChatMediaEditorModal({
   const [isOverlayEditing, setIsOverlayEditing] = useState(false);
   const [baking, setBaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setShowLockPopover(false);
+    return true;
+  }, showLockPopover && isOpen, 130);
+
+  useBackHandler(() => {
+    setShowCaptionEmojiPicker(false);
+    return true;
+  }, showCaptionEmojiPicker && isOpen, 125);
+
+  useBackHandler(() => {
+    setIsCropping(false);
+    setIsOverlayEditing(false);
+    return true;
+  }, (isCropping || isOverlayEditing) && isOpen, 120);
+
+  useBackHandler(() => {
+    onClose();
+    return true;
+  }, isOpen, 115);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const appendInputRef = useRef<HTMLInputElement | null>(null);

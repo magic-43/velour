@@ -16,6 +16,7 @@ import CreateStoryModal from '../stories/CreateStoryModal';
 import HomeStoryFeed from '../stories/HomeStoryFeed';
 import CreatorProfilePanel from '../creator/CreatorProfilePanel';
 import ShareProfileModal from './ShareProfileModal';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface CreatorStudioProfileProps {
   profile: Profile;
@@ -58,6 +59,37 @@ export default function CreatorStudioProfile({
   const [publicProfileOpen, setPublicProfileOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(null);
+
+  // Android hardware back button handlers for Creator Studio overlays and modals
+  useBackHandler(() => {
+    setViewingStoryIndex(null);
+    return true;
+  }, viewingStoryIndex !== null, 100);
+
+  useBackHandler(() => {
+    setCreateStoryOpen(false);
+    return true;
+  }, createStoryOpen, 95);
+
+  useBackHandler(() => {
+    setPublicProfileOpen(false);
+    return true;
+  }, publicProfileOpen, 95);
+
+  useBackHandler(() => {
+    setShareModalOpen(false);
+    return true;
+  }, shareModalOpen, 95);
+
+  useBackHandler(() => {
+    setSwitcherOpen(false);
+    return true;
+  }, switcherOpen, 95);
+
+  useBackHandler(() => {
+    setActiveTab('stories');
+    return true;
+  }, activeTab === 'insights', 60);
 
   useEffect(() => {
     if (activeCreatorProfile?.cover_url) {

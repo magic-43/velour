@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import type { CreatorProfile, Story, HomeStorySession } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import HomeStoryFeed from '../stories/HomeStoryFeed';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface CreatorProfilePanelProps {
   creatorId?: string;
@@ -34,6 +35,20 @@ export default function CreatorProfilePanel({
   const [error, setError] = useState<string | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>('stories');
+
+  // Android hardware back button handlers for CreatorProfilePanel
+  useBackHandler(() => {
+    setActiveStoryIndex(null);
+    return true;
+  }, activeStoryIndex !== null, 100);
+
+  useBackHandler(() => {
+    if (onBack) {
+      onBack();
+      return true;
+    }
+    return false;
+  }, Boolean(onBack), 80);
 
   useEffect(() => {
     async function loadData() {

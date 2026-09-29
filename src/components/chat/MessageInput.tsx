@@ -8,6 +8,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { encodeVaultMediaMessage, uploadVaultMedia, generateBlurredThumbnail, type VaultItem } from '../../lib/creatorVault';
 import { uploadPublicFile } from '../../lib/r2';
 import { getCleanMessagePreview } from '../../lib/messageUtils';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface Props {
   onSend: (text: string) => void;
@@ -33,6 +34,27 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const [showEditorModal, setShowEditorModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Android hardware back button handlers for chat input sheets and modals
+  useBackHandler(() => {
+    setShowEditorModal(false);
+    return true;
+  }, showEditorModal, 120);
+
+  useBackHandler(() => {
+    setShowVaultPicker(false);
+    return true;
+  }, showVaultPicker, 115);
+
+  useBackHandler(() => {
+    setShowEmojiPicker(false);
+    return true;
+  }, showEmojiPicker, 110);
+
+  useBackHandler(() => {
+    setShowAttachmentMenu(false);
+    return true;
+  }, showAttachmentMenu, 105);
 
   const handleDeviceFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);

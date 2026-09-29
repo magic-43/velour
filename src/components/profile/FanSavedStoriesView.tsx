@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import ArchiveStoryViewer from './ArchiveStoryViewer';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { StoryWithCreator } from '../../types';
 
 interface FanSavedStoriesViewProps {
@@ -18,6 +19,12 @@ export default function FanSavedStoriesView({ onBack, onCountChange }: FanSavedS
   const [savedStories, setSavedStories] = useState<StoryWithCreator[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+
+  // Android hardware back button handler
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   const fetchSavedStories = async () => {
     if (!profile) return;

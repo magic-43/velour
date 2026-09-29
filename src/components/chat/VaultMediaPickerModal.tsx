@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Film, Video, Camera, Play, Check, Send } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { getVaultItems, type VaultItem } from '../../lib/creatorVault';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface VaultMediaPickerModalProps {
   isOpen: boolean;
@@ -19,6 +20,17 @@ export default function VaultMediaPickerModal({
   const [selectedItem, setSelectedItem] = useState<VaultItem | null>(null);
   const [price, setPrice] = useState<string>('');
   const [caption, setCaption] = useState<string>('');
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setSelectedItem(null);
+    return true;
+  }, isOpen && selectedItem !== null, 125);
+
+  useBackHandler(() => {
+    onClose();
+    return true;
+  }, isOpen, 120);
 
   useEffect(() => {
     if (!profile || !isOpen) return;

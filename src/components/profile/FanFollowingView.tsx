@@ -3,6 +3,7 @@ import { ArrowLeft, Compass, Search, X, MessageSquare, CheckCircle2 } from 'luci
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { CreatorProfile } from '../../types';
 
 interface FanFollowingViewProps {
@@ -39,6 +40,12 @@ export default function FanFollowingView({ onBack }: FanFollowingViewProps) {
   const [following, setFollowing] = useState<FollowingItem[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Android hardware back button handler
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   useEffect(() => {
     if (!profile) return;

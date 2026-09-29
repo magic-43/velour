@@ -4,6 +4,7 @@ import { X, Check, Plus, Loader2, LogOut, Trash2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import AddAccountModal from './AddAccountModal';
 import type { SavedAccount } from '../../lib/multiAccount';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface AccountSwitcherModalProps {
   isOpen: boolean;
@@ -23,6 +24,17 @@ export default function AccountSwitcherModal({ isOpen, onClose }: AccountSwitche
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setAddAccountOpen(false);
+    return true;
+  }, addAccountOpen && isOpen, 115);
+
+  useBackHandler(() => {
+    onClose();
+    return true;
+  }, isOpen, 100);
 
   if (!isOpen) return null;
 

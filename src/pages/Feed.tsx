@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import HomeStoryFeed from '../components/stories/HomeStoryFeed';
 import CreateStoryModal from '../components/stories/CreateStoryModal';
 import MyStatusView from '../components/stories/MyStatusView';
+import { useBackHandler } from '../lib/backButtonRegistry';
 
 export default function Feed() {
   const { user, isCreator } = useAuth();
@@ -19,6 +20,22 @@ export default function Feed() {
   const [activeHomeSlideIndex, setActiveHomeSlideIndex] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [viewingMyStatus, setViewingMyStatus] = useState(false);
+
+  // Android hardware back button handlers for in-feed overlays
+  useBackHandler(() => {
+    setActiveHomeSessionIndex(null);
+    return true;
+  }, activeHomeSessionIndex !== null, 100);
+
+  useBackHandler(() => {
+    setViewingMyStatus(false);
+    return true;
+  }, viewingMyStatus, 90);
+
+  useBackHandler(() => {
+    setCreateModalOpen(false);
+    return true;
+  }, createModalOpen, 80);
 
   const homeGridRef = useRef<HTMLDivElement | null>(null);
   const homeGridScrollTopRef = useRef(0);

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import DeleteStoryConfirmDialog from './DeleteStoryConfirmDialog';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { Story, CreatorProfile } from '../../types';
 
 interface MyStatusViewProps {
@@ -72,6 +73,34 @@ export default function MyStatusView({
   const [editedCaption, setEditedCaption] = useState('');
   const [isSavingCaption, setIsSavingCaption] = useState(false);
   const [captionSuccess, setCaptionSuccess] = useState(false);
+
+  // Android hardware back button handlers for MyStatusView layers
+  useBackHandler(() => {
+    setStoryToDelete(null);
+    return true;
+  }, storyToDelete !== null, 130);
+
+  useBackHandler(() => {
+    setInsightStory(null);
+    setIsEditingCaption(false);
+    return true;
+  }, insightStory !== null, 120);
+
+  useBackHandler(() => {
+    setActiveMenuStoryId(null);
+    return true;
+  }, activeMenuStoryId !== null, 110);
+
+  useBackHandler(() => {
+    setIsEditMode(false);
+    setSelectedStoryIds(new Set());
+    return true;
+  }, isEditMode, 105);
+
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 90);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
 

@@ -24,6 +24,7 @@ import { encodeStoryReply, encodeStoryReaction } from '../../lib/storyReplies';
 import { useStoryPreloader } from '../../lib/hooks/useStoryPreloader';
 import { useNetworkQuality } from '../../lib/hooks/useNetworkQuality';
 import { getViewedStoryIds, saveViewedStoryId } from '../../lib/hooks/useStories';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { CreatorProfile, Story, TransitionSlide, FeedSlide, HomeStorySession } from '../../types';
 
 interface HomeStoryFeedProps {
@@ -85,6 +86,25 @@ export default function HomeStoryFeed({
   const [replySuccessMsg, setReplySuccessMsg] = useState<string | null>(null);
   const [showReplyEmojiDrawer, setShowReplyEmojiDrawer] = useState(false);
   const [showGridDrawer, setShowGridDrawer] = useState(false);
+
+  // Android hardware back button handlers for story feed layers
+  useBackHandler(() => {
+    setShowReplyEmojiDrawer(false);
+    return true;
+  }, showReplyEmojiDrawer, 130);
+
+  useBackHandler(() => {
+    setShowGridDrawer(false);
+    return true;
+  }, showGridDrawer, 120);
+
+  useBackHandler(() => {
+    if (onClose) {
+      onClose();
+      return true;
+    }
+    return false;
+  }, Boolean(onClose), 100);
 
   // Network resilience & playback states
   const [imageLoaded, setImageLoaded] = useState(false);

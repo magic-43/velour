@@ -7,6 +7,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { addVaultItem } from '../../lib/creatorVault';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { Story, StoryWithCreator } from '../../types';
 
 interface ArchiveStoryViewerProps {
@@ -47,6 +48,17 @@ export default function ArchiveStoryViewer({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setShowDeleteConfirm(false);
+    return true;
+  }, showDeleteConfirm, 110);
+
+  useBackHandler(() => {
+    onClose();
+    return true;
+  }, true, 100);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<number | null>(null);

@@ -6,6 +6,7 @@ import { useAuth } from '../lib/AuthContext';
 import { useCreatorProfiles } from '../lib/hooks/useCreatorProfiles';
 import type { CreatorProfile, Profile } from '../types';
 import CreatorProfilePanel from '../components/creator/CreatorProfilePanel';
+import { useBackHandler } from '../lib/backButtonRegistry';
 
 const AVATAR_COLORS = [
   'bg-blue-500',
@@ -76,6 +77,22 @@ export default function Explore() {
     }
   };
   const [messagingClientId, setMessagingClientId] = useState<string | null>(null);
+
+  // Android hardware back button handlers for Explore
+  useBackHandler(() => {
+    setSelectedDiscoverCreatorId(null);
+    return true;
+  }, Boolean(selectedDiscoverCreatorId), 80);
+
+  useBackHandler(() => {
+    setShowFilterDropdown(false);
+    return true;
+  }, showFilterDropdown, 70);
+
+  useBackHandler(() => {
+    setDiscoverSearch('');
+    return true;
+  }, Boolean(discoverSearch), 60);
 
   const filterMenuRef = useRef<HTMLDivElement>(null);
 

@@ -5,6 +5,7 @@ import StoryCanvasEditor, {
 } from './StoryCanvasEditor';
 import StoryAudienceModal from './StoryAudienceModal';
 import { captureVideoThumbnail } from '../../lib/videoThumbnail';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { AudienceSettings, Story } from '../../types';
 
 interface PostItemPayload {
@@ -106,6 +107,28 @@ export default function CreateStoryModal({
     cleanupUrls();
     onClose();
   };
+
+  // Android hardware back button handlers for CreateStoryModal layers
+  useBackHandler(() => {
+    setAudienceModalOpen(false);
+    return true;
+  }, audienceModalOpen && isOpen, 130);
+
+  useBackHandler(() => {
+    setShowCaptionEmojiPicker(false);
+    return true;
+  }, showCaptionEmojiPicker && isOpen, 125);
+
+  useBackHandler(() => {
+    setIsCropping(false);
+    setIsOverlayEditing(false);
+    return true;
+  }, (isCropping || isOverlayEditing) && isOpen, 120);
+
+  useBackHandler(() => {
+    handleClose();
+    return true;
+  }, isOpen, 100);
 
   const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>, append = false) => {
     const files = Array.from(e.target.files || []);

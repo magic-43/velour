@@ -13,6 +13,7 @@ import {
   encodeVaultMediaMessage,
   type VaultItem
 } from '../../lib/creatorVault';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface CreatorVaultViewProps {
   onBack: () => void;
@@ -48,6 +49,27 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
 
   // Copied link toast
   const [copied, setCopied] = useState(false);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setUploadModalOpen(false);
+    return true;
+  }, uploadModalOpen, 110);
+
+  useBackHandler(() => {
+    setSendModalOpen(false);
+    return true;
+  }, sendModalOpen, 110);
+
+  useBackHandler(() => {
+    setSelectedItem(null);
+    return true;
+  }, selectedItem !== null, 105);
+
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   useEffect(() => {
     if (!profile) return;

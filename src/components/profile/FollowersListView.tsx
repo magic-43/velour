@@ -3,6 +3,7 @@ import { ArrowLeft, Users, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { Profile } from '../../types';
 
 interface FollowersListViewProps {
@@ -40,6 +41,12 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
   const [followers, setFollowers] = useState<FollowerItem[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Android hardware back button handler
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   useEffect(() => {
     if (!profile) return;

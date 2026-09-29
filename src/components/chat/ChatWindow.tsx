@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabase';
 import type { Story, CreatorProfile, HomeStorySession } from '../../types';
 import { StoryReplyMetadata } from '../../lib/storyReplies';
 import { getCleanMessagePreview } from '../../lib/messageUtils';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,27 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     setIsSelectMode(false);
     setSelectedMessageIds(new Set());
   }, []);
+
+  // Android hardware back button handlers for chat overlays and modes
+  useBackHandler(() => {
+    setActiveStoryFeed(null);
+    return true;
+  }, activeStoryFeed !== null, 120);
+
+  useBackHandler(() => {
+    setContextMenuData(null);
+    return true;
+  }, contextMenuData !== null, 110);
+
+  useBackHandler(() => {
+    handleExitSelectMode();
+    return true;
+  }, isSelectMode, 100);
+
+  useBackHandler(() => {
+    setReplyTo(null);
+    return true;
+  }, replyTo !== null, 90);
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedMessageIds((prev) => {

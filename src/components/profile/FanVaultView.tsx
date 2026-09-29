@@ -3,6 +3,7 @@ import { ArrowLeft, Key, Play, Video, Camera, Compass, X, Calendar, LockOpen } f
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface FanVaultViewProps {
   onBack: () => void;
@@ -29,6 +30,17 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
   const [filter, setFilter] = useState<'all' | 'video' | 'image'>('all');
   const [loading, setLoading] = useState(true);
   const [activePreview, setActivePreview] = useState<UnlockedVaultItem | null>(null);
+
+  // Android hardware back button handlers
+  useBackHandler(() => {
+    setActivePreview(null);
+    return true;
+  }, activePreview !== null, 110);
+
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   const fetchVault = async () => {
     if (!profile) return;

@@ -18,6 +18,7 @@ import FanSavedStoriesView from '../components/profile/FanSavedStoriesView';
 import FanFollowingView from '../components/profile/FanFollowingView';
 import CreatorStudioProfile from '../components/profile/CreatorStudioProfile';
 import { getVaultItems } from '../lib/creatorVault';
+import { useBackHandler } from '../lib/backButtonRegistry';
 
 type SubView = 'none' | 'vault' | 'saved' | 'archive' | 'followers' | 'following';
 
@@ -52,6 +53,17 @@ export default function Profile() {
   const [totalViews, setTotalViews] = useState<number>(0);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [switcherOpen, setSwitcherOpen] = useState<boolean>(false);
+
+  // Android hardware back button handlers for Profile subviews and modals
+  useBackHandler(() => {
+    setSwitcherOpen(false);
+    return true;
+  }, switcherOpen, 90);
+
+  useBackHandler(() => {
+    setSubView('none');
+    return true;
+  }, subView !== 'none', 80);
 
   useEffect(() => {
     if (!profile) return;

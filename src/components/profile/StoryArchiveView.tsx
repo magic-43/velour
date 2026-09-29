@@ -3,6 +3,7 @@ import { ArrowLeft, Archive, Eye, Video, Camera } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import ArchiveStoryViewer from './ArchiveStoryViewer';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { Story } from '../../types';
 
 interface StoryArchiveViewProps {
@@ -14,6 +15,12 @@ export default function StoryArchiveView({ onBack }: StoryArchiveViewProps) {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
+
+  // Android hardware back button handler
+  useBackHandler(() => {
+    onBack();
+    return true;
+  }, true, 80);
 
   useEffect(() => {
     if (!profile) return;
