@@ -455,16 +455,16 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     <div className="flex flex-col h-full bg-ink">
       {/* ── Header ──────────────────────────────────────────────────── */}
       {isSelectMode ? (
-        <header className="sticky top-0 z-10 flex items-center justify-between px-3 py-2.5 border-b border-border-subtle bg-ink/95 backdrop-blur">
+        <header className="sticky top-0 z-30 flex items-center justify-between px-3.5 py-3 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button
               onClick={handleExitSelectMode}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors cursor-pointer"
               title="Cancel selection"
             >
-              <X size={20} />
+              <X size={22} />
             </button>
-            <span className="font-semibold text-paper text-sm">
+            <span className="font-semibold text-paper text-base">
               {selectedMessageIds.size} selected
             </span>
           </div>
@@ -472,48 +472,49 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           <div className="flex items-center gap-2">
             <button
               onClick={handleSelectAll}
-              className="text-xs font-medium text-gold hover:text-gold-light px-2.5 py-1.5 rounded-lg hover:bg-gold/10 transition-colors"
+              className="text-xs font-semibold text-gold hover:text-gold-light px-3 py-1.5 rounded-lg hover:bg-gold/10 transition-colors cursor-pointer"
             >
               {selectedMessageIds.size === messages.length && messages.length > 0 ? 'Deselect All' : 'Select All'}
             </button>
             <button
               onClick={handleExitSelectMode}
-              className="text-xs font-semibold text-paper hover:text-gold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 transition-colors"
+              className="text-xs font-semibold text-paper hover:text-gold px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 transition-colors cursor-pointer"
             >
               Done
             </button>
           </div>
         </header>
       ) : (
-        <header className="sticky top-0 z-10 flex items-center gap-3 px-3 py-2.5 border-b border-border-subtle bg-ink/80 backdrop-blur">
+        <header className="sticky top-0 z-30 flex items-center gap-3.5 px-3.5 py-2.5 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
           {/* Back button (always visible — on desktop goes back to /messages list) */}
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors shrink-0"
+            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors shrink-0 cursor-pointer"
+            aria-label="Back to conversations"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={22} />
           </button>
 
           {/* Avatar */}
           <div className="relative shrink-0">
-            <div className="w-9 h-9 rounded-full overflow-hidden bg-ink-light border border-border-subtle">
+            <div className="w-11 h-11 rounded-full overflow-hidden bg-ink-light border border-border-subtle">
               {other.avatar_url ? (
                 <img src={other.avatar_url} alt={other.name || 'User'} className="w-full h-full object-cover" />
               ) : (
-                <span className="w-full h-full flex items-center justify-center text-gold text-sm font-serif">
+                <span className="w-full h-full flex items-center justify-center text-gold text-base font-serif font-bold">
                   {(other.name || '?').charAt(0).toUpperCase()}
                 </span>
               )}
             </div>
             {online && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-ink" />
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-ink" />
             )}
           </div>
 
           {/* Name + status */}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-paper text-sm truncate leading-tight">{other.name}</p>
-            <p className="text-[0.62rem] text-muted truncate">
+            <p className="font-semibold text-paper text-base truncate leading-tight">{other.name}</p>
+            <p className="text-xs text-muted truncate mt-0.5">
               {otherIsTyping ? (
                 <span className="text-gold font-medium animate-pulse">typing…</span>
               ) : (
@@ -523,8 +524,12 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           </div>
 
           {/* Options menu placeholder */}
-          <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors">
-            <MoreVertical size={18} />
+          <button 
+            type="button"
+            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors cursor-pointer"
+            aria-label="More options"
+          >
+            <MoreVertical size={20} />
           </button>
         </header>
       )}
@@ -533,7 +538,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       {pinnedMessage && !isSelectMode && (
         <div
           onClick={() => handleScrollToMessage(pinnedMessage.id)}
-          className="sticky top-[53px] z-10 bg-ink-light/95 backdrop-blur border-b border-border-subtle/80 px-3.5 py-2 flex items-center justify-between gap-3 cursor-pointer hover:bg-ink-light transition-colors group"
+          className="sticky top-[61px] z-20 bg-ink-light/95 backdrop-blur border-b border-border-subtle/80 px-3.5 py-2 flex items-center justify-between gap-3 cursor-pointer hover:bg-ink-light transition-colors group"
         >
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-1 h-7 rounded-full bg-gold shrink-0" />

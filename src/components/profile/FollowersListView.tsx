@@ -132,21 +132,21 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
   return (
     <div className="px-4 sm:px-5 pt-0 pb-24 md:pb-8 max-w-[650px] w-full mx-auto md:mx-0">
       {/* Header matching Stories/Home page */}
-      <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+      <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink-light text-muted hover:text-paper transition-colors cursor-pointer"
+            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 text-muted hover:text-paper transition-colors cursor-pointer"
             aria-label="Back to profile"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={20} />
           </button>
-          <h3 className="text-sm font-medium text-muted tracking-wide uppercase">Followers</h3>
+          <h3 className="text-base sm:text-lg font-serif font-semibold text-paper tracking-tight">Followers</h3>
         </div>
 
         {followers.length > 0 && (
-          <span className="text-[11px] text-muted tracking-tight">
+          <span className="text-xs text-muted font-medium tracking-tight">
             {followers.length} {followers.length === 1 ? 'follower' : 'followers'}
           </span>
         )}

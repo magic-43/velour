@@ -380,87 +380,90 @@ export default function Explore() {
         </div>
       ) : (
         <>
-          {/* Top Header: Discover | Sort */}
-          <div className="px-4 pt-4 pb-2 flex items-center justify-between bg-ink shrink-0">
-            {/* Title in app's serif font */}
-            <h1 className="font-serif text-2xl text-paper font-semibold tracking-tight">
-              Discover
-            </h1>
+          {/* Unified Sticky Header: Discover | Sort + Search Bar */}
+          <div className="sticky top-0 z-30 bg-ink/95 backdrop-blur-md border-b border-border-subtle shrink-0">
+            {/* Top Header: Discover | Sort */}
+            <div className="px-4 pt-3.5 pb-2 flex items-center justify-between">
+              {/* Title in app's serif font */}
+              <h1 className="font-serif text-2xl text-paper font-semibold tracking-tight">
+                Discover
+              </h1>
 
-            {/* Sort / Filter capsule button on the right (Creators only) */}
-            {isCreator && (
-              <div className="relative" ref={filterMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowFilterDropdown((prev) => !prev)}
-                  className="px-4 py-1.5 rounded-full bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white text-sm font-medium transition-colors active:scale-95"
-                >
-                  {discoveryFilter === 'all'
-                    ? 'All'
-                    : discoveryFilter === 'creators'
-                    ? 'Creators'
-                    : 'Clients'}
-                </button>
+              {/* Sort / Filter capsule button on the right (Creators only) */}
+              {isCreator && (
+                <div className="relative" ref={filterMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowFilterDropdown((prev) => !prev)}
+                    className="px-4 py-2 rounded-full bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white text-sm font-semibold transition-colors active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    {discoveryFilter === 'all'
+                      ? 'All'
+                      : discoveryFilter === 'creators'
+                      ? 'Creators'
+                      : 'Clients'}
+                  </button>
 
-                {/* Dropdown Menu */}
-                {showFilterDropdown && (
-                  <div className="absolute right-0 mt-2 w-36 rounded-xl border border-zinc-800 bg-[#1c1c1e] p-1 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
-                    {[
-                      { key: 'clients', label: 'Clients' },
-                      { key: 'creators', label: 'Creators' },
-                      { key: 'all', label: 'All' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => {
-                          setDiscoveryFilter(opt.key as 'clients' | 'creators' | 'all');
-                          setShowFilterDropdown(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                          discoveryFilter === opt.key
-                            ? 'bg-white/15 text-white font-semibold'
-                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <span>{opt.label}</span>
-                        {discoveryFilter === opt.key && <Check size={13} className="text-white" />}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Dropdown Menu */}
+                  {showFilterDropdown && (
+                    <div className="absolute right-0 mt-2 w-36 rounded-xl border border-zinc-800 bg-[#1c1c1e] p-1 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                      {[
+                        { key: 'clients', label: 'Clients' },
+                        { key: 'creators', label: 'Creators' },
+                        { key: 'all', label: 'All' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => {
+                            setDiscoveryFilter(opt.key as 'clients' | 'creators' | 'all');
+                            setShowFilterDropdown(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                            discoveryFilter === opt.key
+                              ? 'bg-white/15 text-white font-semibold'
+                              : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          {discoveryFilter === opt.key && <Check size={14} className="text-white" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Search Bar */}
+            <div className="px-4 pb-3">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input
+                  type="text"
+                  value={discoverSearch}
+                  onChange={(event) => setDiscoverSearch(event.target.value)}
+                  placeholder={
+                    isCreator
+                      ? (discoveryFilter === 'clients'
+                          ? 'Search clients...'
+                          : discoveryFilter === 'creators'
+                          ? 'Search creators...'
+                          : 'Search...')
+                      : 'Search creators...'
+                  }
+                  className="w-full bg-[#1c1c1e] text-white rounded-xl py-2.5 pl-11 pr-10 text-[15px] focus:outline-none placeholder-zinc-500 transition-colors"
+                />
+                {discoverSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setDiscoverSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Search Bar */}
-          <div className="px-4 py-2 bg-ink shrink-0">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-              <input
-                type="text"
-                value={discoverSearch}
-                onChange={(event) => setDiscoverSearch(event.target.value)}
-                placeholder={
-                  isCreator
-                    ? (discoveryFilter === 'clients'
-                        ? 'Search clients...'
-                        : discoveryFilter === 'creators'
-                        ? 'Search creators...'
-                        : 'Search...')
-                    : 'Search creators...'
-                }
-                className="w-full bg-[#1c1c1e] text-white rounded-xl py-2 pl-10 pr-9 text-sm focus:outline-none placeholder-zinc-500 transition-colors"
-              />
-              {discoverSearch && (
-                <button
-                  type="button"
-                  onClick={() => setDiscoverSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
-                >
-                  <X size={14} />
-                </button>
-              )}
             </div>
           </div>
 
@@ -501,10 +504,10 @@ export default function Explore() {
                           handleClientMessage(item.client);
                         }
                       }}
-                      className="flex items-center gap-3.5 px-4 hover:bg-ink-light/50 active:bg-ink-light/80 transition-colors cursor-pointer group"
+                      className="flex items-center gap-4 px-4 hover:bg-ink-light/50 active:bg-ink-light/80 transition-colors cursor-pointer group"
                     >
                       {/* Avatar */}
-                      <div className="w-11 h-11 rounded-full shrink-0 overflow-hidden bg-zinc-800 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full shrink-0 overflow-hidden bg-zinc-800 flex items-center justify-center">
                         {item.avatar_url ? (
                           <img
                             src={item.avatar_url}
@@ -523,17 +526,17 @@ export default function Explore() {
                         )}
                       </div>
 
-                      {/* Content & Inset Divider */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-center border-b border-[#1c1c1e] py-2.5 pr-2">
+                      {/* Content & Inset Divider with increased vertical spacing */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-center border-b border-[#1c1c1e] py-4 pr-2">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[15px] font-medium text-paper truncate leading-tight">
+                          <span className="text-base font-semibold text-paper truncate leading-tight">
                             {item.name}
                           </span>
                         </div>
 
                         <span
-                          className={`text-[13px] truncate leading-tight mt-0.5 ${
-                            online ? 'text-gold font-medium' : 'text-zinc-500'
+                          className={`text-sm truncate leading-tight mt-1.5 ${
+                            online ? 'text-gold font-medium' : 'text-zinc-400'
                           }`}
                         >
                           {formatLastSeen(item.last_seen_at)}

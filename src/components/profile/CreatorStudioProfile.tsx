@@ -287,10 +287,10 @@ export default function CreatorStudioProfile({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-white text-black flex items-center justify-center shadow-md hover:bg-white/90 transition-all cursor-pointer active:scale-95"
+              className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white text-black flex items-center justify-center shadow-md hover:bg-white/90 transition-all cursor-pointer active:scale-95"
               title="Change photo"
             >
-              <Pencil size={12} strokeWidth={2.5} />
+              <Pencil size={14} strokeWidth={2.5} />
             </button>
           </div>
 
@@ -302,16 +302,16 @@ export default function CreatorStudioProfile({
               className="inline-flex items-center gap-1.5 group cursor-pointer text-left max-w-full"
               title="Switch persona or account"
             >
-              <h1 className="font-bold text-lg sm:text-xl text-white tracking-tight truncate group-hover:text-gold transition-colors">
+              <h1 className="font-bold text-xl sm:text-2xl text-white tracking-tight truncate group-hover:text-gold transition-colors">
                 {profile.display_name || profile.username}
               </h1>
               <ChevronDown
-                size={18}
+                size={20}
                 className="text-white/60 group-hover:text-gold transition-colors shrink-0"
               />
             </button>
 
-            <div className="flex items-center gap-1.5 text-xs text-white/60 mt-0.5">
+            <div className="flex items-center gap-1.5 text-sm text-white/60 mt-0.5">
               <span className="truncate">
                 @{profile.username} · {followersCount.toLocaleString()} Followers
               </span>
@@ -334,13 +334,13 @@ export default function CreatorStudioProfile({
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 text-center text-xs font-semibold tracking-wide transition-all relative cursor-pointer ${
+              className={`flex-1 py-3.5 text-center text-sm font-semibold tracking-wide transition-all relative cursor-pointer ${
                 isActive ? 'text-white' : 'text-white/50 hover:text-white/80'
               }`}
             >
               {labels[tab]}
               {isActive && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white rounded-full" />
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-white rounded-full" />
               )}
             </button>
           );

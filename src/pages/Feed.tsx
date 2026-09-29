@@ -142,15 +142,15 @@ export default function Feed() {
           className="h-full overflow-y-auto px-4 sm:px-5 pt-0 pb-24 md:pb-8"
         >
           {/* Header */}
-          <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
-            <h3 className="text-sm font-medium text-muted tracking-wide uppercase">Stories</h3>
+          <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+            <h3 className="font-serif text-lg font-semibold text-paper tracking-wider uppercase">Stories</h3>
             {isCreator && (
               <button
                 type="button"
                 onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold hover:bg-gold-light text-ink text-xs font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
               >
-                <Plus size={14} strokeWidth={2.5} />
+                <Plus size={16} strokeWidth={2.5} />
                 <span>Post Story</span>
               </button>
             )}
@@ -204,18 +204,18 @@ export default function Feed() {
 
                   {/* Center Plus Graphic */}
                   <div className="flex flex-col items-center justify-center text-center my-auto">
-                    <div className="w-10 h-10 rounded-full bg-gold/10 group-hover:bg-gold/20 border border-gold/30 text-gold flex items-center justify-center transition-colors mb-2 shadow-sm">
-                      <Plus size={20} strokeWidth={2.5} />
+                    <div className="w-12 h-12 rounded-full bg-gold/10 group-hover:bg-gold/20 border border-gold/30 text-gold flex items-center justify-center transition-colors mb-2.5 shadow-sm">
+                      <Plus size={24} strokeWidth={2.5} />
                     </div>
-                    <p className="text-xs font-medium text-paper/90">Add to your story</p>
+                    <p className="text-sm font-medium text-paper/90">Add to your story</p>
                   </div>
 
                   {/* Bottom labels */}
                   <div>
-                    <p className="text-paper font-serif font-medium text-sm leading-tight drop-shadow-md">
+                    <p className="text-paper font-serif font-medium text-base leading-tight drop-shadow-md">
                       You
                     </p>
-                    <p className="text-[0.62rem] text-gold uppercase tracking-wider font-semibold mt-0.5">
+                    <p className="text-xs text-gold uppercase tracking-wider font-semibold mt-1">
                       Share a moment
                     </p>
                   </div>
@@ -293,7 +293,7 @@ export default function Feed() {
                     {/* Avatar Ring without badge */}
                     <div className="absolute top-2.5 left-2.5 z-[3]">
                       <div
-                        className={`w-9 h-9 rounded-full border-[2px] ${
+                        className={`w-10 h-10 rounded-full border-[2px] ${
                           isMyCard || !session.isAllViewed
                             ? 'border-gold ring-1 ring-gold/30'
                             : 'border-white/30'
@@ -321,23 +321,23 @@ export default function Feed() {
                             e.stopPropagation();
                             setCreateModalOpen(true);
                           }}
-                          className="w-7 h-7 rounded-full bg-gold hover:bg-gold-light text-ink flex items-center justify-center transition-colors shadow-md cursor-pointer"
+                          className="w-8 h-8 rounded-full bg-gold hover:bg-gold-light text-ink flex items-center justify-center transition-colors shadow-md cursor-pointer"
                           title="Add story"
                         >
-                          <Plus size={13} strokeWidth={2.5} />
+                          <Plus size={15} strokeWidth={2.5} />
                         </button>
                       </div>
                     )}
 
                     {/* Card Footer */}
                     <div className="absolute bottom-0 left-0 right-0 p-3 z-[3]">
-                      <p className="text-paper font-serif font-medium text-sm leading-tight drop-shadow-md truncate flex items-center gap-1.5">
+                      <p className="text-paper font-serif font-medium text-[15px] leading-tight drop-shadow-md truncate flex items-center gap-1.5">
                         <span>{isMyCard ? 'You' : session.creator.display_name}</span>
                         {isMyCard && (
                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
                         )}
                       </p>
-                      <p className="text-[0.58rem] uppercase tracking-wider font-semibold mt-1">
+                      <p className="text-xs uppercase tracking-wider font-semibold mt-1">
                         {isMyCard ? (
                           <span className="text-gold">
                             {session.stories.length} {session.stories.length === 1 ? 'story' : 'stories'}

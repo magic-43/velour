@@ -345,7 +345,7 @@ export default function MessageBubble({
                       ? 'bg-[#18181b] border border-white/10 text-paper rounded-br-sm'
                       : 'bg-[#18181b] border border-white/10 text-paper rounded-bl-sm'
                   }`
-                : `px-3.5 py-2.5 text-sm leading-relaxed ${
+                : `px-4 py-3 text-[15px] sm:text-base leading-relaxed ${
                     isMine
                       ? 'bg-[#1a1a12] border border-gold/20 text-paper rounded-br-sm'
                       : 'bg-ink-light border border-border-subtle text-paper rounded-bl-sm'
@@ -471,7 +471,7 @@ export default function MessageBubble({
                         <span className="text-xs text-neutral-300">Reacted to story</span>
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap text-paper text-sm leading-relaxed px-0.5">
+                      <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
                         {storyReply.replyText}
                       </p>
                     )}
@@ -490,7 +490,7 @@ export default function MessageBubble({
                         timestamp={bubbleTimestamp}
                       />
                       {vaultMedia.text && (
-                        <p className="whitespace-pre-wrap text-paper text-sm leading-relaxed px-0.5">
+                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
                           {vaultMedia.text}
                         </p>
                       )}
@@ -568,7 +568,7 @@ export default function MessageBubble({
                       )}
 
                       {vaultMedia.text && (
-                        <p className="whitespace-pre-wrap text-paper text-sm leading-relaxed px-0.5">
+                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
                           {vaultMedia.text}
                         </p>
                       )}

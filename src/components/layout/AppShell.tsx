@@ -220,7 +220,7 @@ export default function AppShell() {
       {/* Hide bottom nav when in a conversation on mobile */}
       {!(isMessages && location.pathname !== '/messages') && (
         <nav
-          className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border-subtle bg-ink/90 px-2 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] backdrop-blur-lg"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border-subtle bg-ink/95 px-2 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] backdrop-blur-lg"
           style={{
             height: 'calc(68px + env(safe-area-inset-bottom))',
             paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.25rem)',
@@ -232,13 +232,13 @@ export default function AppShell() {
               <Link
                 key={path}
                 to={path}
-                className={`flex flex-col items-center justify-center w-16 h-full gap-1 transition-colors relative
+                className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors relative
                   ${active ? 'text-paper' : 'text-muted hover:text-paper'}`}
               >
-                <Icon size={22} strokeWidth={active ? 2.5 : 1.5} className={active ? 'text-gold' : ''} />
-                <span className="text-[0.58rem] tracking-wide">{label}</span>
+                <Icon size={23} strokeWidth={active ? 2.4 : 1.8} className={active ? 'text-gold' : ''} />
+                <span className={`text-[11px] tracking-wide ${active ? 'font-semibold text-paper' : 'font-medium'}`}>{label}</span>
                 {active && (
-                  <span className="absolute -bottom-1 w-1 h-1 bg-gold rounded-full" />
+                  <span className="absolute bottom-1 w-1 h-1 bg-gold rounded-full" />
                 )}
               </Link>
             );
@@ -247,27 +247,27 @@ export default function AppShell() {
           {/* Profile Tab on Mobile (Avatar Pill) */}
           <Link
             to="/me"
-            className={`flex flex-col items-center justify-center w-16 h-full gap-1 transition-colors relative
+            className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors relative
               ${isProfile ? 'text-paper' : 'text-muted hover:text-paper'}`}
           >
             <div
-              className={`w-6 h-6 rounded-full overflow-hidden border transition-all ${
+              className={`w-6.5 h-6.5 rounded-full overflow-hidden border transition-all ${
                 isProfile ? 'border-gold ring-1 ring-gold/60' : 'border-border-subtle'
               } bg-ink-light flex items-center justify-center`}
             >
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-gold font-serif text-[0.7rem] font-medium leading-none">
+                <span className="text-gold font-serif text-xs font-semibold leading-none">
                   {(profile?.display_name ?? profile?.username ?? '?').charAt(0).toUpperCase()}
                 </span>
               )}
             </div>
-            <span className={`text-[0.58rem] tracking-wide ${isProfile ? 'text-paper font-medium' : ''}`}>
+            <span className={`text-[11px] tracking-wide ${isProfile ? 'text-paper font-semibold' : 'text-muted font-medium'}`}>
               Profile
             </span>
             {isProfile && (
-              <span className="absolute -bottom-1 w-1 h-1 bg-gold rounded-full" />
+              <span className="absolute bottom-1 w-1 h-1 bg-gold rounded-full" />
             )}
           </Link>
         </nav>

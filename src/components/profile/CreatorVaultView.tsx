@@ -258,26 +258,26 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
       />
 
       {/* Header matching Stories/Home page */}
-      <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+      <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-ink-light text-muted hover:text-paper transition-colors cursor-pointer"
+            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 text-muted hover:text-paper transition-colors cursor-pointer"
             aria-label="Back to profile"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={20} />
           </button>
-          <h3 className="text-sm font-medium text-muted tracking-wide uppercase">Media Library</h3>
+          <h3 className="text-base sm:text-lg font-serif font-semibold text-paper tracking-tight">Media Library</h3>
         </div>
 
         <button
           type="button"
           disabled={uploading}
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold hover:bg-gold-light disabled:opacity-50 text-ink text-xs font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light disabled:opacity-50 text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
         >
-          <Plus size={14} strokeWidth={2.5} />
+          <Plus size={16} strokeWidth={2.5} />
           <span>{uploading ? 'Uploading...' : 'Upload'}</span>
         </button>
       </div>

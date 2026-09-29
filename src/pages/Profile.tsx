@@ -281,14 +281,15 @@ export default function Profile() {
         className="hidden"
       />
 
-      {/* ── Top Bar with Edit Button ──────────────────────────────────── */}
-      <div className="flex items-center justify-end mb-2">
+      {/* ── Sticky Top Bar with Title and Edit Button ─────────────────── */}
+      <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 -mt-4 mb-4 flex items-center justify-between px-4 sm:px-5 py-3.5 bg-ink/95 backdrop-blur-md border-b border-border-subtle">
+        <h1 className="font-serif text-2xl text-paper font-semibold tracking-tight">Profile</h1>
         <button
           onClick={() => navigate('/settings/account')}
           title="Edit Profile"
-          className="w-9 h-9 rounded-full bg-[#101010] hover:bg-[#1a1a1a] text-paper/80 hover:text-paper flex items-center justify-center transition-all shadow-sm active:scale-95"
+          className="w-10 h-10 rounded-full bg-[#1c1c1e] hover:bg-[#2c2c2e] text-paper flex items-center justify-center transition-all shadow-sm active:scale-95 cursor-pointer"
         >
-          <Pencil size={15} strokeWidth={1.8} />
+          <Pencil size={18} strokeWidth={2} />
         </button>
       </div>
 
@@ -436,13 +437,13 @@ export default function Profile() {
       <div className="bg-[#101010] rounded-2xl overflow-hidden shadow-sm">
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-red-950/20 transition-colors text-left group"
+          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-red-950/20 transition-colors text-left group cursor-pointer"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-[7px] bg-gradient-to-br from-red-500 to-red-700 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <LogOut size={14} />
+          <div className="flex items-center gap-3.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-red-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <LogOut size={16} />
             </div>
-            <span className="text-sm font-medium text-red-400 group-hover:text-red-300 transition-colors">
+            <span className="text-[15px] font-medium text-red-400 group-hover:text-red-300 transition-colors">
               Sign Out
             </span>
           </div>
@@ -474,20 +475,20 @@ function TelegramRow({ icon, iconBg, label, badge, onClick }: TelegramRowProps) 
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.04] transition-colors text-left group"
+      className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/[0.04] transition-colors text-left group cursor-pointer"
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-7 h-7 rounded-[7px] ${iconBg} flex items-center justify-center shrink-0 shadow-sm`}>
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0 shadow-sm`}>
           {icon}
         </div>
-        <span className="text-sm font-medium text-paper truncate">{label}</span>
+        <span className="text-[15px] font-medium text-paper truncate">{label}</span>
       </div>
 
       <div className="flex items-center gap-2 shrink-0 ml-2">
         {badge && (
-          <span className="text-xs text-muted font-normal">{badge}</span>
+          <span className="text-sm text-muted font-normal">{badge}</span>
         )}
-        <ChevronRight size={16} className="text-muted/60 group-hover:text-paper transition-colors" />
+        <ChevronRight size={18} className="text-muted/60 group-hover:text-paper transition-colors" />
       </div>
     </button>
   );

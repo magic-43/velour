@@ -267,20 +267,33 @@ export default function CreatorProfilePanel({
 
   return (
     <div className="relative min-h-full bg-[#090909] text-paper pb-32 select-none">
-      {/* ── Top Bar Overlay (Transparent Floating without Share Icon) ── */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 pt-3.5 pb-2 bg-transparent pointer-events-auto">
+      {/* ── Sticky Top Bar with Back Button & Creator Name ── */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[#090909]/95 backdrop-blur-md border-b border-white/10">
         {/* Back Button */}
         <button
           type="button"
           onClick={handleBack}
           aria-label="Back"
-          className="w-9 h-9 rounded-full bg-black/45 hover:bg-black/65 backdrop-blur-md active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg border border-white/10"
+          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-sm border border-white/10"
         >
-          <ArrowLeft size={18} strokeWidth={2} />
+          <ArrowLeft size={20} strokeWidth={2} />
         </button>
 
-        {/* Empty container on right so back button remains aligned */}
-        <div className="w-9 h-9" />
+        {/* Creator Name Title in Header */}
+        <span className="font-serif font-semibold text-paper text-base tracking-tight truncate max-w-[220px]">
+          {creator.display_name}
+        </span>
+
+        {/* Message Quick Trigger on Top Right */}
+        <button
+          type="button"
+          onClick={handleStartChat}
+          aria-label="Message"
+          className="w-10 h-10 rounded-full bg-gold/15 hover:bg-gold/25 active:scale-95 text-gold flex items-center justify-center transition-all cursor-pointer shadow-sm border border-gold/30"
+          title="Message Creator"
+        >
+          <MessageCircle size={19} />
+        </button>
       </div>
 
       {/* ── Taller Cover Backdrop ─────────────────────────────────── */}
@@ -322,15 +335,15 @@ export default function CreatorProfilePanel({
             {/* Name & Handle (Followers count removed) */}
             <div className="min-w-0 pb-1">
               <div className="flex items-center gap-1.5">
-                <h1 className="font-bold text-lg sm:text-xl text-white tracking-tight truncate">
+                <h1 className="font-bold text-xl sm:text-2xl text-white tracking-tight truncate">
                   {creator.display_name}
                 </h1>
                 {creator.is_verified && (
-                  <CheckCircle size={16} className="text-gold fill-gold/20 shrink-0" />
+                  <CheckCircle size={18} className="text-gold fill-gold/20 shrink-0" />
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs text-white/60 mt-0.5">
+              <div className="flex items-center gap-1.5 text-sm text-white/60 mt-0.5">
                 <span className="truncate">@{handle}</span>
                 {creator.category && (
                   <>
