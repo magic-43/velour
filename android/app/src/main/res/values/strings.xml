@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Velour</string>
     <string name="title_activity_main">Velour</string>
-    <string name="package_name">com.velour.app</string>
-    <string name="custom_url_scheme">com.velour.app</string>
+    <string name="package_name">com.velour.luxury</string>
+    <string name="custom_url_scheme">com.velour.luxury</string>
 </resources>

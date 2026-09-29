@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.velour.app',
+  appId: 'com.velour.luxury',
   appName: 'Velour',
   webDir: 'dist',
   backgroundColor: '#0a0a0c',
