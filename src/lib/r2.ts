@@ -8,7 +8,9 @@
 
 import { supabase } from './supabase';
 
-const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL as string;
+const FUNCTIONS_URL =
+  (import.meta.env.VITE_SUPABASE_FUNCTIONS_URL as string) ||
+  'https://ksgapugqzqxuogltsudr.supabase.co/functions/v1';
 
 // ── Image compression ─────────────────────────────────────────────────────────
 
