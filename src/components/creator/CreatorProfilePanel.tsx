@@ -267,33 +267,20 @@ export default function CreatorProfilePanel({
 
   return (
     <div className="relative min-h-full bg-[#090909] text-paper pb-32 select-none">
-      {/* ── Sticky Top Bar with Back Button & Creator Name ── */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[#090909]/95 backdrop-blur-md border-b border-white/10">
+      {/* ── Top Bar Overlay (Transparent Floating without Share Icon) ── */}
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 pt-3.5 pb-2 bg-transparent pointer-events-auto">
         {/* Back Button */}
         <button
           type="button"
           onClick={handleBack}
           aria-label="Back"
-          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-sm border border-white/10"
+          className="w-9 h-9 rounded-full bg-black/45 hover:bg-black/65 backdrop-blur-md active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg border border-white/10"
         >
-          <ArrowLeft size={20} strokeWidth={2} />
+          <ArrowLeft size={18} strokeWidth={2} />
         </button>
 
-        {/* Creator Name Title in Header */}
-        <span className="font-serif font-semibold text-paper text-base tracking-tight truncate max-w-[220px]">
-          {creator.display_name}
-        </span>
-
-        {/* Message Quick Trigger on Top Right */}
-        <button
-          type="button"
-          onClick={handleStartChat}
-          aria-label="Message"
-          className="w-10 h-10 rounded-full bg-gold/15 hover:bg-gold/25 active:scale-95 text-gold flex items-center justify-center transition-all cursor-pointer shadow-sm border border-gold/30"
-          title="Message Creator"
-        >
-          <MessageCircle size={19} />
-        </button>
+        {/* Empty container on right so back button remains aligned */}
+        <div className="w-9 h-9" />
       </div>
 
       {/* ── Taller Cover Backdrop ─────────────────────────────────── */}

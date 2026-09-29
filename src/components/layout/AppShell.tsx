@@ -49,14 +49,18 @@ export default function AppShell() {
   const isProfile  = location.pathname === '/me';
   const isDiscover = location.pathname === '/explore';
   const isHome = location.pathname === '/';
+  const isSettings = location.pathname.startsWith('/settings');
+  const isWallet = location.pathname === '/wallet';
+  const isProfileSubView = isProfile && (location.search.includes('tab=') || location.search.includes('view='));
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
-  // Match v1 mainShellClass per route
-  const mainShellClass = isDiscover || isHome
+  // Match v1 mainShellClass per route (fixed layout routes have pinned sticky header)
+  const isFixedLayoutRoute = isDiscover || isHome || isSettings || isWallet || isProfileSubView;
+  const mainShellClass = isFixedLayoutRoute
     ? 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-0 relative h-[calc(100dvh-68px)] md:h-screen min-h-0 overflow-hidden'
     : 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-20 md:pb-0 relative min-h-screen h-screen overflow-y-auto overflow-x-hidden';
 

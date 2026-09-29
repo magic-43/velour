@@ -129,9 +129,9 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
   });
 
   return (
-    <div className="px-4 sm:px-5 pt-0 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
-      {/* Header matching Stories/Home page */}
-      <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+    <div className="h-full flex flex-col overflow-hidden bg-ink">
+      {/* Header matching Stories/Home page (permanently pinned) */}
+      <div className="sticky top-0 z-30 shrink-0 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -152,6 +152,9 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           </span>
         )}
       </div>
+
+      {/* Scrollable Content Body */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
 
       {/* Segmented Filter List if items exist */}
       {items.length > 0 && (
@@ -292,6 +295,7 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           ))}
         </div>
       )}
+      </div>
 
       {/* Media Lightbox / Preview Modal */}
       {activePreview && (

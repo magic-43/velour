@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ArrowLeft, MoreVertical, Pin, X, Check, Copy, CornerUpRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pin, X, Check, Copy, CornerUpRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import { useMessages, type MessageWithSender } from '../../lib/hooks/useMessages';
@@ -523,14 +523,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
             </p>
           </div>
 
-          {/* Options menu placeholder */}
-          <button 
-            type="button"
-            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors cursor-pointer"
-            aria-label="More options"
-          >
-            <MoreVertical size={20} />
-          </button>
+
         </header>
       )}
 

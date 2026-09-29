@@ -318,22 +318,6 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
               <Mic size={20} />
             </button>
 
-            {/* Emoji toggle button (Image 4 keypad icon when open) */}
-            <button
-              type="button"
-              onClick={() => setShowEmojiPicker((prev) => !prev)}
-              className={`transition-colors cursor-pointer p-1 ${
-                showEmojiPicker ? 'text-gold' : 'text-neutral-400 hover:text-white'
-              }`}
-              title={showEmojiPicker ? 'Switch to keyboard' : 'Open emojis'}
-              disabled={disabled}
-            >
-              {showEmojiPicker ? (
-                <Grid3x3 size={20} />
-              ) : (
-                <Smile size={20} />
-              )}
-            </button>
 
             {/* Plus / Send button */}
             {hasText ? (

@@ -314,28 +314,31 @@ export default function Settings() {
   const currentTitle = section ? (sectionTitles[section] ?? 'Settings') : 'Settings';
 
   return (
-    <div className="flex-1 overflow-y-auto pb-24 md:pb-8">
-      <div className="max-w-[600px] mx-auto w-full min-h-full px-4 sm:px-5 pt-0 pb-10">
-        {/* Sticky Header matching Stories/Home page */}
-        <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-5 flex items-center gap-3.5 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.state && window.history.state.idx > 0) {
-                navigate(-1);
-              } else {
-                navigate('/me');
-              }
-            }}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-white/10 transition-colors cursor-pointer"
-            aria-label="Back"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h3 className="text-base sm:text-lg font-serif font-semibold text-paper tracking-tight">
-            {currentTitle}
-          </h3>
-        </div>
+    <div className="h-full flex flex-col overflow-hidden bg-ink">
+      {/* ── Sticky Top Header (guaranteed pinned) ─────────────────── */}
+      <div className="sticky top-0 z-30 shrink-0 flex items-center gap-3.5 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+        <button
+          type="button"
+          onClick={() => {
+            if (window.history.state && window.history.state.idx > 0) {
+              navigate(-1);
+            } else {
+              navigate('/me');
+            }
+          }}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-white/10 transition-colors cursor-pointer"
+          aria-label="Back"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h3 className="text-base sm:text-lg font-serif font-semibold text-paper tracking-tight">
+          {currentTitle}
+        </h3>
+      </div>
+
+      {/* ── Scrollable Body Area ───────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-8">
+        <div className="max-w-[600px] mx-auto w-full min-h-full pb-10">
 
         {/* ── SECTION: ACCOUNT / EDIT PROFILE ───────────────────────────────── */}
         {section === 'account' && (
@@ -579,22 +582,7 @@ export default function Settings() {
         {/* ── SECTION: PRIVACY & SECURITY ───────────────────────────────────── */}
         {section === 'security' && (
           <div className="space-y-4">
-            {/* Account Credentials */}
-            <div className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04]">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Shield size={16} />
-                </div>
-                <div>
-                  <h4 className="text-xs font-semibold text-paper">Security Status</h4>
-                  <p className="text-[11px] text-muted">Standard account encryption active</p>
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between text-xs">
-                <span className="text-muted">Account Email</span>
-                <span className="text-paper font-mono">{user?.email || profile?.email || 'Authenticated'}</span>
-              </div>
-            </div>
+
 
             {/* Change Password */}
             <form onSubmit={handleUpdatePassword} className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04] space-y-4">
@@ -683,33 +671,7 @@ export default function Settings() {
         {/* ── SECTION: RECOVERY EMAIL ONLY ───────────────────────────────────── */}
         {section === 'recovery-email' && (
           <div className="space-y-4">
-            {/* Status Card */}
-            <div className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04]">
-              <div className="flex items-start gap-3.5 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
-                  <Mail size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-paper">Recovery Email</h4>
-                  <p className="text-xs text-muted mt-0.5 leading-relaxed">
-                    This email is strictly used for account security, password recovery, and essential platform alerts. It will never be displayed publicly.
-                  </p>
-                </div>
-              </div>
 
-              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 flex items-center justify-between text-xs">
-                <span className="text-muted">Current Status</span>
-                {profile?.email ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
-                    <Check size={12} /> Configured
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-medium">
-                    Not Set
-                  </span>
-                )}
-              </div>
-            </div>
 
             {/* Recovery Email Form */}
             <form onSubmit={handleSaveRecoveryEmail} className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04] space-y-4">
@@ -876,6 +838,7 @@ export default function Settings() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

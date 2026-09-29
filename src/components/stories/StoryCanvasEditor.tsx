@@ -1151,14 +1151,14 @@ export default function StoryCanvasEditor({
             <CropRotateIcon size={19} />
           </button>
 
-          {/* 2. Stickers Tool (Opens Sticker Sheet Drawer) */}
+          {/* 2. Stickers Tool (Hidden per user preference, functionality preserved) */}
           <button
             type="button"
             onClick={() => {
               if (activeTool === 'crop') applyCropRect(cropRect);
               setIsStickerModalOpen(true);
             }}
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md flex items-center justify-center transition-all shadow-md bg-black/50 text-white/90 hover:bg-black/70 hover:scale-105 active:scale-95"
+            className="hidden w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md items-center justify-center transition-all shadow-md bg-black/50 text-white/90 hover:bg-black/70 hover:scale-105 active:scale-95"
             title="Stickers, iOS Emojis & Shapes"
           >
             <StickerIcon size={19} />

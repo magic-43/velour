@@ -503,38 +503,7 @@ export default function ChatMediaEditorModal({
                     className="w-full bg-transparent text-[15px] text-paper placeholder-muted/80 focus:outline-none pr-3"
                   />
 
-                  {/* Right: Emoji Popover Trigger */}
-                  <button
-                    type="button"
-                    onClick={() => setShowCaptionEmojiPicker(!showCaptionEmojiPicker)}
-                    className="text-paper/80 hover:text-gold transition-colors shrink-0 p-1 cursor-pointer"
-                    title="Insert emoji"
-                  >
-                    <Smile size={22} />
-                  </button>
 
-                  {/* Quick Emoji Popover */}
-                  {showCaptionEmojiPicker && (
-                    <div className="absolute bottom-14 right-2 z-40 flex items-center gap-1.5 p-2 bg-[#18181b] rounded-xl border border-border-subtle shadow-2xl max-w-[85vw] overflow-x-auto animate-fade-in">
-                      {CAPTION_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => {
-                            const newCaption = (currentItem.caption || caption || '') + emoji;
-                            setCaption(newCaption);
-                            setMediaQueue((prev) =>
-                              prev.map((it, idx) => (idx === activeIndex ? { ...it, caption: newCaption } : it))
-                            );
-                            setShowCaptionEmojiPicker(false);
-                          }}
-                          className="text-xl hover:scale-125 transition-transform p-1 cursor-pointer"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 

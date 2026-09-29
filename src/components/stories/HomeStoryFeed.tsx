@@ -442,9 +442,13 @@ export default function HomeStoryFeed({
           video.currentTime = (progressRef.current / 100) * video.duration;
         }
         video.muted = isMuted;
-        video.play().catch((error) => {
-          console.error('Error autoplaying home story video:', error);
-        });
+        if (video.isConnected) {
+          video.play().catch((error) => {
+            if (error.name !== 'AbortError') {
+              console.error('Error autoplaying home story video:', error);
+            }
+          });
+        }
       };
 
       const handleWaiting = () => {
@@ -524,9 +528,13 @@ export default function HomeStoryFeed({
       return;
     }
 
-    video.play().catch((error) => {
-      console.error('Error resuming home story video:', error);
-    });
+    if (video.isConnected) {
+      video.play().catch((error) => {
+        if (error.name !== 'AbortError') {
+          console.error('Error resuming home story video:', error);
+        }
+      });
+    }
   }, [isMuted, isPaused, mediaStory?.id, mediaStory?.media_type]);
 
   useEffect(() => {
@@ -1451,21 +1459,6 @@ export default function HomeStoryFeed({
                       <Mic size={20} />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const next = !showReplyEmojiDrawer;
-                        setShowReplyEmojiDrawer(next);
-                        if (next) setIsPaused(true);
-                      }}
-                      className={`transition-colors cursor-pointer p-1 ${
-                        showReplyEmojiDrawer ? 'text-gold' : 'text-neutral-400 hover:text-white'
-                      }`}
-                      title={showReplyEmojiDrawer ? 'Switch to keyboard' : 'Open emojis'}
-                    >
-                      {showReplyEmojiDrawer ? <Grid3x3 size={20} /> : <Smile size={20} />}
-                    </button>
 
                     {replyText.trim() && (
                       <button

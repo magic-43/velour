@@ -247,7 +247,7 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
   });
 
   return (
-    <div className="px-4 sm:px-5 pt-0 pb-24 md:pb-8 max-w-[700px] w-full mx-auto md:mx-0">
+    <div className="h-full flex flex-col overflow-hidden bg-ink">
       {/* Hidden file input */}
       <input
         type="file"
@@ -257,8 +257,8 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
         className="hidden"
       />
 
-      {/* Header matching Stories/Home page */}
-      <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
+      {/* Header matching Stories/Home page (permanently pinned) */}
+      <div className="sticky top-0 z-30 shrink-0 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -281,6 +281,9 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
           <span>{uploading ? 'Uploading...' : 'Upload'}</span>
         </button>
       </div>
+
+      {/* Scrollable Content Body */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[700px] w-full mx-auto md:mx-0">
 
       {/* Filter Segmented Toggle List */}
       <div className="flex items-center justify-between mb-4">
@@ -406,6 +409,7 @@ export default function CreatorVaultView({ onBack }: CreatorVaultViewProps) {
           ))}
         </div>
       )}
+      </div>
 
       {/* ── Upload Modal ──────────────────────────────────────────────── */}
       {uploadModalOpen && (
