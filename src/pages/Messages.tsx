@@ -13,7 +13,7 @@ export default function Messages() {
       <ConversationList />
 
       {/* Right panel — empty state (desktop only) */}
-      <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center p-8 bg-ink">
+      <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center p-8 bg-ink md:border-r border-border-subtle">
         <div className="w-24 h-24 rounded-full border border-border-subtle bg-ink-light flex items-center justify-center mb-6">
           <MessageSquare size={34} className="text-paper/70" strokeWidth={1.4} />
         </div>

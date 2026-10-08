@@ -8,6 +8,8 @@ import {
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadPublicFile } from '../lib/r2';
+import { requestNotificationPermission, saveNotificationPreferences } from '../lib/notificationService';
+import { triggerNotificationFeedback } from '../lib/soundNotification';
 
 interface NotificationPreferences {
   directMessages: boolean;
@@ -128,6 +130,24 @@ export default function Settings() {
     setAccountSuccess(null);
 
     try {
+      // Check username uniqueness if changed
+      if (cleanUsername !== profile.username) {
+        const { data: existingUser, error: checkError } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('username', cleanUsername)
+          .neq('id', profile.id)
+          .maybeSingle();
+
+        if (checkError) {
+          console.warn('Error verifying username uniqueness:', checkError);
+        } else if (existingUser) {
+          setAccountError('This username is already taken. Please choose another.');
+          setIsSavingAccount(false);
+          return;
+        }
+      }
+
       const updates = {
         display_name: displayName.trim() || null,
         username: cleanUsername,
@@ -259,17 +279,25 @@ export default function Settings() {
   };
 
   // ── Handle Notification Toggle ──────────────────────────────────────────────
-  const toggleNotification = (key: keyof NotificationPreferences) => {
+  const toggleNotification = async (key: keyof NotificationPreferences) => {
     if (!profile) return;
-    const updated = { ...notifications, [key]: !notifications[key] };
-    setNotifications(updated);
-    try {
-      localStorage.setItem(`velour_notifications_${profile.id}`, JSON.stringify(updated));
-      setNotificationToast(true);
-      setTimeout(() => setNotificationToast(false), 2000);
-    } catch (err) {
-      console.error('Error saving notification preferences:', err);
+    const nextVal = !notifications[key];
+
+    // If enabling Direct Messages, request OS / browser permissions
+    if (key === 'directMessages' && nextVal) {
+      await requestNotificationPermission();
     }
+
+    // If enabling Sound & Haptics, trigger sound and haptic preview
+    if (key === 'inAppSounds' && nextVal) {
+      triggerNotificationFeedback().catch(() => {});
+    }
+
+    const updated = { ...notifications, [key]: nextVal };
+    setNotifications(updated);
+    saveNotificationPreferences(updated, profile.id);
+    setNotificationToast(true);
+    setTimeout(() => setNotificationToast(false), 2000);
   };
 
   // ── Handle Password Update ──────────────────────────────────────────────────

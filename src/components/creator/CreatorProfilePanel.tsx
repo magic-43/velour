@@ -2,13 +2,15 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MessageCircle, Play,
-  Sparkles, CheckCircle, Flame, Calendar, User as UserIcon, Tag
+  Sparkles, CheckCircle, Flame, Calendar, User as UserIcon, Tag,
+  Check, UserPlus
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { CreatorProfile, Story, HomeStorySession } from '../../types';
 import { useAuth } from '../../lib/AuthContext';
 import HomeStoryFeed from '../stories/HomeStoryFeed';
 import { useBackHandler } from '../../lib/backButtonRegistry';
+import { useFollow } from '../../lib/hooks/useFollow';
 
 interface CreatorProfilePanelProps {
   creatorId?: string;
@@ -35,6 +37,8 @@ export default function CreatorProfilePanel({
   const [error, setError] = useState<string | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>('stories');
+
+  const { isFollowing, followersCount, toggleFollow } = useFollow(creator?.id);
 
   // Android hardware back button handlers for CreatorProfilePanel
   useBackHandler(() => {
@@ -87,13 +91,29 @@ export default function CreatorProfilePanel({
         }
 
         // 1. Fetch Creator Profile
-        const { data: creatorData, error: cErr } = await supabase
+        let creatorData: any = null;
+        const { data: cDataById } = await supabase
           .from('creator_profiles')
           .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, created_at)')
           .eq('id', targetCreatorId)
-          .single();
+          .maybeSingle();
 
-        if (cErr || !creatorData) {
+        if (cDataById) {
+          creatorData = cDataById;
+        } else {
+          // Fallback: check if targetCreatorId was an owner_id (user profile ID)
+          const { data: cDataByOwner } = await supabase
+            .from('creator_profiles')
+            .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, created_at)')
+            .eq('owner_id', targetCreatorId)
+            .maybeSingle();
+          if (cDataByOwner) {
+            creatorData = cDataByOwner;
+            targetCreatorId = cDataByOwner.id;
+          }
+        }
+
+        if (!creatorData) {
           setError('Creator not found.');
           setCreator(null);
           setLoading(false);
@@ -302,57 +322,47 @@ export default function CreatorProfilePanel({
 
       {/* ── Avatar + Creator Info Section ──────────────────────────── */}
       <div className="relative px-4 -mt-14 sm:-mt-16 z-10">
-        <div className="flex items-end justify-between gap-3">
-          <div className="flex items-end gap-3.5 min-w-0">
-            {/* Avatar */}
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-[#18181b] border-2 border-white/20 overflow-hidden flex items-center justify-center shadow-2xl shrink-0">
-              {creator.avatar_url ? (
-                <img
-                  src={creator.avatar_url}
-                  alt={creator.display_name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="font-serif text-3xl text-gold">
-                  {creator.display_name.charAt(0).toUpperCase()}
-                </span>
+        <div className="flex items-end gap-3.5 min-w-0">
+          {/* Avatar */}
+          <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-[#18181b] border-2 border-white/20 overflow-hidden flex items-center justify-center shadow-2xl shrink-0">
+            {creator.avatar_url ? (
+              <img
+                src={creator.avatar_url}
+                alt={creator.display_name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="font-serif text-3xl text-gold">
+                {creator.display_name.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+
+          {/* Name & Handle & Followers */}
+          <div className="min-w-0 pb-1 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="font-bold text-xl sm:text-2xl text-white tracking-tight truncate">
+                {creator.display_name}
+              </h1>
+              {creator.is_verified && (
+                <CheckCircle size={18} className="text-gold fill-gold/20 shrink-0" />
               )}
             </div>
 
-            {/* Name & Handle (Followers count removed) */}
-            <div className="min-w-0 pb-1">
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-bold text-xl sm:text-2xl text-white tracking-tight truncate">
-                  {creator.display_name}
-                </h1>
-                {creator.is_verified && (
-                  <CheckCircle size={18} className="text-gold fill-gold/20 shrink-0" />
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5 text-sm text-white/60 mt-0.5">
-                <span className="truncate">@{handle}</span>
-                {creator.category && (
-                  <>
-                    <span>·</span>
-                    <span className="text-gold/90">{creator.category}</span>
-                  </>
-                )}
-              </div>
+            <div className="flex items-center gap-1.5 text-sm text-white/60 mt-0.5 flex-wrap">
+              <span className="truncate">@{handle}</span>
+              <span>·</span>
+              <span className="text-white/80 font-medium whitespace-nowrap">
+                {followersCount} {followersCount === 1 ? 'follower' : 'followers'}
+              </span>
+              {creator.category && (
+                <>
+                  <span>·</span>
+                  <span className="text-gold/90 truncate">{creator.category}</span>
+                </>
+              )}
             </div>
           </div>
-
-          {/* Action Button: Message (for fans) */}
-          {!isOwner && (
-            <button
-              type="button"
-              onClick={handleMessage}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gold hover:bg-gold-light active:scale-95 text-ink font-semibold text-xs tracking-wide shadow-lg transition-all cursor-pointer shrink-0"
-            >
-              <MessageCircle size={15} />
-              <span>Message</span>
-            </button>
-          )}
         </div>
 
         {/* Bio preview under header */}
@@ -360,6 +370,42 @@ export default function CreatorProfilePanel({
           <p className="mt-3.5 text-xs sm:text-sm text-white/80 leading-relaxed max-w-xl whitespace-pre-wrap">
             {creator.bio}
           </p>
+        )}
+
+        {/* Action Buttons: Follow + Message (side by side with full breathing room) */}
+        {!isOwner && (
+          <div className="grid grid-cols-2 gap-2.5 mt-3.5 mb-1">
+            <button
+              type="button"
+              onClick={toggleFollow}
+              className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-xs sm:text-sm tracking-wide shadow-md active:scale-95 transition-all cursor-pointer ${
+                isFollowing
+                  ? 'bg-white/10 hover:bg-white/15 border border-white/20 text-white'
+                  : 'bg-gold hover:bg-gold-light text-ink shadow-gold/20'
+              }`}
+            >
+              {isFollowing ? (
+                <>
+                  <Check size={15} className="text-gold" strokeWidth={2.5} />
+                  <span>Following</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={15} strokeWidth={2.5} />
+                  <span>Follow</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleMessage}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium text-xs sm:text-sm tracking-wide shadow-md active:scale-95 transition-all cursor-pointer"
+            >
+              <MessageCircle size={15} />
+              <span>Message</span>
+            </button>
+          </div>
         )}
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { Message, Profile } from '../../types';
+import { showNewMessageNotification } from '../notificationService';
 
 export interface MessageWithSender extends Message {
   sender: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
@@ -31,6 +32,131 @@ export function useMessages(conversationId: string | null) {
     hasLoadedRef.current = false;
     setLoading(true);
   }, [conversationId]);
+
+  // ── Unlocked & Pending Attachment IDs (from DB + optimistic localStorage) ──
+  const [unlockedAttachmentIds, setUnlockedAttachmentIds] = useState<Set<string>>(new Set());
+  const [pendingAttachmentIds, setPendingAttachmentIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadUnlocks = async () => {
+      const unlocked = new Set<string>();
+      const pending = new Set<string>();
+
+      // 1. Read from localStorage optimistic storage
+      try {
+        const raw = localStorage.getItem(`velour_unlocked_media_${user.id}`);
+        if (raw) {
+          const stored = JSON.parse(raw);
+          if (Array.isArray(stored)) {
+            for (const item of stored) {
+              if (item.status === 'verified') {
+                if (item.id) unlocked.add(item.id);
+                if (item.mediaUrl) unlocked.add(item.mediaUrl);
+              } else if (item.status === 'pending') {
+                if (item.id) pending.add(item.id);
+                if (item.mediaUrl) pending.add(item.mediaUrl);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error reading local unlocks:', err);
+      }
+
+      // 2. Query attachment_unlocks from Supabase
+      try {
+        const { data: dbUnlocks } = await supabase
+          .from('attachment_unlocks')
+          .select('attachment_id, status')
+          .eq('fan_id', user.id);
+
+        if (dbUnlocks) {
+          for (const row of dbUnlocks) {
+            if (row.attachment_id) {
+              if (row.status === 'verified') {
+                unlocked.add(row.attachment_id);
+              } else if (row.status === 'pending') {
+                pending.add(row.attachment_id);
+              }
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Error fetching db attachment_unlocks:', dbErr);
+      }
+
+      setUnlockedAttachmentIds(unlocked);
+      setPendingAttachmentIds(pending);
+    };
+
+    loadUnlocks();
+
+    // 3. Realtime listener on attachment_unlocks
+    const channel = supabase
+      .channel(`fan_unlocks_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attachment_unlocks',
+          filter: `fan_id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          const newRow = payload.new;
+          if (newRow?.status === 'verified' && newRow?.attachment_id) {
+            markAttachmentUnlocked(newRow.attachment_id);
+          }
+        }
+      )
+      .subscribe();
+
+    // 4. Window event listener for cross-component / local approval sync
+    const handleLocalUnlockVerified = (e: any) => {
+      const { attachmentId, mediaUrl } = e.detail || {};
+      if (attachmentId) markAttachmentUnlocked(attachmentId);
+      if (mediaUrl) markAttachmentUnlocked(mediaUrl);
+    };
+    window.addEventListener('velour:unlock_verified', handleLocalUnlockVerified);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('velour:unlock_verified', handleLocalUnlockVerified);
+    };
+  }, [user?.id]);
+
+  const markAttachmentPending = useCallback((id: string) => {
+    setPendingAttachmentIds(prev => new Set([...prev, id]));
+  }, []);
+
+  const markAttachmentUnlocked = useCallback((id: string) => {
+    setPendingAttachmentIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setUnlockedAttachmentIds(prev => new Set([...prev, id]));
+
+    // Also update local storage cache to verified
+    if (user?.id) {
+      try {
+        const key = `velour_unlocked_media_${user.id}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list = JSON.parse(raw);
+          const updated = list.map((item: any) => {
+            if (item.id === id || item.mediaUrl === id) {
+              return { ...item, status: 'verified' };
+            }
+            return item;
+          });
+          localStorage.setItem(key, JSON.stringify(updated));
+        }
+      } catch {}
+    }
+  }, [user?.id]);
 
   // ── Initial fetch ────────────────────────────────────────────────────────
   const fetchInitial = useCallback(async (isSilent = false) => {
@@ -393,6 +519,15 @@ export function useMessages(conversationId: string | null) {
             });
             markRead();
             await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
+
+            // Trigger notification & audio feedback
+            showNewMessageNotification({
+              conversationId,
+              senderName: data.sender?.display_name || data.sender?.username || 'New message',
+              body: data.content || (data.message_type === 'image' ? 'Sent an photo' : data.message_type === 'video' ? 'Sent a video' : 'Sent an attachment'),
+              userId: user.id,
+              isForegroundActive: typeof document !== 'undefined' && document.visibilityState === 'visible',
+            }).catch(() => {});
           }
         }
       )
@@ -435,5 +570,9 @@ export function useMessages(conversationId: string | null) {
     deleteMessage,
     toggleReaction,
     markRead,
+    unlockedAttachmentIds,
+    pendingAttachmentIds,
+    markAttachmentPending,
+    markAttachmentUnlocked,
   };
 }

@@ -241,7 +241,7 @@ export default function Explore() {
 
   const handleMessageCreator = async (creatorProfileId: string) => {
     if (!user) {
-      navigate('/auth');
+      navigate('/login');
       return;
     }
 
@@ -273,7 +273,7 @@ export default function Explore() {
 
   const handleClientMessage = async (client: Profile) => {
     if (!user) {
-      navigate('/auth');
+      navigate('/login');
       return;
     }
 

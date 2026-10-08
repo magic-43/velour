@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -339,8 +340,12 @@ export default function ChatMediaEditorModal({
 
   const currentItem = mediaQueue[activeIndex];
 
-  return (
-    <div className="fixed inset-0 z-[110] h-[100dvh] bg-ink text-paper flex flex-col overflow-hidden animate-in fade-in duration-150 font-sans">
+  const chatRoot = typeof document !== 'undefined' ? document.getElementById('chat-window-root') : null;
+  const portalTarget = chatRoot || (typeof document !== 'undefined' ? document.body : null);
+  if (!portalTarget) return null;
+
+  const modalContent = (
+    <div className="fixed md:absolute inset-0 z-[110] h-[100dvh] md:h-full w-full bg-ink text-paper flex flex-col overflow-hidden animate-in fade-in duration-150 font-sans">
       {/* Hidden inputs */}
       <input
         ref={fileInputRef}
@@ -411,7 +416,7 @@ export default function ChatMediaEditorModal({
               {/* 1. Floating Multi-Media Carousel (Above Caption Bar) */}
               {mediaQueue.length > 1 && (
                 <div className="w-full flex items-center justify-center px-4 pb-2.5 pointer-events-auto">
-                  <div className="flex items-center gap-2.5 overflow-x-auto max-w-[92vw] py-1 scrollbar-none">
+                  <div className="flex items-center gap-2.5 overflow-x-auto max-w-[92vw] md:max-w-full px-4 py-1 scrollbar-none">
                     {/* Thumbnails in Queue */}
                     {mediaQueue.map((queueItem, index) => (
                       <div
@@ -670,4 +675,6 @@ export default function ChatMediaEditorModal({
       ) : null}
     </div>
   );
+
+  return createPortal(modalContent, portalTarget);
 }

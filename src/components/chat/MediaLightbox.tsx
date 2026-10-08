@@ -513,9 +513,15 @@ export default function MediaLightbox({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const remainingTime = Math.max(0, duration - currentTime);
 
+  const chatRoot = typeof document !== 'undefined' ? document.getElementById('chat-window-root') : null;
+  const portalTarget = chatRoot || (typeof document !== 'undefined' ? document.body : null);
+  if (!portalTarget) return null;
+
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] select-none overflow-hidden text-paper flex items-center justify-center touch-none overscroll-none h-[100dvh]"
+      className={`${
+        chatRoot ? 'fixed md:absolute inset-0 md:h-full w-full' : 'fixed inset-0 h-[100dvh] w-full'
+      } z-[110] select-none overflow-hidden text-paper flex items-center justify-center touch-none overscroll-none`}
       style={{
         backgroundColor:
           dragDismissY > 0
@@ -1015,7 +1021,7 @@ export default function MediaLightbox({
       {/* iOS-Style Delete Confirmation Action Sheet Modal */}
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex flex-col justify-end items-center px-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] animate-in fade-in duration-150"
+          className={`${chatRoot ? 'fixed md:absolute' : 'fixed'} inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex flex-col justify-end items-center px-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] animate-in fade-in duration-150`}
           onClick={() => setShowDeleteConfirm(false)}
         >
           <div
@@ -1064,6 +1070,6 @@ export default function MediaLightbox({
         </div>
       )}
     </div>,
-    document.body
+    portalTarget
   );
 }

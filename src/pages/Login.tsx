@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import RecoveryModal from '../components/auth/RecoveryModal';
 
 export default function Login() {
   const { user, loading } = useAuth();
@@ -14,6 +15,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -104,9 +106,18 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <label className="block text-xs text-muted tracking-wider uppercase mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-muted tracking-wider uppercase">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowRecovery(true)}
+                  className="text-xs text-gold/80 hover:text-gold transition-colors font-medium cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -161,6 +172,13 @@ export default function Login() {
           </Link>
         </p>
       </div>
+
+      {/* Recovery Modal */}
+      <RecoveryModal
+        isOpen={showRecovery}
+        onClose={() => setShowRecovery(false)}
+        onSuccessLogin={() => navigate('/', { replace: true })}
+      />
     </div>
   );
 }

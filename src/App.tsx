@@ -1,7 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import AppShell from './components/layout/AppShell';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import { registerNotificationNavigation } from './lib/notificationService';
 
 // Pages
 import Root from './pages/Root';
@@ -69,7 +71,15 @@ function Spinner() {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 function AppRoutes() {
+  const navigate = useNavigate();
   useAndroidBackButton();
+
+  useEffect(() => {
+    const cleanup = registerNotificationNavigation((path) => {
+      navigate(path);
+    });
+    return cleanup;
+  }, [navigate]);
 
   return (
     <Routes>

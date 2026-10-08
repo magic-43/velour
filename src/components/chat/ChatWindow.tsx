@@ -8,6 +8,7 @@ import MessageBubble, { DateSeparator } from './MessageBubble';
 import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
 import MessageContextMenu from './MessageContextMenu';
+import ForwardMessageModal from './ForwardMessageModal';
 import HomeStoryFeed from '../stories/HomeStoryFeed';
 import { supabase } from '../../lib/supabase';
 import type { Story, CreatorProfile, HomeStorySession } from '../../types';
@@ -60,6 +61,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   const {
     messages, loading, hasMore, loadingMore, loadMore,
     sendMessage, sendMediaMessage, deleteMessage, toggleReaction, markRead,
+    unlockedAttachmentIds, pendingAttachmentIds, markAttachmentPending, markAttachmentUnlocked,
   } = useMessages(conversationId);
 
   const { otherIsTyping, sendTyping } = useTypingIndicator(conversationId);
@@ -81,13 +83,39 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
 
+  // Message Forwarding Modal State
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [messageToForward, setMessageToForward] = useState<MessageWithSender | null>(null);
+  const [bulkForwardList, setBulkForwardList] = useState<MessageWithSender[]>([]);
+
   // Sync pinned message and reset temporary states when conversationId changes
   useEffect(() => {
     try {
-      setPinnedMessageId(localStorage.getItem(`velour_pinned_msg_${conversationId}`));
+      const localPin = localStorage.getItem(`velour_pinned_msg_${conversationId}`);
+      if (localPin) setPinnedMessageId(localPin);
     } catch {
       setPinnedMessageId(null);
     }
+
+    // Attempt to read remote pinned message from Supabase conversation record
+    const loadPinned = async () => {
+      try {
+        const { data } = await supabase
+          .from('conversations')
+          .select('pinned_message_id')
+          .eq('id', conversationId)
+          .maybeSingle();
+
+        if (data?.pinned_message_id) {
+          setPinnedMessageId(data.pinned_message_id);
+          try {
+            localStorage.setItem(`velour_pinned_msg_${conversationId}`, data.pinned_message_id);
+          } catch {}
+        }
+      } catch {}
+    };
+    loadPinned();
+
     setIsSelectMode(false);
     setSelectedMessageIds(new Set());
     setRevealedMessageIds(new Set());
@@ -276,20 +304,29 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     });
   }, []);
 
-  const handleTogglePin = useCallback((id: string) => {
-    setPinnedMessageId((prev) => {
-      const next = prev === id ? null : id;
-      try {
-        if (next) {
-          localStorage.setItem(`velour_pinned_msg_${conversationId}`, next);
-        } else {
-          localStorage.removeItem(`velour_pinned_msg_${conversationId}`);
-        }
-      } catch {}
-      showToast(next ? 'Message pinned' : 'Message unpinned');
-      return next;
-    });
-  }, [conversationId, showToast]);
+  const handleTogglePin = useCallback(async (id: string) => {
+    const next = pinnedMessageId === id ? null : id;
+    setPinnedMessageId(next);
+    try {
+      if (next) {
+        localStorage.setItem(`velour_pinned_msg_${conversationId}`, next);
+      } else {
+        localStorage.removeItem(`velour_pinned_msg_${conversationId}`);
+      }
+    } catch {}
+
+    // Persist to Supabase so both participants see pinned message
+    try {
+      await supabase
+        .from('conversations')
+        .update({ pinned_message_id: next })
+        .eq('id', conversationId);
+    } catch (err) {
+      console.debug('Error syncing pinned_message_id to database:', err);
+    }
+
+    showToast(next ? 'Message pinned' : 'Message unpinned');
+  }, [conversationId, pinnedMessageId, showToast]);
 
   const handleEnterSelectMode = useCallback((initialId: string) => {
     setIsSelectMode(true);
@@ -362,14 +399,11 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   const handleBulkForward = useCallback(() => {
     const selectedMsgs = messages.filter((m) => selectedMessageIds.has(m.id));
     if (selectedMsgs.length === 0) return;
-    const text = selectedMsgs
-      .map((m) => getCleanMessagePreview(m.content, m.message_type, m.is_deleted).text)
-      .filter(Boolean)
-      .join('\n');
-    navigator.clipboard.writeText(text);
-    showToast(`Copied ${selectedMsgs.length} message${selectedMsgs.length > 1 ? 's' : ''} to forward`);
+    setMessageToForward(null);
+    setBulkForwardList(selectedMsgs);
+    setForwardModalOpen(true);
     handleExitSelectMode();
-  }, [messages, selectedMessageIds, showToast, handleExitSelectMode]);
+  }, [messages, selectedMessageIds, handleExitSelectMode]);
 
   const handleBulkDelete = useCallback(() => {
     const myDeletableMsgs = messages.filter(
@@ -419,6 +453,31 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       // Find the replied-to message either directly or from the loaded messages
       const replyTarget = msg.reply_to || (msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null);
 
+      // Determine if message attachment is unlocked or pending
+      let isUnlocked = false;
+      let isPendingVerification = false;
+      if (msg.content?.includes('"type":"vault_media"')) {
+        try {
+          const parsed = JSON.parse(msg.content);
+          const m = parsed?.media;
+          const k1 = m?.batchId;
+          const k2 = m?.mediaUrl;
+          const k3 = m?.items?.[0]?.mediaUrl;
+          isUnlocked = Boolean(
+            (k1 && unlockedAttachmentIds.has(k1)) ||
+            (k2 && unlockedAttachmentIds.has(k2)) ||
+            (k3 && unlockedAttachmentIds.has(k3)) ||
+            unlockedAttachmentIds.has(msg.id)
+          );
+          isPendingVerification = Boolean(
+            (k1 && pendingAttachmentIds.has(k1)) ||
+            (k2 && pendingAttachmentIds.has(k2)) ||
+            (k3 && pendingAttachmentIds.has(k3)) ||
+            pendingAttachmentIds.has(msg.id)
+          );
+        } catch {}
+      }
+
       return (
         <div key={msg.id} id={`msg-${msg.id}`}>
           {showDate && <DateSeparator date={msg.created_at} />}
@@ -432,6 +491,9 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               isRevealed={revealedMessageIds.has(msg.id)}
               isSelectMode={isSelectMode}
               isSelected={selectedMessageIds.has(msg.id)}
+              isUnlocked={isUnlocked}
+              isPendingVerification={isPendingVerification}
+              onUnlocked={() => markAttachmentPending(msg.id)}
               onToggleSelect={handleToggleSelect}
               onDelete={handleDelete}
               onReveal={isCreator ? handleToggleReveal : undefined}
@@ -452,7 +514,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   const online = isOnline(other.last_seen_at);
 
   return (
-    <div className="flex flex-col h-full bg-ink">
+    <div id="chat-window-root" className="flex flex-col h-full bg-ink relative overflow-hidden md:border-r border-border-subtle">
       {/* ── Header ──────────────────────────────────────────────────── */}
       {isSelectMode ? (
         <header className="sticky top-0 z-30 flex items-center justify-between px-3.5 py-3 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
@@ -486,10 +548,10 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
         </header>
       ) : (
         <header className="sticky top-0 z-30 flex items-center gap-3.5 px-3.5 py-2.5 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
-          {/* Back button (always visible — on desktop goes back to /messages list) */}
+          {/* Back button (mobile only — on desktop conversation list is side-by-side) */}
           <button
             onClick={onBack}
-            className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors shrink-0 cursor-pointer"
+            className="md:hidden w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-ink-light transition-colors shrink-0 cursor-pointer"
             aria-label="Back to conversations"
           >
             <ArrowLeft size={22} />
@@ -722,15 +784,29 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           onOpenStory={handleOpenStory}
           onPin={() => handleTogglePin(contextMenuData.message.id)}
           onForward={() => {
-            const preview = getCleanMessagePreview(contextMenuData.message.content, contextMenuData.message.message_type, contextMenuData.message.is_deleted);
-            if (preview.text) {
-              navigator.clipboard.writeText(preview.text);
-              showToast('Copied to forward');
-            }
+            setMessageToForward(contextMenuData.message);
+            setBulkForwardList([]);
+            setForwardModalOpen(true);
+            setContextMenuData(null);
           }}
           onSelect={() => handleEnterSelectMode(contextMenuData.message.id)}
         />
       )}
+
+      {/* ── Forward Message Modal ────────────────────────────────────── */}
+      <ForwardMessageModal
+        isOpen={forwardModalOpen}
+        onClose={() => {
+          setForwardModalOpen(false);
+          setMessageToForward(null);
+          setBulkForwardList([]);
+        }}
+        messageToForward={messageToForward}
+        bulkMessages={bulkForwardList}
+        onForwardSuccess={(count) => {
+          showToast(`Forwarded to ${count} chat${count > 1 ? 's' : ''}`);
+        }}
+      />
 
       {/* Subtle notification toast */}
       {toastMessage && (

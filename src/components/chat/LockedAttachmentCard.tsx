@@ -16,6 +16,7 @@ interface LockedAttachmentCardProps {
   senderName?: string;
   senderAvatar?: string | null;
   timestamp?: string;
+  creatorId?: string;
   onUnlocked?: () => void;
 }
 
@@ -30,6 +31,7 @@ export default function LockedAttachmentCard({
   senderName,
   senderAvatar,
   timestamp,
+  creatorId,
   onUnlocked,
 }: LockedAttachmentCardProps) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -272,6 +274,8 @@ export default function LockedAttachmentCard({
       <UnlockPaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
+        attachmentId={media.batchId || (items[0] && items[0].mediaUrl) || media.mediaUrl}
+        creatorId={creatorId}
         amountUsd={price}
         attachmentTitle={media.title}
         batchCount={items.length}

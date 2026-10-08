@@ -79,7 +79,7 @@ export default function Feed() {
 
   const handleMessage = async (creatorProfileId: string) => {
     if (!user) {
-      navigate('/auth');
+      navigate('/login');
       return;
     }
 

@@ -47,7 +47,7 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
     try {
       setLoading(true);
 
-      // 1. Fetch from attachment_unlocks
+      // 1. Fetch from attachment_unlocks (strictly status = 'verified')
       const { data: unlocks, error } = await supabase
         .from('attachment_unlocks')
         .select(`
@@ -55,6 +55,7 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           amount_usd,
           unlocked_at,
           status,
+          media_url,
           attachment:message_attachments!attachment_id(
             id,
             public_url,
@@ -73,16 +74,22 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
         for (const row of unlocks) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const att = row.attachment as any;
-          if (att?.public_url) {
-            const isVideo = att.mime_type?.startsWith('video/') || att.file_name?.match(/\.(mp4|mov|webm)$/i);
+          const directUrl = (row as any).media_url;
+          const finalUrl = att?.public_url || directUrl;
+          if (finalUrl) {
+            const isVideo =
+              att?.mime_type?.startsWith('video/') ||
+              att?.file_name?.match(/\.(mp4|mov|webm)$/i) ||
+              finalUrl.match(/\.(mp4|mov|webm)$/i);
+
             parsedDbItems.push({
               id: row.id,
-              mediaUrl: att.public_url,
-              thumbnailUrl: att.thumbnail_url || (isVideo ? null : att.public_url),
+              mediaUrl: finalUrl,
+              thumbnailUrl: att?.thumbnail_url || (isVideo ? null : finalUrl),
               mediaType: isVideo ? 'video' : 'image',
-              title: att.file_name || 'Exclusive Attachment',
-              creatorName: att.sender?.display_name || att.sender?.username || 'Creator',
-              creatorAvatar: att.sender?.avatar_url || null,
+              title: att?.file_name || 'Exclusive Media',
+              creatorName: att?.sender?.display_name || att?.sender?.username || 'Creator',
+              creatorAvatar: att?.sender?.avatar_url || null,
               unlockedAt: row.unlocked_at,
               amountUsd: row.amount_usd,
             });
@@ -90,8 +97,50 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
         }
       }
 
-      // 2. Fetch locally recorded unlocked media (from chat interactions)
-      let localItems: UnlockedVaultItem[] = [];
+      // 2. Fetch from verified transactions_ledger
+      try {
+        const { data: verifiedTxs } = await supabase
+          .from('transactions_ledger')
+          .select(`
+            id,
+            amount_usd,
+            created_at,
+            media_url,
+            attachment_id,
+            description,
+            creator:profiles!creator_id(display_name, username, avatar_url)
+          `)
+          .eq('user_id', profile.id)
+          .eq('type', 'attachment_unlock')
+          .eq('status', 'verified');
+
+        if (verifiedTxs) {
+          for (const tx of verifiedTxs) {
+            if (
+              tx.media_url &&
+              !parsedDbItems.some((p) => p.mediaUrl === tx.media_url || p.id === tx.id)
+            ) {
+              const isVid = Boolean(tx.media_url.match(/\.(mp4|mov|webm)$/i));
+              parsedDbItems.push({
+                id: tx.id,
+                mediaUrl: tx.media_url,
+                thumbnailUrl: tx.media_url,
+                mediaType: isVid ? 'video' : 'image',
+                title: tx.description || 'Exclusive Media',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                creatorName: (tx.creator as any)?.display_name || (tx.creator as any)?.username || 'Creator',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                creatorAvatar: (tx.creator as any)?.avatar_url || null,
+                unlockedAt: tx.created_at,
+                amountUsd: tx.amount_usd,
+              });
+            }
+          }
+        }
+      } catch {}
+
+      // 3. Fetch locally recorded unlocked media — STRICTLY status: 'verified' only
+      let localItems: any[] = [];
       try {
         const localKey = `velour_unlocked_media_${profile.id}`;
         const raw = localStorage.getItem(localKey);
@@ -100,11 +149,28 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
         localItems = [];
       }
 
-      // Combine unique by mediaUrl or ID
       const combined = [...parsedDbItems];
-      for (const loc of localItems) {
-        if (!combined.some((c) => c.mediaUrl === loc.mediaUrl || c.id === loc.id)) {
-          combined.push(loc);
+      if (Array.isArray(localItems)) {
+        // Enforce STRICT filter: item MUST have status === 'verified' and a valid mediaUrl
+        const verifiedLocals = localItems.filter(
+          (loc) => loc && loc.status === 'verified' && (loc.mediaUrl || loc.thumbnailUrl)
+        );
+
+        for (const loc of verifiedLocals) {
+          const url = loc.mediaUrl || loc.thumbnailUrl;
+          if (!combined.some((c) => c.mediaUrl === url || c.id === loc.id)) {
+            combined.push({
+              id: loc.id,
+              mediaUrl: url,
+              thumbnailUrl: loc.thumbnailUrl || url,
+              mediaType: loc.mediaType === 'video' ? 'video' : 'image',
+              title: loc.title || 'Exclusive Media',
+              creatorName: loc.creatorName || 'Creator',
+              creatorAvatar: loc.creatorAvatar || null,
+              unlockedAt: loc.unlockedAt || new Date().toISOString(),
+              amountUsd: loc.amountUsd || null,
+            });
+          }
         }
       }
 

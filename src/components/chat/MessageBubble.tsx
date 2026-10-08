@@ -50,6 +50,9 @@ interface Props {
   onReact?: (messageId: string, emoji: string) => void;
   otherName?: string;
   otherAvatar?: string | null;
+  isUnlocked?: boolean;
+  isPendingVerification?: boolean;
+  onUnlocked?: () => void;
 }
 
 export default function MessageBubble({
@@ -57,6 +60,7 @@ export default function MessageBubble({
   isRevealed, isSelectMode, isSelected, onToggleSelect,
   onDelete, onReveal, onReply, onOpenStory, onScrollToMessage,
   onOpenContextMenu, onReact, otherName, otherAvatar,
+  isUnlocked = false, isPendingVerification = false, onUnlocked,
 }: Props) {
   const { user } = useAuth();
   const isDeleted = message.is_deleted;
@@ -326,15 +330,6 @@ export default function MessageBubble({
             >
               <MoreHorizontal size={13} strokeWidth={2.2} />
             </button>
-            {isMine && !isDeleted && message.status !== 'sending' && (
-              <button
-                onClick={() => onDelete(message.id)}
-                className="w-7 h-7 rounded-full bg-ink-light border border-border-subtle flex items-center justify-center text-muted hover:text-red-400 transition-colors"
-                title="Delete"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-              </button>
-            )}
           </div>
 
           <div
@@ -484,6 +479,10 @@ export default function MessageBubble({
                         isMine={isMine}
                         isCreator={isCreator}
                         currentUserId={user?.id}
+                        creatorId={isMine ? user?.id : message.sender_id}
+                        isUnlocked={isUnlocked}
+                        isPendingVerification={isPendingVerification}
+                        onUnlocked={onUnlocked}
                         isSending={message.status === 'sending'}
                         senderName={senderDisplayName}
                         senderAvatar={senderAvatarUrl}

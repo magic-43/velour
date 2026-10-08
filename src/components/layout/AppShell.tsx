@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import {
   Play, Compass, MessageSquare,
-  ChevronRight, Search, X,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -40,7 +39,6 @@ export default function AppShell() {
   const { profile, isCreator } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [desktopSearch, setDesktopSearch] = useState('');
 
   const sidebarNavItems = isCreator ? SIDEBAR_CREATOR_NAV : SIDEBAR_FAN_NAV;
   const mobileNavItems  = isCreator ? MOBILE_CREATOR_NAV  : MOBILE_FAN_NAV;
@@ -171,52 +169,10 @@ export default function AppShell() {
             <Outlet />
           </div>
         ) : (
-          /* Standard: center column + right sidebar */
-          <>
-            <main className={mainShellClass}>
-              <Outlet />
-            </main>
-
-            {/* ── Right Sidebar (large screens only) ── */}
-            <aside className="hidden lg:block shrink-0 sticky top-0 h-screen py-6 pl-8 pr-4 overflow-y-auto no-scrollbar transition-all duration-500 ease-in-out w-80">
-
-              {/* Search */}
-              {!isProfile && (
-                <div className="relative mb-6">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                  <input
-                    type="text"
-                    value={desktopSearch}
-                    onChange={e => setDesktopSearch(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && desktopSearch.trim()) {
-                        navigate(`/explore?q=${encodeURIComponent(desktopSearch.trim())}`);
-                      }
-                    }}
-                    placeholder="Search"
-                    className="w-full bg-[#1c1c1e] text-white rounded-xl py-2 pl-10 pr-9 text-sm focus:outline-none placeholder-zinc-500 transition-colors"
-                  />
-                  {desktopSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setDesktopSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Trending creators placeholder */}
-              {!isProfile && (
-                <div className="bg-ink-light border border-border-subtle rounded-2xl p-4 mb-4">
-                  <h3 className="font-serif text-lg text-paper mb-3">Trending Creators</h3>
-                  <p className="text-muted text-xs">Trending creators will appear here.</p>
-                </div>
-              )}
-            </aside>
-          </>
+          /* Standard: center column */
+          <main className={mainShellClass}>
+            <Outlet />
+          </main>
         )}
       </div>
 

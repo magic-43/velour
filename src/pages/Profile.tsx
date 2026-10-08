@@ -86,13 +86,39 @@ export default function Profile() {
             new Set([currentUserId, ...(personas || []).map((p) => p.id)])
           );
 
-          // 3. Followers count (conversations connected to this creator)
-          const { count: fCount } = await supabase
-            .from('conversations')
-            .select('*', { count: 'exact', head: true })
-            .in('creator_profile_id', targetIds);
+          // 3. Followers count from real follows table (RPC first, then table count)
+          let resolvedFCount: number | null = null;
+          try {
+            const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_creator_followers_count', {
+              p_creator_id: currentUserId,
+            });
+            if (!rpcErr && typeof rpcCount === 'number') {
+              resolvedFCount = rpcCount;
+            }
+          } catch {}
 
-          if (typeof fCount === 'number') setFollowersCount(fCount);
+          if (resolvedFCount !== null) {
+            setFollowersCount(resolvedFCount);
+          } else {
+            const { count: fCount, error: fErr } = await supabase
+              .from('follows')
+              .select('*', { count: 'exact', head: true })
+              .in('creator_profile_id', targetIds);
+
+            if (!fErr && typeof fCount === 'number') {
+              setFollowersCount(fCount);
+            } else {
+              // Local fallback
+              let sumFollowers = 0;
+              for (const tId of targetIds) {
+                try {
+                  const raw = localStorage.getItem(`velour_creator_followers_${tId}`);
+                  if (raw) sumFollowers += JSON.parse(raw).length;
+                } catch {}
+              }
+              setFollowersCount(sumFollowers);
+            }
+          }
 
           // 4. Archived stories count
           const { count: sCount } = await supabase
@@ -113,7 +139,7 @@ export default function Profile() {
             setTotalViews(sum);
           }
         } else {
-          // 1. Vault items (verified attachment unlocks for fans + local unlocks)
+          // 1. Vault items (STRICTLY verified attachment unlocks for fans)
           const { count: vCount } = await supabase
             .from('attachment_unlocks')
             .select('*', { count: 'exact', head: true })
@@ -123,20 +149,34 @@ export default function Profile() {
           let localVaultCount = 0;
           try {
             const raw = localStorage.getItem(`velour_unlocked_media_${currentUserId}`);
-            if (raw) localVaultCount = JSON.parse(raw).length;
+            if (raw) {
+              const items = JSON.parse(raw);
+              if (Array.isArray(items)) {
+                localVaultCount = items.filter((i: any) => i && i.status === 'verified').length;
+              }
+            }
           } catch {
             localVaultCount = 0;
           }
 
           setVaultCount(Math.max(vCount || 0, localVaultCount));
 
-          // 2. Following / connected conversations for fans
-          const { count: fCount } = await supabase
-            .from('conversations')
+          // 2. Following count from real follows table
+          const { count: followingC, error: followErr } = await supabase
+            .from('follows')
             .select('*', { count: 'exact', head: true })
             .eq('fan_id', currentUserId);
 
-          if (typeof fCount === 'number') setFollowingCount(fCount);
+          if (!followErr && typeof followingC === 'number') {
+            setFollowingCount(followingC);
+          } else {
+            let localFollowingCount = 0;
+            try {
+              const raw = localStorage.getItem(`velour_user_follows_${currentUserId}`);
+              if (raw) localFollowingCount = JSON.parse(raw).length;
+            } catch {}
+            setFollowingCount(localFollowingCount);
+          }
 
           // 3. Saved stories count from localStorage & Supabase reactions
           const localKey = `saved_stories_${currentUserId}`;
@@ -163,6 +203,26 @@ export default function Profile() {
     }
 
     fetchStats();
+
+    // Realtime subscription to follows table so creator stats update live
+    const channel = supabase
+      .channel(`profile_stats_realtime_${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'follows',
+        },
+        () => {
+          fetchStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [profile, isCreator]);
 
   const handleSignOut = async () => {

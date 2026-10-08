@@ -157,6 +157,27 @@ export function useStories(): UseStoriesReturn {
         return;
       }
 
+      // Sync viewed story IDs from database
+      if (user?.id) {
+        try {
+          const { data: dbViews } = await supabase
+            .from('story_views')
+            .select('story_id')
+            .eq('viewer_id', user.id);
+
+          if (dbViews) {
+            dbViews.forEach((v) => {
+              if (v.story_id) {
+                viewedStoryIds.current.add(v.story_id);
+                saveViewedStoryId(v.story_id, user.id);
+              }
+            });
+          }
+        } catch (viewErr) {
+          console.debug('Error querying story_views table:', viewErr);
+        }
+      }
+
       const creatorMap = new Map<string, { creator: CreatorProfile; allStories: Story[] }>();
 
       for (const row of (data ?? []) as any[]) {
@@ -503,6 +524,17 @@ export function useStories(): UseStoriesReturn {
 
       try {
         await supabase.rpc('increment_story_view', { p_story_id: storyId });
+
+        if (userRef.current?.id) {
+          try {
+            await supabase
+              .from('story_views')
+              .insert({
+                story_id: storyId,
+                viewer_id: userRef.current.id,
+              });
+          } catch {}
+        }
 
         // Optimistically increment view count and update unviewed count in local state
         setSessions((prevSessions) =>

@@ -59,6 +59,29 @@ export default function CreatorStudioProfile({
   const [publicProfileOpen, setPublicProfileOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(null);
+  const [pendingUnlocksCount, setPendingUnlocksCount] = useState(0);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const loadPendingCount = async () => {
+      try {
+        const { count } = await supabase
+          .from('transactions_ledger')
+          .select('*', { count: 'exact', head: true })
+          .or(`creator_id.eq.${profile.id},user_id.eq.${profile.id}`)
+          .eq('status', 'pending');
+
+        let localCount = 0;
+        try {
+          const raw = localStorage.getItem(`velour_creator_pending_txs_${profile.id}`);
+          if (raw) localCount = JSON.parse(raw).length;
+        } catch {}
+
+        setPendingUnlocksCount(Math.max(count || 0, localCount));
+      } catch {}
+    };
+    loadPendingCount();
+  }, [profile?.id]);
 
   // Android hardware back button handlers for Creator Studio overlays and modals
   useBackHandler(() => {
@@ -492,7 +515,14 @@ export default function CreatorStudioProfile({
                     </p>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-white/40 group-hover:text-white transition-colors" />
+                <div className="flex items-center gap-2">
+                  {pendingUnlocksCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold">
+                      {pendingUnlocksCount} pending
+                    </span>
+                  )}
+                  <ChevronRight size={16} className="text-white/40 group-hover:text-white transition-colors" />
+                </div>
               </button>
 
               <button
@@ -567,7 +597,7 @@ export default function CreatorStudioProfile({
             onBack={() => setPublicProfileOpen(false)}
             onMessage={() => {
               setPublicProfileOpen(false);
-              navigate('/conversations');
+              navigate('/messages');
             }}
           />
         </div>
