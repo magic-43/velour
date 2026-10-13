@@ -7,6 +7,7 @@ import { useCreatorProfiles } from '../lib/hooks/useCreatorProfiles';
 import type { CreatorProfile, Profile } from '../types';
 import CreatorProfilePanel from '../components/creator/CreatorProfilePanel';
 import { useBackHandler } from '../lib/backButtonRegistry';
+import PullToRefresh from '../components/common/PullToRefresh';
 
 const AVATAR_COLORS = [
   'bg-blue-500',
@@ -178,6 +179,13 @@ export default function Explore() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [fetchCreators, fetchClients, isCreator]);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      fetchCreators(),
+      isCreator ? fetchClients() : Promise.resolve(),
+    ]);
   }, [fetchCreators, fetchClients, isCreator]);
 
   // Combine items into a unified list based on role and active filter
@@ -468,7 +476,10 @@ export default function Explore() {
           </div>
 
           {/* Contacts List Body */}
-          <div className="flex-1 overflow-y-auto bg-ink pb-24 md:pb-8">
+          <PullToRefresh
+            onRefresh={handleRefresh}
+            className="flex-1 overflow-y-auto bg-ink pb-24 md:pb-8"
+          >
             {/* Loading Indicator */}
             {(loading || clientsLoading) && items.length === 0 ? (
               <div className="flex justify-center py-16">
@@ -547,7 +558,7 @@ export default function Explore() {
                 })}
               </div>
             )}
-          </div>
+          </PullToRefresh>
         </>
       )}
     </div>

@@ -6,6 +6,7 @@ import { useConversations } from '../../lib/hooks/useConversations';
 import { useIsOtherTyping } from '../../lib/hooks/useIsOtherTyping';
 import { parseConversationPreview } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
+import PullToRefresh from '../common/PullToRefresh';
 import type { ConversationWithParticipants } from '../../types';
 
 function formatMessageTime(iso: string | null): string {
@@ -31,7 +32,7 @@ export default function ConversationList() {
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState('');
-  const { conversations, loading, getOtherParticipant, getUnread } = useConversations();
+  const { conversations, loading, refresh, getOtherParticipant, getUnread } = useConversations();
 
   // Active conversation id from URL
   const activeId = location.pathname.startsWith('/messages/')
@@ -119,7 +120,10 @@ export default function ConversationList() {
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto no-scrollbar p-2.5 space-y-0.5">
+      <PullToRefresh
+        onRefresh={refresh}
+        className="flex-1 overflow-y-auto no-scrollbar p-2.5 space-y-0.5"
+      >
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-gold border-t-transparent rounded-full animate-spin" />
@@ -143,7 +147,7 @@ export default function ConversationList() {
             />
           ))
         )}
-      </div>
+      </PullToRefresh>
     </div>
   );
 }

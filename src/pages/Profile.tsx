@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, type ChangeEvent, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Key, Wallet, Bookmark, Compass,
@@ -19,6 +19,7 @@ import FanFollowingView from '../components/profile/FanFollowingView';
 import CreatorStudioProfile from '../components/profile/CreatorStudioProfile';
 import { getVaultItems } from '../lib/creatorVault';
 import { useBackHandler } from '../lib/backButtonRegistry';
+import PullToRefresh from '../components/common/PullToRefresh';
 
 type SubView = 'none' | 'vault' | 'saved' | 'archive' | 'followers' | 'following';
 
@@ -65,143 +66,151 @@ export default function Profile() {
     return true;
   }, subView !== 'none', 80);
 
-  useEffect(() => {
+  const fetchStats = useCallback(async () => {
     if (!profile) return;
     const currentUserId = profile.id;
 
-    async function fetchStats() {
-      try {
-        if (isCreator) {
-          // 1. Vault items from creator vault storage
-          const vaultItems = getVaultItems(currentUserId);
-          setVaultCount(vaultItems.length);
+    try {
+      if (isCreator) {
+        // 1. Vault items from creator vault storage
+        const vaultItems = getVaultItems(currentUserId);
+        setVaultCount(vaultItems.length);
 
-          // 2. Fetch creator persona IDs
-          const { data: personas } = await supabase
-            .from('creator_profiles')
-            .select('id')
-            .eq('owner_id', currentUserId);
+        // 2. Fetch creator persona IDs
+        const { data: personas } = await supabase
+          .from('creator_profiles')
+          .select('id')
+          .eq('owner_id', currentUserId);
 
-          const targetIds = Array.from(
-            new Set([currentUserId, ...(personas || []).map((p) => p.id)])
-          );
+        const targetIds = Array.from(
+          new Set([currentUserId, ...(personas || []).map((p) => p.id)])
+        );
 
-          // 3. Followers count from real follows table (RPC first, then table count)
-          let resolvedFCount: number | null = null;
-          try {
-            const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_creator_followers_count', {
-              p_creator_id: currentUserId,
-            });
-            if (!rpcErr && typeof rpcCount === 'number') {
-              resolvedFCount = rpcCount;
-            }
-          } catch {}
-
-          if (resolvedFCount !== null) {
-            setFollowersCount(resolvedFCount);
-          } else {
-            const { count: fCount, error: fErr } = await supabase
-              .from('follows')
-              .select('*', { count: 'exact', head: true })
-              .in('creator_profile_id', targetIds);
-
-            if (!fErr && typeof fCount === 'number') {
-              setFollowersCount(fCount);
-            } else {
-              // Local fallback
-              let sumFollowers = 0;
-              for (const tId of targetIds) {
-                try {
-                  const raw = localStorage.getItem(`velour_creator_followers_${tId}`);
-                  if (raw) sumFollowers += JSON.parse(raw).length;
-                } catch {}
-              }
-              setFollowersCount(sumFollowers);
-            }
+        // 3. Followers count from real follows table (RPC first, then table count)
+        let resolvedFCount: number | null = null;
+        try {
+          const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_creator_followers_count', {
+            p_creator_id: currentUserId,
+          });
+          if (!rpcErr && typeof rpcCount === 'number') {
+            resolvedFCount = rpcCount;
           }
+        } catch {}
 
-          // 4. Archived stories count
-          const { count: sCount } = await supabase
-            .from('stories')
-            .select('*', { count: 'exact', head: true })
-            .in('creator_profile_id', targetIds);
-
-          if (typeof sCount === 'number') setArchiveCount(sCount);
-
-          // 5. Total story views
-          const { data: viewsData } = await supabase
-            .from('stories')
-            .select('view_count')
-            .in('creator_profile_id', targetIds);
-
-          if (viewsData) {
-            const sum = viewsData.reduce((acc, curr) => acc + (curr.view_count || 0), 0);
-            setTotalViews(sum);
-          }
+        if (resolvedFCount !== null) {
+          setFollowersCount(resolvedFCount);
         } else {
-          // 1. Vault items (STRICTLY verified attachment unlocks for fans)
-          const { count: vCount } = await supabase
-            .from('attachment_unlocks')
-            .select('*', { count: 'exact', head: true })
-            .eq('fan_id', currentUserId)
-            .eq('status', 'verified');
-
-          let localVaultCount = 0;
-          try {
-            const raw = localStorage.getItem(`velour_unlocked_media_${currentUserId}`);
-            if (raw) {
-              const items = JSON.parse(raw);
-              if (Array.isArray(items)) {
-                localVaultCount = items.filter((i: any) => i && i.status === 'verified').length;
-              }
-            }
-          } catch {
-            localVaultCount = 0;
-          }
-
-          setVaultCount(Math.max(vCount || 0, localVaultCount));
-
-          // 2. Following count from real follows table
-          const { count: followingC, error: followErr } = await supabase
+          const { count: fCount, error: fErr } = await supabase
             .from('follows')
             .select('*', { count: 'exact', head: true })
-            .eq('fan_id', currentUserId);
+            .in('creator_profile_id', targetIds);
 
-          if (!followErr && typeof followingC === 'number') {
-            setFollowingCount(followingC);
+          if (!fErr && typeof fCount === 'number') {
+            setFollowersCount(fCount);
           } else {
-            let localFollowingCount = 0;
-            try {
-              const raw = localStorage.getItem(`velour_user_follows_${currentUserId}`);
-              if (raw) localFollowingCount = JSON.parse(raw).length;
-            } catch {}
-            setFollowingCount(localFollowingCount);
+            // Local fallback
+            let sumFollowers = 0;
+            for (const tId of targetIds) {
+              try {
+                const raw = localStorage.getItem(`velour_creator_followers_${tId}`);
+                if (raw) sumFollowers += JSON.parse(raw).length;
+              } catch {}
+            }
+            setFollowersCount(sumFollowers);
           }
-
-          // 3. Saved stories count from localStorage & Supabase reactions
-          const localKey = `saved_stories_${currentUserId}`;
-          let localSavedIds: string[] = [];
-          try {
-            localSavedIds = JSON.parse(localStorage.getItem(localKey) || '[]');
-          } catch {
-            localSavedIds = [];
-          }
-
-          const { data: dbReactions } = await supabase
-            .from('story_reactions')
-            .select('story_id')
-            .eq('user_id', currentUserId)
-            .eq('reaction_type', 'bookmark');
-
-          const dbSavedIds = (dbReactions || []).map((r) => r.story_id);
-          const allSavedIds = Array.from(new Set([...localSavedIds, ...dbSavedIds]));
-          setSavedCount(allSavedIds.length);
         }
-      } catch (err) {
-        console.error('Error fetching profile stats:', err);
-      }
-    }
 
+        // 4. Archived stories count
+        const { count: sCount } = await supabase
+          .from('stories')
+          .select('*', { count: 'exact', head: true })
+          .in('creator_profile_id', targetIds);
+
+        if (typeof sCount === 'number') setArchiveCount(sCount);
+
+        // 5. Total story views
+        const { data: viewsData } = await supabase
+          .from('stories')
+          .select('view_count')
+          .in('creator_profile_id', targetIds);
+
+        if (viewsData) {
+          const sum = viewsData.reduce((acc, curr) => acc + (curr.view_count || 0), 0);
+          setTotalViews(sum);
+        }
+      } else {
+        // 1. Vault items (STRICTLY verified attachment unlocks for fans)
+        const { count: vCount } = await supabase
+          .from('attachment_unlocks')
+          .select('*', { count: 'exact', head: true })
+          .eq('fan_id', currentUserId)
+          .eq('status', 'verified');
+
+        let localVaultCount = 0;
+        try {
+          const raw = localStorage.getItem(`velour_unlocked_media_${currentUserId}`);
+          if (raw) {
+            const items = JSON.parse(raw);
+            if (Array.isArray(items)) {
+              localVaultCount = items.filter((i: any) => i && i.status === 'verified').length;
+            }
+          }
+        } catch {
+          localVaultCount = 0;
+        }
+
+        setVaultCount(Math.max(vCount || 0, localVaultCount));
+
+        // 2. Following count from real follows table
+        const { count: followingC, error: followErr } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('fan_id', currentUserId);
+
+        if (!followErr && typeof followingC === 'number') {
+          setFollowingCount(followingC);
+        } else {
+          let localFollowingCount = 0;
+          try {
+            const raw = localStorage.getItem(`velour_user_follows_${currentUserId}`);
+            if (raw) localFollowingCount = JSON.parse(raw).length;
+          } catch {}
+          setFollowingCount(localFollowingCount);
+        }
+
+        // 3. Saved stories count from localStorage & Supabase reactions
+        const localKey = `saved_stories_${currentUserId}`;
+        let localSavedIds: string[] = [];
+        try {
+          localSavedIds = JSON.parse(localStorage.getItem(localKey) || '[]');
+        } catch {
+          localSavedIds = [];
+        }
+
+        const { data: dbReactions } = await supabase
+          .from('story_reactions')
+          .select('story_id')
+          .eq('user_id', currentUserId)
+          .eq('reaction_type', 'bookmark');
+
+        const dbSavedIds = (dbReactions || []).map((r) => r.story_id);
+        const allSavedIds = Array.from(new Set([...localSavedIds, ...dbSavedIds]));
+        setSavedCount(allSavedIds.length);
+      }
+    } catch (err) {
+      console.error('Error fetching profile stats:', err);
+    }
+  }, [profile, isCreator]);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      refreshProfile(),
+      fetchStats(),
+    ]);
+  }, [refreshProfile, fetchStats]);
+
+  useEffect(() => {
+    if (!profile) return;
     fetchStats();
 
     // Realtime subscription to follows table so creator stats update live
@@ -223,7 +232,7 @@ export default function Profile() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile, isCreator]);
+  }, [profile, fetchStats]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -315,24 +324,27 @@ export default function Profile() {
   // ── CREATOR STUDIO PROFILE VIEW (Snapchat / Creator Studio Style) ───────────
   if (isCreator) {
     return (
-      <CreatorStudioProfile
-        profile={profile}
-        followersCount={followersCount}
-        archiveCount={archiveCount}
-        vaultCount={vaultCount}
-        totalViews={totalViews}
-        onPhotoUpload={handlePhotoUpload}
-        fileInputRef={fileInputRef}
-        onOpenVault={() => setSubView('vault')}
-        onOpenArchive={() => setSubView('archive')}
-        onOpenFollowers={() => setSubView('followers')}
-      />
+      <PullToRefresh onRefresh={handleRefresh} className="h-full overflow-y-auto">
+        <CreatorStudioProfile
+          profile={profile}
+          followersCount={followersCount}
+          archiveCount={archiveCount}
+          vaultCount={vaultCount}
+          totalViews={totalViews}
+          onPhotoUpload={handlePhotoUpload}
+          fileInputRef={fileInputRef}
+          onOpenVault={() => setSubView('vault')}
+          onOpenArchive={() => setSubView('archive')}
+          onOpenFollowers={() => setSubView('followers')}
+        />
+      </PullToRefresh>
     );
   }
 
   // ── MAIN TELEGRAM-STYLE FAN PROFILE VIEW ────────────────────────────────────
   return (
-    <div className="px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
+    <PullToRefresh onRefresh={handleRefresh} className="h-full overflow-y-auto">
+      <div className="px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
       <input
         type="file"
         ref={fileInputRef}
@@ -517,7 +529,8 @@ export default function Profile() {
           onClose={() => setSwitcherOpen(false)}
         />
       )}
-    </div>
+      </div>
+    </PullToRefresh>
   );
 }
 

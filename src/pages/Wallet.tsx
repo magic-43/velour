@@ -23,6 +23,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { useBackHandler } from '../lib/backButtonRegistry';
+import PullToRefresh from '../components/common/PullToRefresh';
 
 interface TransactionItem {
   id: string;
@@ -519,7 +520,10 @@ export default function Wallet() {
       </div>
 
       {/* ── Scrollable Body ───────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-28 md:pb-12">
+      <PullToRefresh
+        onRefresh={fetchWalletData}
+        className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-28 md:pb-12"
+      >
         <div className="max-w-[680px] mx-auto w-full space-y-6">
 
           {/* ── Balance Overview Bento Cards ──────────────────────────────── */}
@@ -839,7 +843,7 @@ export default function Wallet() {
           )}
 
         </div>
-      </div>
+      </PullToRefresh>
 
       {/* ── Physical Gift Card Inspection & Zoom Modal ────────────────────── */}
       {inspectedTx && (

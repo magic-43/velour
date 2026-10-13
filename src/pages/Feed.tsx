@@ -9,12 +9,13 @@ import HomeStoryFeed from '../components/stories/HomeStoryFeed';
 import CreateStoryModal from '../components/stories/CreateStoryModal';
 import MyStatusView from '../components/stories/MyStatusView';
 import { useBackHandler } from '../lib/backButtonRegistry';
+import PullToRefresh from '../components/common/PullToRefresh';
 
 export default function Feed() {
   const { user, isCreator } = useAuth();
   const { activeCreatorProfile } = useCreatorProfiles();
   const navigate = useNavigate();
-  const { sessions, loading, postStory, postStoryBatch, deleteStory, updateStoryCaption, markStoryViewed } = useStories();
+  const { sessions, loading, refetch, postStory, postStoryBatch, deleteStory, updateStoryCaption, markStoryViewed } = useStories();
 
   const [activeHomeSessionIndex, setActiveHomeSessionIndex] = useState<number | null>(null);
   const [activeHomeSlideIndex, setActiveHomeSlideIndex] = useState(0);
@@ -136,9 +137,10 @@ export default function Feed() {
           onAddStory={() => setCreateModalOpen(true)}
         />
       ) : (
-        <div
+        <PullToRefresh
           ref={homeGridRef}
           onScroll={handleHomeGridScroll}
+          onRefresh={refetch}
           className="h-full overflow-y-auto px-4 sm:px-5 pt-0 pb-24 md:pb-8"
         >
           {/* Header */}
@@ -360,7 +362,7 @@ export default function Feed() {
               })}
             </div>
           )}
-        </div>
+        </PullToRefresh>
       )}
 
       {/* Creator Post Story Modal */}
