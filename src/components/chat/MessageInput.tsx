@@ -263,7 +263,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const replyThumbnail = replyTo?.thumbnailUrl || cleanReply?.thumbnailUrl;
 
   return (
-    <div className="relative border-t border-border-subtle/50 bg-[#141416] select-none safe-area-bottom">
+    <div className="relative border-t border-border-subtle/50 bg-[#141416] select-none pb-[env(safe-area-inset-bottom,0px)] shrink-0">
       {/* Reply preview */}
       {replyTo && cleanReply && (
         <div className="flex items-center gap-3 px-3 py-2 border-l-2 border-gold mx-3 mt-2 bg-white/5 rounded-r-xl">

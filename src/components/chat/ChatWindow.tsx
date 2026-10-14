@@ -242,15 +242,20 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
 
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    window.scrollTo(0, 0);
   }, [conversationId]);
 
   useEffect(() => {
     if (!loading && messages.length > 0) {
       if (!initialScrollDoneRef.current) {
-        bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+        if (listRef.current) {
+          listRef.current.scrollTop = listRef.current.scrollHeight;
+        }
         initialScrollDoneRef.current = true;
       } else if (messages.length > prevMessagesCountRef.current && !loadingMore) {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (listRef.current) {
+          listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+        }
       }
     }
     prevMessagesCountRef.current = messages.length;
@@ -259,7 +264,9 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   // Auto-scroll when other participant starts typing so the indicator is in full view
   useEffect(() => {
     if (otherIsTyping) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (listRef.current) {
+        listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
+      }
     }
   }, [otherIsTyping]);
 
@@ -426,8 +433,12 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
 
   const handleScrollToMessage = useCallback((targetId: string) => {
     const el = document.getElementById(`msg-${targetId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el && listRef.current) {
+      const elTop = el.offsetTop;
+      listRef.current.scrollTo({
+        top: Math.max(0, elTop - listRef.current.clientHeight / 2),
+        behavior: 'smooth',
+      });
       el.classList.add('reply-highlight');
       setTimeout(() => {
         el.classList.remove('reply-highlight');
@@ -514,10 +525,10 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
   const online = isOnline(other.last_seen_at);
 
   return (
-    <div id="chat-window-root" className="flex flex-col h-full bg-ink relative overflow-hidden md:border-r border-border-subtle">
+    <div id="chat-window-root" className="flex flex-col h-full max-h-[100dvh] bg-ink relative overflow-hidden md:border-r border-border-subtle">
       {/* ── Header ──────────────────────────────────────────────────── */}
       {isSelectMode ? (
-        <header className="sticky top-0 z-30 flex items-center justify-between px-3.5 py-3 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
+        <header className="shrink-0 z-30 flex items-center justify-between px-3.5 py-3 pt-[max(0.75rem,calc(env(safe-area-inset-top,0px)+0.25rem))] border-b border-border-subtle bg-ink/95 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button
               onClick={handleExitSelectMode}
@@ -547,7 +558,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           </div>
         </header>
       ) : (
-        <header className="sticky top-0 z-30 flex items-center gap-3.5 px-3.5 py-2.5 border-b border-border-subtle bg-ink/95 backdrop-blur-md">
+        <header className="shrink-0 z-30 flex items-center gap-3.5 px-3.5 py-2.5 pt-[max(0.625rem,calc(env(safe-area-inset-top,0px)+0.25rem))] border-b border-border-subtle bg-ink/95 backdrop-blur-md">
           {/* Back button (mobile only — on desktop conversation list is side-by-side) */}
           <button
             onClick={onBack}

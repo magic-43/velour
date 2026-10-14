@@ -165,7 +165,7 @@ export default function AppShell() {
 
         {isMessages ? (
           /* Messages: 2-column full-bleed layout, no right sidebar */
-          <div className="flex-1 flex h-screen overflow-hidden flex-col md:flex-row relative">
+          <div className="flex-1 flex h-full max-h-[100dvh] overflow-hidden flex-col md:flex-row relative">
             <Outlet />
           </div>
         ) : (

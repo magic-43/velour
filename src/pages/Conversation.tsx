@@ -109,14 +109,14 @@ export default function Conversation() {
   if (!conversationId) return null;
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
+    <div className="flex flex-1 h-full max-h-[100dvh] overflow-hidden">
       {/* Left panel — conversation list (desktop only) */}
       <div className="hidden md:block">
         <ConversationList />
       </div>
 
       {/* Right panel — chat window */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden md:border-r border-border-subtle">
+      <div className="flex-1 flex flex-col h-full max-h-[100dvh] overflow-hidden md:border-r border-border-subtle">
         {effectiveOther ? (
           <ChatWindow
             conversationId={conversationId}

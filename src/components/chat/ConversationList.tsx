@@ -66,7 +66,7 @@ export default function ConversationList() {
   return (
     <div className="w-full md:w-[320px] lg:w-[400px] border-r border-border-subtle flex flex-col h-full pb-20 md:pb-0 shrink-0 overflow-hidden">
       {/* Sticky header — Messages title + search + active users */}
-      <div className="sticky top-0 bg-ink/95 backdrop-blur-md z-30 border-b border-border-subtle px-4 md:px-5 pt-3.5 pb-3 space-y-3 shrink-0">
+      <div className="sticky top-0 bg-ink/95 backdrop-blur-md z-30 border-b border-border-subtle px-4 md:px-5 pt-[max(0.875rem,calc(env(safe-area-inset-top,0px)+0.35rem))] pb-3 space-y-3 shrink-0">
 
         {/* Search */}
         <div className="relative">
