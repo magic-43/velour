@@ -2,11 +2,23 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { ConversationWithParticipants } from '../../types';
+import { getCachedConversations, saveCachedConversations } from '../offline/db';
 
 export function useConversations() {
   const { user, profile, isCreator } = useAuth();
   const [conversations, setConversations] = useState<ConversationWithParticipants[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fast path: load cached conversations from IndexedDB immediately for 0ms offline display
+  useEffect(() => {
+    if (!user?.id) return;
+    getCachedConversations().then((cached) => {
+      if (cached && cached.length > 0) {
+        setConversations(cached);
+        setLoading(false);
+      }
+    });
+  }, [user?.id]);
 
   const fetch = useCallback(async () => {
     if (!user) return;
@@ -40,10 +52,14 @@ export function useConversations() {
 
       const { data, error } = await query;
       if (!error && data) {
-        setConversations(data as ConversationWithParticipants[]);
+        const convs = data as ConversationWithParticipants[];
+        setConversations(convs);
+        saveCachedConversations(convs).catch(() => {});
+      } else if (error) {
+        console.warn('Network error fetching conversations (using cached if available):', error.message);
       }
     } catch (err) {
-      console.error('Error in useConversations fetch:', err);
+      console.warn('Error in useConversations fetch (offline mode active):', err);
     } finally {
       setLoading(false);
     }

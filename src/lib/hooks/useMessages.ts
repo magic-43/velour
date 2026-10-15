@@ -3,6 +3,14 @@ import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { Message, Profile } from '../../types';
 import { showNewMessageNotification } from '../notificationService';
+import {
+  getCachedMessages,
+  saveCachedMessages,
+  appendCachedMessage,
+  updateCachedMessage,
+  queueOutboxMessage,
+} from '../offline/db';
+import { isOnline } from '../offline/outboxSync';
 
 export interface MessageWithSender extends Message {
   sender: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
@@ -27,10 +35,47 @@ export function useMessages(conversationId: string | null) {
   const oldestCursorRef = useRef<string | null>(null);
   const hasLoadedRef = useRef(false);
 
+  // Fast path: load cached messages from IndexedDB immediately for 0ms offline display
+  useEffect(() => {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+
+    let isSubscribed = true;
+    getCachedMessages(conversationId).then((cached) => {
+      if (isSubscribed && cached && cached.length > 0) {
+        setMessages(cached);
+        oldestCursorRef.current = cached[0]?.created_at ?? null;
+        setLoading(false);
+        hasLoadedRef.current = true;
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [conversationId]);
+
   // Reset loaded status only when switching to a different conversation
   useEffect(() => {
     hasLoadedRef.current = false;
     setLoading(true);
+  }, [conversationId]);
+
+  // Listen for outbox synchronizer confirmation events
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const handleSynced = (e: any) => {
+      const { tempId, confirmed, conversationId: syncConvId } = e.detail || {};
+      if (syncConvId === conversationId && tempId && confirmed) {
+        setMessages(prev => prev.map(m => m.id === tempId ? confirmed : m));
+      }
+    };
+
+    window.addEventListener('velour:message_synced', handleSynced);
+    return () => window.removeEventListener('velour:message_synced', handleSynced);
   }, [conversationId]);
 
   // ── Unlocked & Pending Attachment IDs (from DB + optimistic localStorage) ──
@@ -165,21 +210,29 @@ export function useMessages(conversationId: string | null) {
       setLoading(true);
     }
 
-    const { data, error } = await supabase
-      .from('messages')
-      .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: false })
-      .limit(PAGE_SIZE);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
 
-    if (!error && data) {
-      const sorted = [...data].reverse() as MessageWithSender[];
-      setMessages(sorted);
-      setHasMore(data.length === PAGE_SIZE);
-      oldestCursorRef.current = sorted[0]?.created_at ?? null;
-      hasLoadedRef.current = true;
+      if (!error && data) {
+        const sorted = [...data].reverse() as MessageWithSender[];
+        setMessages(sorted);
+        saveCachedMessages(sorted).catch(() => {});
+        setHasMore(data.length === PAGE_SIZE);
+        oldestCursorRef.current = sorted[0]?.created_at ?? null;
+        hasLoadedRef.current = true;
+      } else if (error) {
+        console.warn('Network error fetching messages (using offline cache):', error.message);
+      }
+    } catch (err) {
+      console.warn('Error fetching messages (offline mode active):', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [conversationId, user?.id]);
 
   // ── Load older messages (pagination) ─────────────────────────────────────
@@ -222,7 +275,7 @@ export function useMessages(conversationId: string | null) {
     });
   }, [conversationId]);
 
-  // ── Send a message (true optimistic UI with reply support) ────────────────
+  // ── Send a message (true optimistic UI with offline outbox queuing) ───────
   const sendMessage = useCallback(async (content: string, replyTo?: MessageWithSender | null) => {
     if (!conversationId || !user || !content.trim()) return null;
 
@@ -261,46 +314,86 @@ export function useMessages(conversationId: string | null) {
 
     // 2. Show instantly — user sees their message with quote banner the moment they hit send
     setMessages(prev => [...prev, tempMessage]);
+    appendCachedMessage(tempMessage).catch(() => {});
+
+    // If device is currently offline, queue directly into IndexedDB outbox
+    if (!isOnline()) {
+      await queueOutboxMessage({
+        tempId,
+        conversationId,
+        senderId: user.id,
+        senderType: isCreator ? 'creator' : 'fan',
+        content: content.trim(),
+        messageType: 'text',
+        replyToId: replyTo ? replyTo.id : null,
+        replyTo: tempMessage.reply_to,
+        createdAt: tempMessage.created_at,
+        retries: 0,
+      });
+      return tempMessage;
+    }
 
     // 3. Persist to DB in the background
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        sender_type: isCreator ? 'creator' : 'fan',
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          sender_type: isCreator ? 'creator' : 'fan',
+          content: content.trim(),
+          message_type: 'text',
+          reply_to_id: replyTo ? replyTo.id : null,
+        })
+        .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
+        .single();
+
+      if (error) {
+        console.warn('Network send failed, queuing to offline outbox:', error.message);
+        await queueOutboxMessage({
+          tempId,
+          conversationId,
+          senderId: user.id,
+          senderType: isCreator ? 'creator' : 'fan',
+          content: content.trim(),
+          messageType: 'text',
+          replyToId: replyTo ? replyTo.id : null,
+          replyTo: tempMessage.reply_to,
+          createdAt: tempMessage.created_at,
+          retries: 0,
+        });
+        return tempMessage;
+      }
+
+      // 4. Swap the temp message for the real confirmed message, retaining reply_to
+      const confirmed = data as MessageWithSender;
+      if (replyTo && !confirmed.reply_to) {
+        confirmed.reply_to = tempMessage.reply_to;
+      }
+
+      updateCachedMessage(tempId, confirmed).catch(() => {});
+
+      setMessages(prev =>
+        prev.map(m => m.id === tempId ? confirmed : m)
+      );
+
+      return confirmed;
+    } catch (netErr) {
+      console.warn('Network exception while sending, queuing to offline outbox:', netErr);
+      await queueOutboxMessage({
+        tempId,
+        conversationId,
+        senderId: user.id,
+        senderType: isCreator ? 'creator' : 'fan',
         content: content.trim(),
-        message_type: 'text',
-        reply_to_id: replyTo ? replyTo.id : null,
-      })
-      .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
-      .single();
-
-    if (error) {
-      console.error('Send message error:', error);
-      // Remove the failed temp message from the list
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      return null;
+        messageType: 'text',
+        replyToId: replyTo ? replyTo.id : null,
+        replyTo: tempMessage.reply_to,
+        createdAt: tempMessage.created_at,
+        retries: 0,
+      });
+      return tempMessage;
     }
-
-    // 4. Swap the temp message for the real confirmed message, retaining reply_to
-    const confirmed = data as MessageWithSender;
-    if (replyTo && !confirmed.reply_to) {
-      confirmed.reply_to = {
-        id: replyTo.id,
-        content: replyTo.content,
-        message_type: replyTo.message_type,
-        sender_id: replyTo.sender_id,
-        is_deleted: replyTo.is_deleted,
-        sender: replyTo.sender,
-      };
-    }
-
-    setMessages(prev =>
-      prev.map(m => m.id === tempId ? confirmed : m)
-    );
-
-    return confirmed;
   }, [conversationId, user?.id, isCreator, profile?.username, profile?.display_name, profile?.avatar_url]);
 
   // ── Send media message with instant optimistic bubble + background upload ─
@@ -513,10 +606,12 @@ export function useMessages(conversationId: string | null) {
             .single();
 
           if (data) {
+            const confirmedMsg = data as MessageWithSender;
             setMessages(prev => {
-              if (prev.some(m => m.id === data.id)) return prev;
-              return [...prev, data as MessageWithSender];
+              if (prev.some(m => m.id === confirmedMsg.id)) return prev;
+              return [...prev, confirmedMsg];
             });
+            appendCachedMessage(confirmedMsg).catch(() => {});
             markRead();
             await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
 
@@ -543,7 +638,14 @@ export function useMessages(conversationId: string | null) {
           // Skip temp messages (they won't match any DB id)
           if (!payload.new.id) return;
           setMessages(prev =>
-            prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m)
+            prev.map(m => {
+              if (m.id === payload.new.id) {
+                const updated = { ...m, ...payload.new };
+                appendCachedMessage(updated).catch(() => {});
+                return updated;
+              }
+              return m;
+            })
           );
         }
       )

@@ -9,6 +9,7 @@ import {
   removeSavedAccount,
   type SavedAccount,
 } from './multiAccount';
+import { getCachedProfile, saveCachedProfile } from './offline/db';
 
 interface AuthContextType {
   user: User | null;
@@ -37,6 +38,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string, activeSession?: Session | null) => {
+    // 1. Fast path: check offline cache first
+    try {
+      const cached = await getCachedProfile(userId);
+      if (cached) {
+        setProfile(cached);
+      }
+    } catch (_) {}
+
+    // 2. Fetch fresh profile from Supabase
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -44,11 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      console.error('Error fetching profile:', error.message);
+      console.warn('Error fetching profile (may be offline):', error.message);
       return;
     }
     const prof = data as Profile;
     setProfile(prof);
+    saveCachedProfile(prof).catch(() => {});
 
     // If user is a creator or admin, auto-record their session in saved accounts
     if (prof.role === 'creator' || prof.role === 'admin') {
@@ -101,10 +112,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        // Optimistically populate profile from IndexedDB immediately so UI renders offline
+        try {
+          const cached = await getCachedProfile(session.user.id);
+          if (cached) {
+            setProfile(cached);
+            setLoading(false);
+          }
+        } catch (_) {}
         fetchProfile(session.user.id, session).finally(() => setLoading(false));
       } else {
         setLoading(false);

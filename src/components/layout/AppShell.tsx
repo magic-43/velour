@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import {
   Play, Compass, MessageSquare,
@@ -11,7 +11,9 @@ import {
   canPromptDesktopNotifications,
   sendTestDesktopNotification,
 } from '../../lib/notificationService';
+import { initOutboxSync } from '../../lib/offline/outboxSync';
 import InAppMessageToast from '../chat/InAppMessageToast';
+import NetworkStatusBar from '../common/NetworkStatusBar';
 
 // ─── Nav Configurations ──────────────────────────────────────────────────────
 
@@ -48,6 +50,12 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { totalUnreadCount, inAppToast, dismissToast } = useGlobalMessageNotifications();
+
+  // Initialize offline outbox sync engine
+  useEffect(() => {
+    const cleanup = initOutboxSync();
+    return cleanup;
+  }, []);
 
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(() => {
     try {
@@ -100,6 +108,9 @@ export default function AppShell() {
     <div className="h-[100dvh] md:h-screen bg-ink text-paper font-sans flex justify-center overflow-hidden overscroll-none relative">
       {/* ── Global Floating In-App Message Toast ─────────────────────────── */}
       <InAppMessageToast toast={inAppToast} onDismiss={dismissToast} />
+
+      {/* ── Offline / Connectivity Status Indicator ──────────────────────── */}
+      <NetworkStatusBar />
 
       <div className="w-full h-full flex transition-all duration-500 ease-in-out max-w-[1200px]">
 

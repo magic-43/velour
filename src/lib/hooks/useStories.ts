@@ -5,6 +5,7 @@ import { useCreatorProfiles } from './useCreatorProfiles';
 import { uploadPublicFile } from '../r2';
 import { captureVideoThumbnail } from '../videoThumbnail';
 import type { Story, HomeStorySession, CreatorProfile, ArchiveGroup, FeedSlide, AudienceSettings } from '../../types';
+import { getCachedStories, saveCachedStories } from '../offline/db';
 
 interface PostStoryItem {
   file: File;
@@ -62,6 +63,16 @@ export function useStories(): UseStoriesReturn {
   const [sessions, setSessions] = useState<HomeStorySession[]>([]);
   const [loading, setLoading] = useState(true);
   const viewedStoryIds = useRef<Set<string>>(getViewedStoryIds(user?.id));
+
+  // Fast path: load cached stories from IndexedDB immediately for 0ms offline display
+  useEffect(() => {
+    getCachedStories().then((cached) => {
+      if (cached && cached.length > 0) {
+        setSessions(cached);
+        setLoading(false);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     viewedStoryIds.current = getViewedStoryIds(user?.id);
@@ -281,8 +292,9 @@ export function useStories(): UseStoriesReturn {
       });
 
       setSessions(builtSessions);
+      saveCachedStories(builtSessions).catch(() => {});
     } catch (err) {
-      console.error('Failed to load stories:', err);
+      console.warn('Failed to load stories (offline mode active):', err);
     } finally {
       setLoading(false);
     }
