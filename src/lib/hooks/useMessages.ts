@@ -9,6 +9,7 @@ import {
   appendCachedMessage,
   updateCachedMessage,
   queueOutboxMessage,
+  markConversationCachedAsRead,
 } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
 
@@ -269,13 +270,64 @@ export function useMessages(conversationId: string | null) {
   }, [conversationId, loadingMore]);
 
   // ── Mark read / delivered ─────────────────────────────────────────────────
+  const isMarkingReadRef = useRef(false);
+
   const markRead = useCallback(async () => {
-    if (!conversationId || !user) return;
-    await supabase.rpc('mark_read', {
-      p_conversation_id: conversationId,
-      p_reader_id: user.id,
+    if (!conversationId || !user?.id) return;
+
+    // 1. Optimistic in-memory update: mark all incoming messages as 'read'
+    setMessages(prev => {
+      let changed = false;
+      const updated = prev.map(m => {
+        if (m.sender_id !== user.id && m.status !== 'read') {
+          changed = true;
+          return { ...m, status: 'read' as const, read_at: m.read_at || new Date().toISOString() };
+        }
+        return m;
+      });
+      return changed ? updated : prev;
     });
-  }, [conversationId, user]);
+
+    // 2. Optimistic update to IndexedDB cache
+    markConversationCachedAsRead(conversationId, !isCreator, user.id).catch(() => {});
+
+    // 3. Dispatch global custom event so all components (ConversationList, AppShell, etc.) update instantly
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('velour:conversation_read', {
+          detail: { conversationId, userId: user.id },
+        })
+      );
+    }
+
+    // 4. Remote DB call with concurrency throttling
+    if (isMarkingReadRef.current) return;
+    isMarkingReadRef.current = true;
+
+    try {
+      if (isOnline()) {
+        const { error } = await supabase.rpc('mark_read', {
+          p_conversation_id: conversationId,
+          p_reader_id: user.id,
+        });
+
+        if (error) {
+          console.warn('mark_read RPC warning:', error.message);
+        }
+
+        // Also bulk mark delivered
+        await supabase.rpc('mark_all_delivered', {
+          p_conversation_id: conversationId,
+        });
+      }
+    } catch (err) {
+      console.warn('Failed executing mark_read RPC (offline mode):', err);
+    } finally {
+      setTimeout(() => {
+        isMarkingReadRef.current = false;
+      }, 400);
+    }
+  }, [conversationId, user?.id, isCreator]);
 
   const markAllDelivered = useCallback(async () => {
     if (!conversationId) return;
@@ -623,15 +675,6 @@ export function useMessages(conversationId: string | null) {
             appendCachedMessage(confirmedMsg).catch(() => {});
             markRead();
             await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
-
-            // Trigger notification & audio feedback
-            showNewMessageNotification({
-              conversationId,
-              senderName: data.sender?.display_name || data.sender?.username || 'New message',
-              body: data.content || (data.message_type === 'image' ? 'Sent an photo' : data.message_type === 'video' ? 'Sent a video' : 'Sent an attachment'),
-              userId: user.id,
-              isForegroundActive: typeof document !== 'undefined' && document.visibilityState === 'visible',
-            }).catch(() => {});
           }
         }
       )
@@ -661,14 +704,42 @@ export function useMessages(conversationId: string | null) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [conversationId, user?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversationId, user?.id, markRead]);
 
-  // Mark read when conversation opens
+  // 1. Mark read immediately when conversation opens
   useEffect(() => {
-    if (conversationId && user?.id && messages.length > 0) {
+    if (!conversationId || !user?.id) return;
+    markRead();
+  }, [conversationId, user?.id, markRead]);
+
+  // 2. When messages load or change, if there are unread incoming messages, ensure marked read
+  useEffect(() => {
+    if (!conversationId || !user?.id) return;
+    const hasIncomingUnread = messages.some(
+      m => m.sender_id !== user.id && m.status !== 'read'
+    );
+    if (hasIncomingUnread) {
       markRead();
     }
-  }, [conversationId, user?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messages, conversationId, user?.id, markRead]);
+
+  // 3. Mark read when browser tab / app regains focus or visibility
+  useEffect(() => {
+    if (!conversationId || !user?.id) return;
+
+    const handleFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        markRead();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [conversationId, user?.id, markRead]);
 
   return {
     messages,

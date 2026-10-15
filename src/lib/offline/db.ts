@@ -157,6 +157,62 @@ export async function getCachedConversation(id: string): Promise<ConversationWit
   }
 }
 
+export async function markConversationCachedAsRead(
+  conversationId: string,
+  isFan: boolean,
+  currentUserId?: string
+): Promise<void> {
+  if (!conversationId) return;
+  try {
+    const db = await openDB();
+
+    // 1. Update unread counter in conversations object store
+    try {
+      const convTx = db.transaction('conversations', 'readwrite');
+      const convStore = convTx.objectStore('conversations');
+      const getReq = convStore.get(conversationId);
+      getReq.onsuccess = () => {
+        const conv = getReq.result;
+        if (conv) {
+          if (isFan) {
+            conv.fan_unread = 0;
+          } else {
+            conv.creator_unread = 0;
+          }
+          convStore.put(conv);
+        }
+      };
+    } catch (e) {
+      console.warn('Could not update conversation unread in IDB:', e);
+    }
+
+    // 2. Mark all messages for this conversation as read in messages object store
+    try {
+      const msgTx = db.transaction('messages', 'readwrite');
+      const msgStore = msgTx.objectStore('messages');
+      const index = msgStore.index('conversation_id');
+      const msgReq = index.openCursor(IDBKeyRange.only(conversationId));
+      msgReq.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          const msg = cursor.value;
+          const isIncoming = currentUserId ? msg.sender_id !== currentUserId : true;
+          if (isIncoming && msg.status !== 'read') {
+            msg.status = 'read';
+            msg.read_at = msg.read_at || new Date().toISOString();
+            cursor.update(msg);
+          }
+          cursor.continue();
+        }
+      };
+    } catch (e) {
+      console.warn('Could not update messages status in IDB:', e);
+    }
+  } catch (err) {
+    console.warn('Failed marking conversation cached as read:', err);
+  }
+}
+
 // ── Messages Cache ───────────────────────────────────────────────────────────
 
 export async function getCachedMessages(conversationId: string): Promise<MessageWithSender[]> {

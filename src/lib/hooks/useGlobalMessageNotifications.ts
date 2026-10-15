@@ -4,6 +4,8 @@ import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import { showNewMessageNotification } from '../notificationService';
 import { getCleanMessagePreview } from '../messageUtils';
+import { getCachedConversations } from '../offline/db';
+import { isOnline } from '../offline/outboxSync';
 import type { InAppToastData } from '../../components/chat/InAppMessageToast';
 
 export function useGlobalMessageNotifications() {
@@ -30,6 +32,23 @@ export function useGlobalMessageNotifications() {
       return;
     }
 
+    // If offline, calculate from local IndexedDB cache immediately
+    if (!isOnline()) {
+      try {
+        const cached = await getCachedConversations();
+        let total = 0;
+        for (const c of cached) {
+          if (c.id === activeConvRef.current) continue;
+          if (c.last_message_sender_id === user.id) continue;
+          const isFanInThisConv = c.fan_id === user.id;
+          const unread = isFanInThisConv ? (c.fan_unread ?? 0) : (c.creator_unread ?? 0);
+          if (unread > 0) total += unread;
+        }
+        setTotalUnreadCount(total);
+      } catch (_) {}
+      return;
+    }
+
     try {
       // Find creator persona IDs owned by user
       const { data: creatorProfiles } = await supabase
@@ -53,9 +72,9 @@ export function useGlobalMessageNotifications() {
       if (!error && data) {
         let total = 0;
         for (const c of data) {
-          // If the last message was sent by me, or this conversation is active in foreground, skip
-          if (c.last_message_sender_id === user.id) continue;
+          // If this conversation is active in foreground or last message is from me, skip
           if (c.id === activeConvRef.current) continue;
+          if (c.last_message_sender_id === user.id) continue;
 
           const isFanInThisConv = c.fan_id === user.id;
           const unread = isFanInThisConv ? (c.fan_unread ?? 0) : (c.creator_unread ?? 0);
@@ -74,6 +93,19 @@ export function useGlobalMessageNotifications() {
   useEffect(() => {
     refreshUnreadCount();
   }, [refreshUnreadCount, activeConversationId]);
+
+  // Synchronize immediately on global conversation read event
+  useEffect(() => {
+    const handleRead = (e: any) => {
+      const { conversationId } = e.detail || {};
+      if (conversationId) {
+        refreshUnreadCount();
+      }
+    };
+
+    window.addEventListener('velour:conversation_read', handleRead);
+    return () => window.removeEventListener('velour:conversation_read', handleRead);
+  }, [refreshUnreadCount]);
 
   // ── Dynamic Browser Tab Title Manager ──────────────────────────────────────
   useEffect(() => {

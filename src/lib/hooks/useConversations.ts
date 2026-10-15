@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { ConversationWithParticipants } from '../../types';
-import { getCachedConversations, saveCachedConversations } from '../offline/db';
+import { getCachedConversations, saveCachedConversations, markConversationCachedAsRead } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
 
 export function useConversations() {
@@ -21,6 +21,29 @@ export function useConversations() {
         setLoading(false);
       }
     });
+  }, [user?.id]);
+
+  // Synchronize read events across all component instances
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const handleRead = (e: any) => {
+      const { conversationId } = e.detail || {};
+      if (!conversationId) return;
+
+      setConversations(prev => prev.map(c => {
+        if (c.id !== conversationId) return c;
+        const isFanInThisConv = c.fan_id === user.id;
+        return {
+          ...c,
+          fan_unread: isFanInThisConv ? 0 : c.fan_unread,
+          creator_unread: !isFanInThisConv ? 0 : c.creator_unread,
+        };
+      }));
+    };
+
+    window.addEventListener('velour:conversation_read', handleRead);
+    return () => window.removeEventListener('velour:conversation_read', handleRead);
   }, [user?.id]);
 
   const fetch = useCallback(async () => {
@@ -131,18 +154,45 @@ export function useConversations() {
     return isFanInThisConv ? (conv.fan_unread ?? 0) : (conv.creator_unread ?? 0);
   }, [user?.id]);
 
-  // Optimistically mark a conversation as read in local state
+  // Optimistically mark a conversation as read in local state, IDB cache, and remote DB
   const markConversationViewed = useCallback((convId: string) => {
+    if (!user?.id || !convId) return;
+
+    // 1. Optimistic React state update
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c;
-      const isFanInThisConv = c.fan_id === user?.id;
+      const isFanInThisConv = c.fan_id === user.id;
       return {
         ...c,
         fan_unread: isFanInThisConv ? 0 : c.fan_unread,
         creator_unread: !isFanInThisConv ? 0 : c.creator_unread,
       };
     }));
-  }, [user?.id]);
+
+    // 2. Persist to IndexedDB offline cache
+    markConversationCachedAsRead(convId, !isCreator, user.id).catch(() => {});
+
+    // 3. Dispatch global event so all instances & useGlobalMessageNotifications sync immediately
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('velour:conversation_read', {
+          detail: { conversationId: convId, userId: user.id },
+        })
+      );
+    }
+
+    // 4. Remote DB call
+    if (isOnline()) {
+      Promise.resolve(
+        supabase.rpc('mark_read', {
+          p_conversation_id: convId,
+          p_reader_id: user.id,
+        })
+      ).catch((err: unknown) => {
+        console.warn('mark_read RPC failed from markConversationViewed:', err);
+      });
+    }
+  }, [user?.id, isCreator]);
 
   return { conversations, loading, refresh: fetch, getOtherParticipant, getUnread, markConversationViewed };
 }

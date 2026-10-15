@@ -121,6 +121,11 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     setRevealedMessageIds(new Set());
   }, [conversationId]);
 
+  // Guarantee conversation is marked as read when opened
+  useEffect(() => {
+    markRead();
+  }, [conversationId, markRead]);
+
   const showToast = useCallback((text: string) => {
     setToastMessage(text);
     setTimeout(() => setToastMessage(null), 2000);
