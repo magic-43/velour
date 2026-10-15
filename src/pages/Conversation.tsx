@@ -5,6 +5,8 @@ import ChatWindow from '../components/chat/ChatWindow';
 import { useConversations } from '../lib/hooks/useConversations';
 import { supabase } from '../lib/supabase';
 import type { ConversationWithParticipants } from '../types';
+import { getCachedConversation, saveCachedConversations } from '../lib/offline/db';
+import { isOnline } from '../lib/offline/outboxSync';
 
 /**
  * Conversation — /messages/:conversationId
@@ -19,6 +21,16 @@ export default function Conversation() {
   const [directConv, setDirectConv] = useState<ConversationWithParticipants | null>(null);
   const [directLoading, setDirectLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+
+  // Fast path: load this conversation directly from IndexedDB immediately (0ms)
+  useEffect(() => {
+    if (!conversationId) return;
+    getCachedConversation(conversationId).then((cached) => {
+      if (cached) {
+        setDirectConv(cached);
+      }
+    });
+  }, [conversationId]);
 
   // Reset refs when conversationId changes
   const prevConvIdRef = useRef<string | undefined>(conversationId);
@@ -44,6 +56,23 @@ export default function Conversation() {
 
     let isMounted = true;
     const fetchDirect = async () => {
+      // 1. Immediately check offline IndexedDB cache
+      try {
+        const cached = await getCachedConversation(conversationId);
+        if (cached && isMounted) {
+          setDirectConv(cached);
+          setDirectLoading(false);
+          setNotFound(false);
+          return;
+        }
+      } catch (_) {}
+
+      // 2. If offline, don't hang on network request
+      if (!isOnline()) {
+        if (isMounted) setDirectLoading(false);
+        return;
+      }
+
       setDirectLoading(true);
       try {
         const { data, error } = await supabase
@@ -66,7 +95,9 @@ export default function Conversation() {
           setNotFound(true);
           setDirectConv(null);
         } else {
-          setDirectConv(data as ConversationWithParticipants);
+          const convData = data as ConversationWithParticipants;
+          setDirectConv(convData);
+          saveCachedConversations([convData]).catch(() => {});
           setNotFound(false);
           // Refresh list so sidebar picks it up
           refresh();

@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { ConversationWithParticipants } from '../../types';
 import { getCachedConversations, saveCachedConversations } from '../offline/db';
+import { isOnline } from '../offline/outboxSync';
 
 export function useConversations() {
   const { user, profile, isCreator } = useAuth();
@@ -16,12 +17,20 @@ export function useConversations() {
       if (cached && cached.length > 0) {
         setConversations(cached);
         setLoading(false);
+      } else if (!isOnline()) {
+        setLoading(false);
       }
     });
   }, [user?.id]);
 
   const fetch = useCallback(async () => {
     if (!user) return;
+
+    // If offline, resolve loading immediately from cache without hanging on network
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
 
     try {
       // Find all creator persona IDs owned by user

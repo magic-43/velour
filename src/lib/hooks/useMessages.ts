@@ -39,16 +39,19 @@ export function useMessages(conversationId: string | null) {
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
+      setLoading(false);
       return;
     }
 
     let isSubscribed = true;
     getCachedMessages(conversationId).then((cached) => {
-      if (isSubscribed && cached && cached.length > 0) {
-        setMessages(cached);
-        oldestCursorRef.current = cached[0]?.created_at ?? null;
+      if (isSubscribed) {
+        if (cached && cached.length > 0) {
+          setMessages(cached);
+          oldestCursorRef.current = cached[0]?.created_at ?? null;
+          hasLoadedRef.current = true;
+        }
         setLoading(false);
-        hasLoadedRef.current = true;
       }
     });
 
@@ -60,7 +63,6 @@ export function useMessages(conversationId: string | null) {
   // Reset loaded status only when switching to a different conversation
   useEffect(() => {
     hasLoadedRef.current = false;
-    setLoading(true);
   }, [conversationId]);
 
   // Listen for outbox synchronizer confirmation events
@@ -206,6 +208,13 @@ export function useMessages(conversationId: string | null) {
   // ── Initial fetch ────────────────────────────────────────────────────────
   const fetchInitial = useCallback(async (isSilent = false) => {
     if (!conversationId || !user?.id) return;
+
+    // If offline, rely purely on local IndexedDB cache without hanging
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
+
     if (!isSilent && !hasLoadedRef.current) {
       setLoading(true);
     }

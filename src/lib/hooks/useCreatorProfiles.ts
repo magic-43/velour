@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { CreatorProfile } from '../../types';
 import { useAuth } from '../AuthContext';
+import { isOnline } from '../offline/outboxSync';
 
 const STORAGE_KEY = 'velour:active-creator-profile';
+const CACHE_PROFILES_KEY = 'velour:cached-creator-profiles';
 
 interface UseCreatorProfilesReturn {
   creatorProfiles: CreatorProfile[];
@@ -27,7 +29,27 @@ export function useCreatorProfiles(): UseCreatorProfilesReturn {
       return;
     }
 
-    setLoading(true);
+    // 1. Fast path: check local cache
+    try {
+      const raw = localStorage.getItem(CACHE_PROFILES_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw) as CreatorProfile[];
+        if (cached && cached.length > 0) {
+          setCreatorProfiles(cached);
+          const storedId = localStorage.getItem(STORAGE_KEY);
+          const stored = cached.find(p => p.id === storedId);
+          setActiveCreatorProfileState(stored ?? cached[0] ?? null);
+          setLoading(false);
+        }
+      }
+    } catch (_) {}
+
+    // 2. If offline, resolve immediately from cache without hanging
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('creator_profiles')
       .select('*')
@@ -36,7 +58,7 @@ export function useCreatorProfiles(): UseCreatorProfilesReturn {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching creator profiles:', error.message);
+      console.warn('Error fetching creator profiles (offline fallback active):', error.message);
       setLoading(false);
       return;
     }
@@ -63,6 +85,9 @@ export function useCreatorProfiles(): UseCreatorProfilesReturn {
     }
 
     setCreatorProfiles(profiles);
+    try {
+      localStorage.setItem(CACHE_PROFILES_KEY, JSON.stringify(profiles));
+    } catch (_) {}
 
     // Restore last active profile from localStorage
     const storedId = localStorage.getItem(STORAGE_KEY);

@@ -146,6 +146,17 @@ export async function saveCachedConversations(conversations: ConversationWithPar
   }
 }
 
+export async function getCachedConversation(id: string): Promise<ConversationWithParticipants | null> {
+  try {
+    return await performTransaction<ConversationWithParticipants | null>('conversations', 'readonly', (store) => {
+      return store.get(id);
+    });
+  } catch (err) {
+    console.warn('Failed reading conversation from cache:', err);
+    return null;
+  }
+}
+
 // ── Messages Cache ───────────────────────────────────────────────────────────
 
 export async function getCachedMessages(conversationId: string): Promise<MessageWithSender[]> {

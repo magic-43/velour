@@ -6,6 +6,7 @@ import { uploadPublicFile } from '../r2';
 import { captureVideoThumbnail } from '../videoThumbnail';
 import type { Story, HomeStorySession, CreatorProfile, ArchiveGroup, FeedSlide, AudienceSettings } from '../../types';
 import { getCachedStories, saveCachedStories } from '../offline/db';
+import { isOnline } from '../offline/outboxSync';
 
 interface PostStoryItem {
   file: File;
@@ -70,6 +71,8 @@ export function useStories(): UseStoriesReturn {
       if (cached && cached.length > 0) {
         setSessions(cached);
         setLoading(false);
+      } else if (!isOnline()) {
+        setLoading(false);
       }
     });
   }, []);
@@ -85,6 +88,10 @@ export function useStories(): UseStoriesReturn {
 
   // Fetch stories and build v1 story sessions with live + archive transitions
   const fetchStories = useCallback(async () => {
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
     try {
       let { data, error } = await supabase
         .from('stories')

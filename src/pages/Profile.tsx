@@ -20,6 +20,7 @@ import CreatorStudioProfile from '../components/profile/CreatorStudioProfile';
 import { getVaultItems } from '../lib/creatorVault';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
+import { isOnline } from '../lib/offline/outboxSync';
 
 type SubView = 'none' | 'vault' | 'saved' | 'archive' | 'followers' | 'following';
 
@@ -69,6 +70,14 @@ export default function Profile() {
   const fetchStats = useCallback(async () => {
     if (!profile) return;
     const currentUserId = profile.id;
+
+    // Load local vault items first regardless of network
+    if (isCreator) {
+      const vaultItems = getVaultItems(currentUserId);
+      setVaultCount(vaultItems.length);
+    }
+
+    if (!isOnline()) return;
 
     try {
       if (isCreator) {

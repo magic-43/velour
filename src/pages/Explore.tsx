@@ -8,6 +8,7 @@ import type { CreatorProfile, Profile } from '../types';
 import CreatorProfilePanel from '../components/creator/CreatorProfilePanel';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
+import { isOnline } from '../lib/offline/outboxSync';
 
 const AVATAR_COLORS = [
   'bg-blue-500',
@@ -50,6 +51,33 @@ export default function Explore() {
   const [clients, setClients] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [clientsLoading, setClientsLoading] = useState(false);
+
+  // Fast path: load cached explore items immediately (0ms)
+  useEffect(() => {
+    try {
+      const rawCreators = localStorage.getItem('velour:cached-explore-creators');
+      if (rawCreators) {
+        const parsed = JSON.parse(rawCreators);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCreators(parsed);
+          setLoading(false);
+        }
+      }
+      const rawClients = localStorage.getItem('velour:cached-explore-clients');
+      if (rawClients) {
+        const parsed = JSON.parse(rawClients);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setClients(parsed);
+          setClientsLoading(false);
+        }
+      }
+      if (!isOnline()) {
+        setLoading(false);
+        setClientsLoading(false);
+      }
+    } catch (_) {}
+  }, []);
+
   // For creators, default view is 'clients'. For fans, default is 'creators'.
   const [discoveryFilter, setDiscoveryFilter] = useState<'clients' | 'creators' | 'all'>(
     isCreator ? 'clients' : 'creators'
@@ -118,7 +146,11 @@ export default function Explore() {
   }, []);
 
   const fetchCreators = useCallback(async () => {
-    setLoading(true);
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('creator_profiles')
       .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, role, last_seen_at)')
@@ -131,12 +163,19 @@ export default function Explore() {
         avatar_url: item.avatar_url || item.owner?.avatar_url || null,
       }));
       setCreators(formatted);
+      try {
+        localStorage.setItem('velour:cached-explore-creators', JSON.stringify(formatted));
+      } catch (_) {}
     }
     setLoading(false);
   }, []);
 
   const fetchClients = useCallback(async () => {
-    setClientsLoading(true);
+    if (!isOnline()) {
+      setClientsLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, display_name, avatar_url, bio, role, is_banned, last_seen_at, created_at')
@@ -146,6 +185,9 @@ export default function Explore() {
 
     if (!error && data) {
       setClients(data as Profile[]);
+      try {
+        localStorage.setItem('velour:cached-explore-clients', JSON.stringify(data));
+      } catch (_) {}
     }
     setClientsLoading(false);
   }, []);

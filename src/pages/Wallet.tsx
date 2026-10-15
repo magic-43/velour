@@ -24,6 +24,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
+import { isOnline } from '../lib/offline/outboxSync';
 
 interface TransactionItem {
   id: string;
@@ -59,6 +60,26 @@ export default function Wallet() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [totalEarned, setTotalEarned] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+
+  // Fast path: load cached wallet data immediately (0ms)
+  useEffect(() => {
+    try {
+      const rawEarned = localStorage.getItem('velour:cached-wallet-earned');
+      if (rawEarned) setTotalEarned(Number(rawEarned) || 0);
+      const rawTxs = localStorage.getItem('velour:cached-wallet-txs');
+      if (rawTxs) {
+        const parsed = JSON.parse(rawTxs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTransactions(parsed);
+          setLoading(false);
+        }
+      }
+      if (!isOnline()) {
+        setLoading(false);
+      }
+    } catch (_) {}
+  }, []);
+
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -79,7 +100,10 @@ export default function Wallet() {
 
   const fetchWalletData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    if (!isOnline()) {
+      setLoading(false);
+      return;
+    }
 
     try {
       // 1. Fetch balance from user_balances
@@ -223,8 +247,12 @@ export default function Wallet() {
           .reduce((acc, curr) => acc + (curr.amount_usd || 0), 0);
       }
       setTotalEarned(dbEarned);
+      try {
+        localStorage.setItem('velour:cached-wallet-earned', String(dbEarned));
+        localStorage.setItem('velour:cached-wallet-txs', JSON.stringify(combined));
+      } catch (_) {}
     } catch (err) {
-      console.warn('Error fetching wallet data:', err);
+      console.warn('Error fetching wallet data (offline fallback active):', err);
     } finally {
       setLoading(false);
     }

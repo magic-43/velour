@@ -53,20 +53,33 @@ self.addEventListener('fetch', (event) => {
         .then((res) => {
           if (res.ok) {
             const copy = res.clone();
-            caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+            caches.open(SHELL_CACHE).then((c) => {
+              c.put(req, copy);
+              c.put('/index.html', res.clone());
+            });
           }
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match('/index.html');
+          const cached = (await caches.match('/index.html')) || (await caches.match('/'));
           if (cached) return cached;
-          return caches.match('/');
+          const shell = await caches.open(SHELL_CACHE);
+          const keys = await shell.keys();
+          for (const k of keys) {
+            if (k.url.endsWith('.html') || k.url === self.registration.scope) {
+              const res = await shell.match(k);
+              if (res) return res;
+            }
+          }
+          return new Response('<!DOCTYPE html><html><body><div id="root"></div></body></html>', {
+            headers: { 'Content-Type': 'text/html' }
+          });
         })
     );
     return;
   }
 
-  // 2. Static Vite Assets (.js, .css, .woff2, fonts)
+  // 2. Static Vite Assets (.js, .css, .woff2, fonts) - Cache-first with network fallback
   if (
     url.pathname.startsWith('/assets/') ||
     url.pathname.endsWith('.js') ||
@@ -75,17 +88,14 @@ self.addEventListener('fetch', (event) => {
   ) {
     event.respondWith(
       caches.match(req).then((cached) => {
-        const fetchPromise = fetch(req)
-          .then((networkRes) => {
-            if (networkRes.ok) {
-              const copy = networkRes.clone();
-              caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
-            }
-            return networkRes;
-          })
-          .catch(() => cached);
-
-        return cached || fetchPromise;
+        if (cached) return cached;
+        return fetch(req).then((networkRes) => {
+          if (networkRes && networkRes.ok) {
+            const copy = networkRes.clone();
+            caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+          }
+          return networkRes;
+        });
       })
     );
     return;
