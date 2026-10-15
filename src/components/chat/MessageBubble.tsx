@@ -304,9 +304,9 @@ export default function MessageBubble({
           className={`relative max-w-[75%] select-text
             ${isMine ? 'items-end' : 'items-start'} flex flex-col`}
         >
-          {/* Context menu on hover (desktop) */}
+          {/* Context menu on hover (desktop only — mobile uses swipe & long-press) */}
           <div
-            className={`absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10
+            className={`absolute top-0 hidden md:flex opacity-0 group-hover:opacity-100 transition-opacity gap-1 z-10
               ${isMine ? 'right-full mr-2' : 'left-full ml-2'}`}
           >
             {onReply && !isDeleted && message.status !== 'sending' && (

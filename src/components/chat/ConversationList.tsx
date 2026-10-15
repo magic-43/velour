@@ -284,18 +284,18 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
             />
           )}
 
-          {/* Unread badge / reaction indicator */}
-          {unread > 0 && preview.type === 'reaction' ? (
+          {/* Unread badge / reaction indicator — only shown to the recipient, never the sender */}
+          {unread > 0 && !isFromMe && preview.type === 'reaction' ? (
             <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold/20 border border-gold/40 text-gold text-[0.68rem] font-bold">
               <span>{preview.badge}</span>
               <span>{unread}</span>
             </span>
-          ) : unread > 0 && preview.type === 'locked' && !isFromMe ? (
+          ) : unread > 0 && !isFromMe && preview.type === 'locked' ? (
             <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold text-ink text-[0.65rem] font-bold shadow-md shadow-gold/20">
               <Lock size={10} strokeWidth={2.6} />
               <span>{unread}</span>
             </span>
-          ) : unread > 0 ? (
+          ) : unread > 0 && !isFromMe ? (
             <span className="shrink-0 min-w-5 h-5 px-1 rounded-full bg-gold text-ink text-[0.6rem] font-bold flex items-center justify-center">
               {unread > 9 ? '9+' : unread}
             </span>
