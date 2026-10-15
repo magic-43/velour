@@ -1,0 +1,189 @@
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { supabase } from '../supabase';
+import { useAuth } from '../AuthContext';
+import { showNewMessageNotification } from '../notificationService';
+import { getCleanMessagePreview } from '../messageUtils';
+import type { InAppToastData } from '../../components/chat/InAppMessageToast';
+
+export function useGlobalMessageNotifications() {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [inAppToast, setInAppToast] = useState<InAppToastData | null>(null);
+
+  // Active conversation ID from current route (e.g. /messages/:id)
+  const activeConversationId = location.pathname.startsWith('/messages/')
+    ? location.pathname.split('/messages/')[1]
+    : null;
+
+  const activeConvRef = useRef<string | null>(activeConversationId);
+  useEffect(() => {
+    activeConvRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  // ── Calculate Total Unread Conversations / Messages ─────────────────────────
+  const refreshUnreadCount = useCallback(async () => {
+    if (!user) {
+      setTotalUnreadCount(0);
+      return;
+    }
+
+    try {
+      // Find creator persona IDs owned by user
+      const { data: creatorProfiles } = await supabase
+        .from('creator_profiles')
+        .select('id')
+        .eq('owner_id', user.id);
+
+      const cpIds = (creatorProfiles ?? []).map(cp => cp.id);
+
+      let query = supabase
+        .from('conversations')
+        .select('id, fan_id, creator_profile_id, fan_unread, creator_unread, last_message_sender_id');
+
+      if (cpIds.length > 0) {
+        query = query.or(`fan_id.eq.${user.id},creator_profile_id.in.(${cpIds.join(',')})`);
+      } else {
+        query = query.eq('fan_id', user.id);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        let total = 0;
+        for (const c of data) {
+          // If the last message was sent by me, or this conversation is active in foreground, skip
+          if (c.last_message_sender_id === user.id) continue;
+          if (c.id === activeConvRef.current) continue;
+
+          const isFanInThisConv = c.fan_id === user.id;
+          const unread = isFanInThisConv ? (c.fan_unread ?? 0) : (c.creator_unread ?? 0);
+          if (unread > 0) {
+            total += unread;
+          }
+        }
+        setTotalUnreadCount(total);
+      }
+    } catch (err) {
+      console.warn('Failed calculating total unread count:', err);
+    }
+  }, [user]);
+
+  // Initial fetch and on active conversation change
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount, activeConversationId]);
+
+  // ── Dynamic Browser Tab Title Manager ──────────────────────────────────────
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    if (totalUnreadCount > 0) {
+      document.title = `(${totalUnreadCount}) Velour`;
+    } else {
+      document.title = 'Velour';
+    }
+
+    return () => {
+      document.title = 'Velour';
+    };
+  }, [totalUnreadCount]);
+
+  // ── Realtime Global Listeners ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. Subscribe to conversation updates (to update unread badge counts)
+    const convChannel = supabase
+      .channel(`global_conv_unread:${user.id}:${Math.random().toString(36).slice(2, 7)}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        () => {
+          refreshUnreadCount();
+        }
+      )
+      .subscribe();
+
+    // 2. Subscribe to incoming messages (to trigger in-app toast, audio & system notifications)
+    const msgChannel = supabase
+      .channel(`global_messages:${user.id}:${Math.random().toString(36).slice(2, 7)}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        async (payload: any) => {
+          const newMsg = payload.new;
+          if (!newMsg) return;
+
+          // Never notify on messages sent by current user
+          if (newMsg.sender_id === user.id) return;
+
+          // Suppress if user is currently looking at this exact chat thread in foreground
+          if (newMsg.conversation_id === activeConvRef.current && typeof document !== 'undefined' && !document.hidden) {
+            return;
+          }
+
+          // Fetch sender details
+          let senderName = 'New Message';
+          let senderAvatarUrl: string | null = null;
+          try {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('display_name, username, avatar_url')
+              .eq('id', newMsg.sender_id)
+              .single();
+
+            if (senderProfile) {
+              senderName = senderProfile.display_name || senderProfile.username || 'New Message';
+              senderAvatarUrl = senderProfile.avatar_url || null;
+            }
+          } catch (_) {}
+
+          // Format clean text
+          const clean = getCleanMessagePreview(newMsg.content, newMsg.message_type, newMsg.is_deleted);
+          const bodyText = clean.text || 'Sent you a message';
+
+          // Trigger audio chime, native Android alert, and desktop OS notification
+          showNewMessageNotification({
+            conversationId: newMsg.conversation_id,
+            senderName,
+            body: bodyText,
+            senderAvatarUrl,
+            userId: user.id,
+            isForegroundActive: false,
+          }).catch(() => {});
+
+          // Display in-app floating toast banner
+          setInAppToast({
+            id: newMsg.id || String(Date.now()),
+            conversationId: newMsg.conversation_id,
+            senderName,
+            senderAvatarUrl,
+            content: bodyText,
+            timestamp: newMsg.created_at,
+          });
+
+          // Update unread count
+          refreshUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(convChannel);
+      supabase.removeChannel(msgChannel);
+    };
+  }, [user, refreshUnreadCount]);
+
+  const dismissToast = useCallback(() => {
+    setInAppToast(null);
+  }, []);
+
+  return {
+    totalUnreadCount,
+    inAppToast,
+    dismissToast,
+    refreshUnreadCount,
+  };
+}

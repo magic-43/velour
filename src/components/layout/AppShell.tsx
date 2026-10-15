@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import {
   Play, Compass, MessageSquare,
-  ChevronRight,
+  ChevronRight, X,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
+import { useGlobalMessageNotifications } from '../../lib/hooks/useGlobalMessageNotifications';
+import { requestNotificationPermission, canPromptDesktopNotifications } from '../../lib/notificationService';
+import InAppMessageToast from '../chat/InAppMessageToast';
 
 // ─── Nav Configurations ──────────────────────────────────────────────────────
 
@@ -39,6 +43,29 @@ export default function AppShell() {
   const { profile, isCreator } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { totalUnreadCount, inAppToast, dismissToast } = useGlobalMessageNotifications();
+
+  const [showDesktopPrompt, setShowDesktopPrompt] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const dismissed = localStorage.getItem('velour_dismissed_desktop_notif');
+      return !dismissed && canPromptDesktopNotifications();
+    } catch {
+      return false;
+    }
+  });
+
+  const handleEnableDesktopNotifications = async () => {
+    setShowDesktopPrompt(false);
+    await requestNotificationPermission();
+  };
+
+  const handleDismissDesktopPrompt = () => {
+    setShowDesktopPrompt(false);
+    try {
+      localStorage.setItem('velour_dismissed_desktop_notif', 'true');
+    } catch (_) {}
+  };
 
   const sidebarNavItems = isCreator ? SIDEBAR_CREATOR_NAV : SIDEBAR_FAN_NAV;
   const mobileNavItems  = isCreator ? MOBILE_CREATOR_NAV  : MOBILE_FAN_NAV;
@@ -63,7 +90,10 @@ export default function AppShell() {
     : 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-20 md:pb-0 relative min-h-screen h-screen overflow-y-auto overflow-x-hidden';
 
   return (
-    <div className="h-[100dvh] md:h-screen bg-ink text-paper font-sans flex justify-center overflow-hidden overscroll-none">
+    <div className="h-[100dvh] md:h-screen bg-ink text-paper font-sans flex justify-center overflow-hidden overscroll-none relative">
+      {/* ── Global Floating In-App Message Toast ─────────────────────────── */}
+      <InAppMessageToast toast={inAppToast} onDismiss={dismissToast} />
+
       <div className="w-full h-full flex transition-all duration-500 ease-in-out max-w-[1200px]">
 
         {/* ── Left Sidebar (Desktop) ──────────────────────────────────────── */}
@@ -91,12 +121,13 @@ export default function AppShell() {
           <nav className="flex-1 space-y-2 w-full">
             {sidebarNavItems.map(({ path, label, Icon }) => {
               const active = isActive(path);
+              const isMessagesTab = path === '/messages';
               return (
                 <Link
                   key={path}
                   to={path}
                   title={label}
-                  className={`flex items-center transition-all duration-300 font-medium
+                  className={`flex items-center transition-all duration-300 font-medium relative
                     ${isMessages
                       ? 'justify-center w-12 h-12 p-0 mx-auto rounded-full'
                       : 'w-full gap-4 px-4 py-3.5 rounded-full'}
@@ -104,12 +135,24 @@ export default function AppShell() {
                       ? 'bg-ink-light text-paper'
                       : 'text-muted hover:text-paper hover:bg-ink-light/50'}`}
                 >
-                  <Icon
-                    size={24}
-                    strokeWidth={active ? 2 : 1.5}
-                    className={active ? 'text-gold' : ''}
-                  />
-                  {!isMessages && <span>{label}</span>}
+                  <div className="relative flex items-center justify-center">
+                    <Icon
+                      size={24}
+                      strokeWidth={active ? 2 : 1.5}
+                      className={active ? 'text-gold' : ''}
+                    />
+                    {isMessagesTab && totalUnreadCount > 0 && isMessages && (
+                      <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-gold text-ink font-bold text-[0.6rem] flex items-center justify-center shadow-md">
+                        {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                      </span>
+                    )}
+                  </div>
+                  {!isMessages && <span className="truncate">{label}</span>}
+                  {isMessagesTab && totalUnreadCount > 0 && !isMessages && (
+                    <span className="ml-auto px-1.5 py-0.5 min-w-[20px] h-5 rounded-full bg-gold text-ink font-bold text-[0.65rem] flex items-center justify-center shadow-sm">
+                      {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -188,6 +231,7 @@ export default function AppShell() {
         >
           {mobileNavItems.map(({ path, label, Icon }) => {
             const active = isActive(path);
+            const isMessagesTab = path === '/messages';
             return (
               <Link
                 key={path}
@@ -195,7 +239,14 @@ export default function AppShell() {
                 className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors relative
                   ${active ? 'text-paper' : 'text-muted hover:text-paper'}`}
               >
-                <Icon size={23} strokeWidth={active ? 2.4 : 1.8} className={active ? 'text-gold' : ''} />
+                <div className="relative flex items-center justify-center">
+                  <Icon size={23} strokeWidth={active ? 2.4 : 1.8} className={active ? 'text-gold' : ''} />
+                  {isMessagesTab && totalUnreadCount > 0 && (
+                    <span className="absolute -top-1 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-gold text-ink font-bold text-[0.6rem] flex items-center justify-center shadow-md">
+                      {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-[11px] tracking-wide ${active ? 'font-semibold text-paper' : 'font-medium'}`}>{label}</span>
                 {active && (
                   <span className="absolute bottom-1 w-1 h-1 bg-gold rounded-full" />
@@ -231,6 +282,34 @@ export default function AppShell() {
             )}
           </Link>
         </nav>
+      )}
+
+      {/* ── Desktop Notification Permission Pill (One-click enable) ───────── */}
+      {showDesktopPrompt && (
+        <div className="hidden md:flex fixed bottom-6 right-6 z-40 bg-[#16161a]/95 border border-gold/30 text-paper px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl items-center gap-3 animate-in fade-in slide-in-from-bottom-4">
+          <div className="w-8 h-8 rounded-full bg-gold/15 text-gold flex items-center justify-center shrink-0">
+            <MessageSquare size={16} />
+          </div>
+          <div className="text-xs">
+            <p className="font-semibold text-paper">Desktop Notifications</p>
+            <p className="text-muted">Get alerted when you receive new messages</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleEnableDesktopNotifications}
+            className="px-3 py-1.5 bg-gold text-ink font-semibold text-xs rounded-xl hover:bg-gold-light transition-colors cursor-pointer shrink-0"
+          >
+            Enable
+          </button>
+          <button
+            type="button"
+            onClick={handleDismissDesktopPrompt}
+            className="text-muted hover:text-white p-1 transition-colors cursor-pointer"
+            title="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
     </div>
   );

@@ -133,8 +133,26 @@ export interface ShowNotificationOptions {
   conversationId: string;
   senderName: string;
   body: string;
+  senderAvatarUrl?: string | null;
   userId?: string;
   isForegroundActive?: boolean;
+}
+
+/**
+ * Check if the browser or OS supports notifications and what the current status is.
+ */
+export function getNotificationPermissionState(): 'granted' | 'denied' | 'default' | 'unsupported' {
+  if (typeof window === 'undefined') return 'unsupported';
+  if (Capacitor.isNativePlatform()) return 'granted';
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+
+/**
+ * Returns true if we can prompt the desktop user to allow notifications.
+ */
+export function canPromptDesktopNotifications(): boolean {
+  return getNotificationPermissionState() === 'default';
 }
 
 /**
@@ -144,6 +162,7 @@ export async function showNewMessageNotification({
   conversationId,
   senderName,
   body,
+  senderAvatarUrl,
   userId,
   isForegroundActive = false,
 }: ShowNotificationOptions): Promise<void> {
@@ -189,18 +208,21 @@ export async function showNewMessageNotification({
     }
   }
 
-  // 5. Desktop / Web Browser Fallback
+  // 5. Desktop / Web Browser Fallback (Windows Action Center, macOS Notifications)
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
       try {
         const notif = new Notification(senderName || 'New Message', {
           body: body || 'You received a new message',
-          icon: '/favicon.ico',
+          icon: senderAvatarUrl || '/favicon.ico',
+          badge: '/favicon.ico',
           tag: `velour-msg-${conversationId}`,
         });
 
         notif.onclick = () => {
-          window.focus();
+          try {
+            window.focus();
+          } catch (_) {}
           if (navigationHandler) {
             navigationHandler(`/messages/${conversationId}`);
           } else {
