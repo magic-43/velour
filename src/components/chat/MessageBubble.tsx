@@ -333,14 +333,14 @@ export default function MessageBubble({
           </div>
 
           <div
-            className={`rounded-2xl break-words transition-all
+            className={`rounded-2xl break-words transition-all relative
               ${vaultMedia.isVaultMedia && vaultMedia.media
                 ? `p-1 overflow-hidden max-w-[320px] ${
                     isMine
                       ? 'bg-[#18181b] border border-white/10 text-paper rounded-br-sm'
                       : 'bg-[#18181b] border border-white/10 text-paper rounded-bl-sm'
                   }`
-                : `px-4 py-3 text-[15px] sm:text-base leading-relaxed ${
+                : `px-3.5 pt-2 pb-1.5 text-[15px] sm:text-base leading-relaxed ${
                     isMine
                       ? 'bg-[#1a1a12] border border-gold/20 text-paper rounded-br-sm'
                       : 'bg-ink-light border border-border-subtle text-paper rounded-bl-sm'
@@ -360,7 +360,7 @@ export default function MessageBubble({
             )}
 
             {isDeleted && !isRevealed ? (
-              <span className="italic text-muted text-xs flex items-center justify-between gap-2">
+              <div className="italic text-muted text-xs flex items-center justify-between gap-4 pr-14">
                 <span>{isMine ? 'You deleted this message' : 'This message was deleted'}</span>
                 {!isMine && isCreator && onReveal && (
                   <button
@@ -374,7 +374,7 @@ export default function MessageBubble({
                     Reveal
                   </button>
                 )}
-              </span>
+              </div>
             ) : (
               <>
                 {isDeleted && isRevealed && (
@@ -461,19 +461,20 @@ export default function MessageBubble({
 
                     {/* User's Reply Text / Reaction */}
                     {storyReply.meta?.reactionEmoji ? (
-                      <div className="flex items-center gap-2 pt-0.5">
+                      <div className="flex items-center gap-2 pt-0.5 pr-14">
                         <span className="text-2xl leading-none select-none">{storyReply.meta.reactionEmoji}</span>
                         <span className="text-xs text-neutral-300">Reacted to story</span>
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
+                      <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5 break-words">
                         {storyReply.replyText}
+                        <TimestampSpacer isMine={isMine} />
                       </p>
                     )}
                   </div>
                 ) : vaultMedia.isVaultMedia && vaultMedia.media ? (
                   vaultMedia.media.isLocked ? (
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <LockedAttachmentCard
                         media={vaultMedia.media}
                         isMine={isMine}
@@ -489,8 +490,9 @@ export default function MessageBubble({
                         timestamp={bubbleTimestamp}
                       />
                       {vaultMedia.text && (
-                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
+                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-1.5 pt-1 pb-0.5 break-words">
                           {vaultMedia.text}
+                          <TimestampSpacer isMine={isMine} />
                         </p>
                       )}
                     </div>
@@ -558,7 +560,7 @@ export default function MessageBubble({
                             </div>
                           )}
                           {!message.status && (
-                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/80 text-[0.62rem] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/80 text-[0.62rem] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Eye size={11} />
                               <span>Expand</span>
                             </div>
@@ -567,8 +569,9 @@ export default function MessageBubble({
                       )}
 
                       {vaultMedia.text && (
-                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-0.5">
+                        <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-1.5 pt-1.5 pb-0.5 break-words">
                           {vaultMedia.text}
+                          <TimestampSpacer isMine={isMine} />
                         </p>
                       )}
 
@@ -619,18 +622,29 @@ export default function MessageBubble({
                     </div>
                   )
                 ) : isVoiceNote ? (
-                  <span className="flex items-center gap-2 text-muted text-xs">
+                  <div className="flex items-center gap-2 text-muted text-xs pr-14">
                     🎤 <span>Voice note</span>
-                  </span>
+                  </div>
                 ) : isAttachment ? (
-                  <span className="flex items-center gap-2 text-muted text-xs">
+                  <div className="flex items-center gap-2 text-muted text-xs pr-14">
                     📎 <span>Attachment</span>
-                  </span>
+                  </div>
                 ) : (
-                  <span className="whitespace-pre-wrap">{message.content}</span>
+                  <span className="whitespace-pre-wrap break-words">
+                    {message.content}
+                    <TimestampSpacer isMine={isMine} />
+                  </span>
                 )}
             </>
           )}
+
+            {/* WhatsApp-style In-Bubble Timestamp & Read Receipt */}
+            <BubbleTimestamp
+              createdAt={message.created_at}
+              isMine={isMine}
+              status={message.status}
+              isMediaOverlay={Boolean(vaultMedia.isVaultMedia && vaultMedia.media && !vaultMedia.text && !vaultMedia.media.isLocked)}
+            />
           </div>
 
           {/* Reaction badges on bubble */}
@@ -672,16 +686,6 @@ export default function MessageBubble({
               })}
             </div>
           )}
-
-          {/* Timestamp + read receipt */}
-          <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMine ? 'flex-row-reverse' : ''}`}>
-            <span className="text-[0.6rem] text-muted">
-              {formatTime(message.created_at)}
-            </span>
-            {isMine && (
-              <ReadReceipt status={message.status} />
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -764,25 +768,65 @@ function QuotedReplyBanner({
   );
 }
 
-function ReadReceipt({ status }: { status: MessageStatus }) {
+function ReadReceipt({ status, isOverlay = false }: { status: MessageStatus; isOverlay?: boolean }) {
   if (status === 'sending') {
-    return <Clock size={12} className="text-muted shrink-0" />;
+    return <Clock size={11} className={`${isOverlay ? 'text-white/80' : 'text-paper/40'} shrink-0`} />;
   }
   if (status === 'read') {
-    return <CheckCheck size={14} className="text-gold shrink-0" />;
+    return <CheckCheck size={14} strokeWidth={2.4} className="text-gold shrink-0" />;
   }
   if (status === 'delivered') {
-    return <CheckCheck size={14} className="text-muted shrink-0" />;
+    return <CheckCheck size={14} strokeWidth={2.4} className={`${isOverlay ? 'text-white/80' : 'text-paper/40'} shrink-0`} />;
   }
   // 'sent'
-  return <Check size={13} className="text-muted shrink-0" />;
+  return <Check size={13} strokeWidth={2.4} className={`${isOverlay ? 'text-white/80' : 'text-paper/40'} shrink-0`} />;
+}
+
+function BubbleTimestamp({
+  createdAt,
+  isMine,
+  status,
+  isMediaOverlay = false,
+}: {
+  createdAt: string;
+  isMine: boolean;
+  status: MessageStatus;
+  isMediaOverlay?: boolean;
+}) {
+  return (
+    <span
+      className={`absolute select-none inline-flex items-center gap-1 leading-none z-10 pointer-events-none ${
+        isMediaOverlay
+          ? 'right-2 bottom-2 px-1.5 py-0.5 rounded-full bg-black/65 backdrop-blur-sm text-white/90 text-[0.62rem] shadow-sm'
+          : 'right-2.5 bottom-1.5 text-[0.65rem] text-paper/50'
+      }`}
+    >
+      <span className="tabular-nums font-normal">{formatTime(createdAt)}</span>
+      {isMine && <ReadReceipt status={status} isOverlay={isMediaOverlay} />}
+    </span>
+  );
+}
+
+function TimestampSpacer({ isMine }: { isMine: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-block pointer-events-none select-none align-baseline ${
+        isMine ? 'w-[54px] h-3.5' : 'w-[36px] h-3.5'
+      }`}
+    />
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return '';
+  }
 }
 
 // Date separator — subtle, minimal floating date pill
