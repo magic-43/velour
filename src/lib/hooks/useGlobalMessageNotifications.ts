@@ -25,11 +25,19 @@ export function useGlobalMessageNotifications() {
     activeConvRef.current = activeConversationId;
   }, [activeConversationId]);
 
+  // Track conversation IDs marked as read locally within the last 6 seconds to prevent network race conditions
+  const recentlyReadRef = useRef<Map<string, number>>(new Map());
+
   // ── Calculate Total Unread Conversations / Messages ─────────────────────────
   const refreshUnreadCount = useCallback(async () => {
     if (!user) {
       setTotalUnreadCount(0);
       return;
+    }
+
+    const now = Date.now();
+    for (const [id, ts] of recentlyReadRef.current.entries()) {
+      if (now - ts > 6000) recentlyReadRef.current.delete(id);
     }
 
     // If offline, calculate from local IndexedDB cache immediately
@@ -39,10 +47,11 @@ export function useGlobalMessageNotifications() {
         let total = 0;
         for (const c of cached) {
           if (c.id === activeConvRef.current) continue;
+          if (recentlyReadRef.current.has(c.id)) continue;
           if (c.last_message_sender_id === user.id) continue;
           const isFanInThisConv = c.fan_id === user.id;
           const unread = isFanInThisConv ? (c.fan_unread ?? 0) : (c.creator_unread ?? 0);
-          if (unread > 0) total += unread;
+          if (unread > 0) total += 1;
         }
         setTotalUnreadCount(total);
       } catch (_) {}
@@ -72,14 +81,15 @@ export function useGlobalMessageNotifications() {
       if (!error && data) {
         let total = 0;
         for (const c of data) {
-          // If this conversation is active in foreground or last message is from me, skip
+          // If this conversation is active in foreground, recently read locally, or last message is from me, skip
           if (c.id === activeConvRef.current) continue;
+          if (recentlyReadRef.current.has(c.id)) continue;
           if (c.last_message_sender_id === user.id) continue;
 
           const isFanInThisConv = c.fan_id === user.id;
           const unread = isFanInThisConv ? (c.fan_unread ?? 0) : (c.creator_unread ?? 0);
           if (unread > 0) {
-            total += unread;
+            total += 1;
           }
         }
         setTotalUnreadCount(total);
@@ -99,7 +109,11 @@ export function useGlobalMessageNotifications() {
     const handleRead = (e: any) => {
       const { conversationId } = e.detail || {};
       if (conversationId) {
-        refreshUnreadCount();
+        recentlyReadRef.current.set(conversationId, Date.now());
+        setTotalUnreadCount(prev => Math.max(0, prev - 1));
+        setTimeout(() => {
+          refreshUnreadCount();
+        }, 1500);
       }
     };
 

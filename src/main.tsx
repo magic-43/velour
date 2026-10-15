@@ -15,6 +15,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.loca
     navigator.serviceWorker
       .register('/sw.js')
       .then((reg) => {
+        reg.update().catch(() => {});
         console.log('Velour offline service worker registered:', reg.scope);
       })
       .catch((err) => {

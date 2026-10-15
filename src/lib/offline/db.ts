@@ -174,10 +174,12 @@ export async function markConversationCachedAsRead(
       getReq.onsuccess = () => {
         const conv = getReq.result;
         if (conv) {
-          if (isFan) {
-            conv.fan_unread = 0;
+          if (currentUserId) {
+            if (conv.fan_id === currentUserId) conv.fan_unread = 0;
+            else conv.creator_unread = 0;
           } else {
-            conv.creator_unread = 0;
+            if (isFan) conv.fan_unread = 0;
+            else conv.creator_unread = 0;
           }
           convStore.put(conv);
         }

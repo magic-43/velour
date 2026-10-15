@@ -1,5 +1,5 @@
-const SHELL_CACHE = 'velour-shell-v1';
-const MEDIA_CACHE = 'velour-media-v1';
+const SHELL_CACHE = 'velour-shell-v2';
+const MEDIA_CACHE = 'velour-media-v2';
 
 const STATIC_ASSETS = [
   '/',

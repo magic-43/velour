@@ -138,7 +138,10 @@ export default function ConversationList() {
               {activeUsers.map(u => (
                 <button
                   key={u.convId}
-                  onClick={() => navigate(`/messages/${u.convId}`)}
+                  onClick={() => {
+                    markConversationViewed(u.convId);
+                    navigate(`/messages/${u.convId}`);
+                  }}
                   className="shrink-0 w-[66px] text-center cursor-pointer"
                 >
                   <div className="relative mx-auto w-14 h-14 rounded-full border border-gold/40 p-[2px] bg-black/30">
