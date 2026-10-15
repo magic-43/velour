@@ -55,7 +55,6 @@ export default function ConversationList() {
       return false;
     }
   });
-  const [testSent, setTestSent] = useState(false);
 
   useEffect(() => {
     const handleSync = () => {
@@ -70,8 +69,6 @@ export default function ConversationList() {
     setNotifState(getNotificationPermissionState());
     if (granted) {
       await sendTestDesktopNotification();
-      setTestSent(true);
-      setTimeout(() => setTestSent(false), 5000);
     }
   };
 
@@ -80,12 +77,6 @@ export default function ConversationList() {
     try {
       localStorage.setItem('velour_dismissed_desktop_notif', 'true');
     } catch (_) {}
-  };
-
-  const handleTestAlert = async () => {
-    await sendTestDesktopNotification();
-    setTestSent(true);
-    setTimeout(() => setTestSent(false), 5000);
   };
 
   // Filter by search
@@ -169,10 +160,10 @@ export default function ConversationList() {
         )}
       </div>
 
-      {/* ── Desktop Notification Prompt / Alert Banner ─────────────────── */}
-      {notifState !== 'unsupported' && (
+      {/* ── Desktop Notification Prompt / Alert Banner (Only when attention is needed) ── */}
+      {notifState !== 'unsupported' && notifState !== 'granted' && !dismissedBanner && (
         <div className="shrink-0 px-3 pt-2">
-          {notifState === 'default' && !dismissedBanner && (
+          {notifState === 'default' && (
             <div className="bg-[#18160e] border border-gold/40 rounded-xl p-3 flex items-start gap-3 shadow-lg">
               <div className="w-8 h-8 rounded-full bg-gold/15 text-gold flex items-center justify-center shrink-0 mt-0.5">
                 <Bell size={16} />
@@ -211,11 +202,11 @@ export default function ConversationList() {
           )}
 
           {notifState === 'denied' && (
-            <div className="bg-red-950/25 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 shadow-md">
+            <div className="bg-red-950/25 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 shadow-md relative">
               <div className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center shrink-0 mt-0.5">
                 <BellOff size={16} />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-4">
                 <p className="font-semibold text-paper text-xs">Notifications blocked in browser</p>
                 <p className="text-muted text-[11px] leading-tight mt-0.5">
                   Click the lock 🔒 icon in the address bar to allow notifications.
@@ -228,21 +219,13 @@ export default function ConversationList() {
                   Check permission again
                 </button>
               </div>
-            </div>
-          )}
-
-          {notifState === 'granted' && (
-            <div className="px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04] flex items-center justify-between text-[11px] text-muted">
-              <div className="flex items-center gap-1.5 text-emerald-400">
-                <Check size={12} />
-                <span>Desktop alerts active</span>
-              </div>
               <button
                 type="button"
-                onClick={handleTestAlert}
-                className="text-gold hover:underline text-[11px] cursor-pointer"
+                onClick={handleDismissBanner}
+                className="text-muted hover:text-white p-0.5 cursor-pointer absolute top-2.5 right-2.5"
+                title="Dismiss"
               >
-                {testSent ? 'Alert sent!' : 'Test alert'}
+                <X size={14} />
               </button>
             </div>
           )}
