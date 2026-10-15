@@ -106,5 +106,18 @@ export function useConversations() {
     return isFanInThisConv ? (conv.fan_unread ?? 0) : (conv.creator_unread ?? 0);
   }, [user?.id]);
 
-  return { conversations, loading, refresh: fetch, getOtherParticipant, getUnread };
+  // Optimistically mark a conversation as read in local state
+  const markConversationViewed = useCallback((convId: string) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c;
+      const isFanInThisConv = c.fan_id === user?.id;
+      return {
+        ...c,
+        fan_unread: isFanInThisConv ? 0 : c.fan_unread,
+        creator_unread: !isFanInThisConv ? 0 : c.creator_unread,
+      };
+    }));
+  }, [user?.id]);
+
+  return { conversations, loading, refresh: fetch, getOtherParticipant, getUnread, markConversationViewed };
 }

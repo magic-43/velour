@@ -32,7 +32,7 @@ export default function ConversationList() {
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState('');
-  const { conversations, loading, refresh, getOtherParticipant, getUnread } = useConversations();
+  const { conversations, loading, refresh, getOtherParticipant, getUnread, markConversationViewed } = useConversations();
 
   // Active conversation id from URL
   const activeId = location.pathname.startsWith('/messages/')
@@ -60,6 +60,7 @@ export default function ConversationList() {
   }, [conversations, getOtherParticipant]);
 
   const openConversation = (conv: ConversationWithParticipants) => {
+    markConversationViewed(conv.id);
     navigate(`/messages/${conv.id}`);
   };
 
@@ -181,8 +182,10 @@ function parseReactionPreview(text: string | null): { isReaction: boolean; emoji
 
 function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread, onOpen }: RowProps) {
   const other = getOtherParticipant(conv);
-  const unread = getUnread(conv);
   const isFromMe = conv.last_message_sender_id === user?.id;
+  // Unread badge and highlighted text only apply if the last message is NOT from me and not active
+  const hasUnread = !isFromMe && !isActive && getUnread(conv) > 0;
+  const unread = hasUnread ? getUnread(conv) : 0;
   const preview = parseConversationPreview(conv.last_message_preview);
   const otherIsTyping = useIsOtherTyping(conv.id);
 
@@ -210,37 +213,51 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         <div className="flex justify-between items-center mb-0.5">
-          <p className="text-[15px] font-semibold text-paper truncate">{other?.name || 'User'}</p>
-          <p className="text-xs text-muted shrink-0 ml-1 font-medium">
+          <p className={`text-[15px] truncate ${hasUnread ? 'font-semibold text-paper' : 'font-medium text-paper/80'}`}>
+            {other?.name || 'User'}
+          </p>
+          <p className={`text-xs shrink-0 ml-1 ${hasUnread ? 'text-gold font-medium' : 'text-muted font-normal'}`}>
             {formatMessageTime(conv.last_message_at)}
           </p>
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Preview — replaced by typing dots when other person is typing */}
+          {/* Preview — dimmer view for sent and read messages; bright for unread incoming messages */}
           <div className={`text-sm truncate flex-1 flex items-center gap-1.5 min-w-0 ${
-            otherIsTyping ? 'text-gold' : unread > 0 ? 'text-paper font-medium' : isActive ? 'text-gold' : 'text-muted'
+            otherIsTyping
+              ? 'text-gold'
+              : hasUnread
+                ? 'text-paper font-medium'
+                : isActive
+                  ? 'text-gold/90'
+                  : 'text-muted font-normal'
           }`}>
             {otherIsTyping ? (
               <TypingDots />
             ) : preview.type === 'reaction' ? (
               <span className="flex items-center gap-1.5 truncate">
                 <span className="text-sm shrink-0 leading-none">{preview.badge}</span>
-                <span className="text-gold font-medium shrink-0">
+                <span className={`shrink-0 ${hasUnread ? 'text-gold font-medium' : 'text-muted font-normal'}`}>
                   {isFromMe ? 'You reacted' : 'Reacted'}
                 </span>
                 {preview.detail && (
-                  <span className="truncate text-paper/70 font-normal">{preview.detail}</span>
+                  <span className={`truncate ${hasUnread ? 'text-paper/80 font-normal' : 'text-muted font-normal'}`}>
+                    {preview.detail}
+                  </span>
                 )}
               </span>
             ) : preview.type === 'locked' ? (
               <span className="flex items-center gap-1.5 truncate">
                 {isFromMe && <span className="text-muted shrink-0">You: </span>}
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/20 text-gold border border-gold/40 text-[0.66rem] font-bold shrink-0">
-                  <Lock size={10} className="shrink-0 text-gold" strokeWidth={2.4} />
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.66rem] font-bold shrink-0 ${
+                  hasUnread
+                    ? 'bg-gold/20 text-gold border border-gold/40'
+                    : 'bg-white/5 text-muted border border-white/10'
+                }`}>
+                  <Lock size={10} className={`shrink-0 ${hasUnread ? 'text-gold' : 'text-muted'}`} strokeWidth={2.4} />
                   <span>{preview.badge}</span>
                 </span>
-                <span className="truncate text-paper/90 font-medium">
+                <span className={`truncate ${hasUnread ? 'text-paper font-medium' : 'text-muted font-normal'}`}>
                   {preview.text}
                 </span>
                 {preview.detail && (
@@ -253,22 +270,28 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
               <span className="flex items-center gap-1.5 truncate">
                 {isFromMe && <span className="text-muted shrink-0">You: </span>}
                 {preview.mediaType === 'video' ? (
-                  <Video size={13} className="text-gold shrink-0" />
+                  <Video size={13} className={`shrink-0 ${hasUnread ? 'text-gold' : 'text-muted'}`} />
                 ) : (
-                  <Camera size={13} className="text-gold shrink-0" />
+                  <Camera size={13} className={`shrink-0 ${hasUnread ? 'text-gold' : 'text-muted'}`} />
                 )}
-                <span className="truncate text-paper/85">{preview.text}</span>
+                <span className={`truncate ${hasUnread ? 'text-paper font-medium' : 'text-muted font-normal'}`}>
+                  {preview.text}
+                </span>
               </span>
             ) : preview.type === 'story' ? (
               <>
                 {isFromMe && <span className="text-muted shrink-0">You: </span>}
-                <StoryStatusIcon size={13} className="text-emerald-400 shrink-0 inline" />
-                <span className="truncate">{preview.text}</span>
+                <StoryStatusIcon size={13} className={`shrink-0 inline ${hasUnread ? 'text-emerald-400' : 'text-muted'}`} />
+                <span className={`truncate ${hasUnread ? 'text-paper font-medium' : 'text-muted font-normal'}`}>
+                  {preview.text}
+                </span>
               </>
             ) : (
               <>
                 {isFromMe && <span className="text-muted shrink-0">You: </span>}
-                <span className="truncate">{preview.text}</span>
+                <span className={`truncate ${hasUnread ? 'text-paper font-medium' : 'text-muted font-normal'}`}>
+                  {preview.text}
+                </span>
               </>
             )}
           </div>
@@ -284,18 +307,18 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
             />
           )}
 
-          {/* Unread badge / reaction indicator — only shown to the recipient, never the sender */}
-          {unread > 0 && !isFromMe && preview.type === 'reaction' ? (
+          {/* Unread badge / reaction indicator — only shown for incoming unread messages */}
+          {hasUnread && preview.type === 'reaction' ? (
             <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold/20 border border-gold/40 text-gold text-[0.68rem] font-bold">
               <span>{preview.badge}</span>
               <span>{unread}</span>
             </span>
-          ) : unread > 0 && !isFromMe && preview.type === 'locked' ? (
+          ) : hasUnread && preview.type === 'locked' ? (
             <span className="shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-full bg-gold text-ink text-[0.65rem] font-bold shadow-md shadow-gold/20">
               <Lock size={10} strokeWidth={2.6} />
               <span>{unread}</span>
             </span>
-          ) : unread > 0 && !isFromMe ? (
+          ) : hasUnread ? (
             <span className="shrink-0 min-w-5 h-5 px-1 rounded-full bg-gold text-ink text-[0.6rem] font-bold flex items-center justify-center">
               {unread > 9 ? '9+' : unread}
             </span>
