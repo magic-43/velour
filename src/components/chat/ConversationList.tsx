@@ -1,10 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, Check, CheckCheck, Lock, Camera, Video } from 'lucide-react';
+import { Search, X, Check, CheckCheck, Lock, Camera, Video, Bell, BellOff } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useConversations } from '../../lib/hooks/useConversations';
 import { useIsOtherTyping } from '../../lib/hooks/useIsOtherTyping';
 import { parseConversationPreview } from '../../lib/messageUtils';
+import {
+  getNotificationPermissionState,
+  requestNotificationPermission,
+  sendTestDesktopNotification,
+} from '../../lib/notificationService';
 import StoryStatusIcon from './StoryStatusIcon';
 import PullToRefresh from '../common/PullToRefresh';
 import type { ConversationWithParticipants } from '../../types';
@@ -38,6 +43,50 @@ export default function ConversationList() {
   const activeId = location.pathname.startsWith('/messages/')
     ? location.pathname.split('/messages/')[1]
     : null;
+
+  // Desktop notification permission status & prompt
+  const [notifState, setNotifState] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(() => {
+    return getNotificationPermissionState();
+  });
+  const [dismissedBanner, setDismissedBanner] = useState(() => {
+    try {
+      return localStorage.getItem('velour_dismissed_desktop_notif') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [testSent, setTestSent] = useState(false);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setNotifState(getNotificationPermissionState());
+    };
+    window.addEventListener('focus', handleSync);
+    return () => window.removeEventListener('focus', handleSync);
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    setNotifState(getNotificationPermissionState());
+    if (granted) {
+      await sendTestDesktopNotification();
+      setTestSent(true);
+      setTimeout(() => setTestSent(false), 5000);
+    }
+  };
+
+  const handleDismissBanner = () => {
+    setDismissedBanner(true);
+    try {
+      localStorage.setItem('velour_dismissed_desktop_notif', 'true');
+    } catch (_) {}
+  };
+
+  const handleTestAlert = async () => {
+    await sendTestDesktopNotification();
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 5000);
+  };
 
   // Filter by search
   const filtered = useMemo(() => {
@@ -119,6 +168,86 @@ export default function ConversationList() {
           </div>
         )}
       </div>
+
+      {/* ── Desktop Notification Prompt / Alert Banner ─────────────────── */}
+      {notifState !== 'unsupported' && (
+        <div className="shrink-0 px-3 pt-2">
+          {notifState === 'default' && !dismissedBanner && (
+            <div className="bg-[#18160e] border border-gold/40 rounded-xl p-3 flex items-start gap-3 shadow-lg">
+              <div className="w-8 h-8 rounded-full bg-gold/15 text-gold flex items-center justify-center shrink-0 mt-0.5">
+                <Bell size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-paper text-xs">Turn on desktop notifications</p>
+                <p className="text-muted text-[11px] leading-tight mt-0.5">
+                  Get notified of new messages even when Velour is minimized.
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleEnableNotifications}
+                    className="px-3 py-1 bg-gold text-ink font-semibold rounded-lg hover:bg-gold-light transition-colors cursor-pointer text-[11px]"
+                  >
+                    Turn on
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissBanner}
+                    className="text-muted hover:text-paper text-[11px] transition-colors cursor-pointer"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleDismissBanner}
+                className="text-muted hover:text-white p-0.5 cursor-pointer"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {notifState === 'denied' && (
+            <div className="bg-red-950/25 border border-red-500/30 rounded-xl p-3 flex items-start gap-3 shadow-md">
+              <div className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center shrink-0 mt-0.5">
+                <BellOff size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-paper text-xs">Notifications blocked in browser</p>
+                <p className="text-muted text-[11px] leading-tight mt-0.5">
+                  Click the lock 🔒 icon in the address bar to allow notifications.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setNotifState(getNotificationPermissionState())}
+                  className="mt-1.5 text-gold hover:underline text-[11px] font-medium block cursor-pointer"
+                >
+                  Check permission again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {notifState === 'granted' && (
+            <div className="px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04] flex items-center justify-between text-[11px] text-muted">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <Check size={12} />
+                <span>Desktop alerts active</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestAlert}
+                className="text-gold hover:underline text-[11px] cursor-pointer"
+              >
+                {testSent ? 'Alert sent!' : 'Test alert'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Conversation list */}
       <PullToRefresh

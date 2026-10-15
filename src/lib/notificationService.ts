@@ -95,7 +95,15 @@ export async function requestNotificationPermission(): Promise<boolean> {
   // Web Browser Notification API
   if (typeof window !== 'undefined' && 'Notification' in window) {
     try {
-      const permission = await Notification.requestPermission();
+      let permission: NotificationPermission;
+      const res = Notification.requestPermission();
+      if (res && typeof (res as any).then === 'function') {
+        permission = await res;
+      } else {
+        permission = await new Promise<NotificationPermission>((resolve) => {
+          Notification.requestPermission(resolve);
+        });
+      }
       return permission === 'granted';
     } catch (err) {
       console.error('Failed requesting Web Notification permission:', err);
@@ -103,6 +111,35 @@ export async function requestNotificationPermission(): Promise<boolean> {
     }
   }
 
+  return false;
+}
+
+/**
+ * Fires a test notification and sound to confirm desktop notifications work.
+ */
+export async function sendTestDesktopNotification(): Promise<boolean> {
+  triggerNotificationFeedback().catch(() => {});
+
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        const notif = new Notification('Velour Messages', {
+          body: 'Desktop notifications are active! You will receive instant alerts for incoming messages.',
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'velour-test-alert',
+        });
+        notif.onclick = () => {
+          try { window.focus(); } catch (_) {}
+          notif.close();
+        };
+        setTimeout(() => notif.close(), 7000);
+        return true;
+      } catch (err) {
+        console.warn('Failed displaying test notification:', err);
+      }
+    }
+  }
   return false;
 }
 

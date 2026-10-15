@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, User, Bell, Shield, Mail, Key, Check,
+  ArrowLeft, User, Bell, BellOff, Shield, Mail, Key, Check,
   AlertCircle, Camera, LogOut, ChevronRight, Lock,
   Film, Wallet, Archive, Users, Calendar, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadPublicFile } from '../lib/r2';
-import { requestNotificationPermission, saveNotificationPreferences } from '../lib/notificationService';
+import {
+  requestNotificationPermission,
+  saveNotificationPreferences,
+  getNotificationPermissionState,
+  sendTestDesktopNotification,
+} from '../lib/notificationService';
 import { triggerNotificationFeedback } from '../lib/soundNotification';
 
 interface NotificationPreferences {
@@ -65,6 +70,26 @@ export default function Settings() {
     }
   });
   const [notificationToast, setNotificationToast] = useState(false);
+  const [desktopNotifState, setDesktopNotifState] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(() => {
+    return getNotificationPermissionState();
+  });
+  const [testSent, setTestSent] = useState(false);
+
+  const handleEnableDesktopNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    setDesktopNotifState(getNotificationPermissionState());
+    if (granted) {
+      await sendTestDesktopNotification();
+      setTestSent(true);
+      setTimeout(() => setTestSent(false), 5000);
+    }
+  };
+
+  const handleTestAlert = async () => {
+    await sendTestDesktopNotification();
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 5000);
+  };
 
   // ── Security State ───────────────────────────────────────────────────────────
   const [newPassword, setNewPassword] = useState('');
@@ -566,6 +591,89 @@ export default function Settings() {
         {/* ── SECTION: NOTIFICATIONS ────────────────────────────────────────── */}
         {section === 'notifications' && (
           <div className="space-y-4">
+            {/* Desktop / Browser Notification Status Card */}
+            {desktopNotifState !== 'unsupported' && (
+              <div className="bg-[#101010] rounded-2xl p-4 sm:p-5 border border-white/[0.04] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-gold/10 text-gold flex items-center justify-center shrink-0">
+                      <Bell size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-paper uppercase tracking-wider">
+                        Browser & Desktop Alerts
+                      </h4>
+                      <p className="text-[11px] text-muted">
+                        Native OS notifications for new messages
+                      </p>
+                    </div>
+                  </div>
+
+                  {desktopNotifState === 'granted' && (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      Enabled
+                    </span>
+                  )}
+                  {desktopNotifState === 'denied' && (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
+                      Blocked
+                    </span>
+                  )}
+                  {desktopNotifState === 'default' && (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      Not Enabled
+                    </span>
+                  )}
+                </div>
+
+                {desktopNotifState === 'granted' && (
+                  <div className="pt-1 flex items-center justify-between">
+                    <p className="text-xs text-muted">
+                      Your browser is permitted to send alerts. Click below to test sound and banner.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleTestAlert}
+                      className="px-3 py-1.5 rounded-xl bg-gold text-ink font-semibold text-xs hover:bg-gold-light transition-colors cursor-pointer shrink-0 ml-3"
+                    >
+                      {testSent ? 'Alert sent!' : 'Test Alert'}
+                    </button>
+                  </div>
+                )}
+
+                {desktopNotifState === 'default' && (
+                  <div className="pt-1 flex items-center justify-between">
+                    <p className="text-xs text-muted">
+                      Allow Velour to send you alerts when people message you.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleEnableDesktopNotifications}
+                      className="px-3.5 py-1.5 rounded-xl bg-gold text-ink font-semibold text-xs hover:bg-gold-light transition-colors cursor-pointer shrink-0 ml-3"
+                    >
+                      Enable
+                    </button>
+                  </div>
+                )}
+
+                {desktopNotifState === 'denied' && (
+                  <div className="pt-1 bg-red-950/20 border border-red-500/20 rounded-xl p-3 text-xs text-muted space-y-1.5">
+                    <p className="text-red-300 font-medium">Notifications are blocked in your browser</p>
+                    <p className="text-[11px] leading-relaxed">
+                      To receive desktop alerts, click the lock 🔒 or tune icon in your browser URL bar, set Notifications to "Allow", and reload.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setDesktopNotifState(getNotificationPermissionState())}
+                      className="text-gold hover:underline text-[11px] font-medium pt-1 cursor-pointer block"
+                    >
+                      Check permission again
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
               <NotificationToggleRow
                 title="Direct Messages"

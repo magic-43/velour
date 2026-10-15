@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import {
   Play, Compass, MessageSquare,
-  ChevronRight, X,
+  ChevronRight, X, Bell,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useGlobalMessageNotifications } from '../../lib/hooks/useGlobalMessageNotifications';
-import { requestNotificationPermission, canPromptDesktopNotifications } from '../../lib/notificationService';
+import {
+  requestNotificationPermission,
+  canPromptDesktopNotifications,
+  sendTestDesktopNotification,
+} from '../../lib/notificationService';
 import InAppMessageToast from '../chat/InAppMessageToast';
 
 // ─── Nav Configurations ──────────────────────────────────────────────────────
@@ -57,7 +61,10 @@ export default function AppShell() {
 
   const handleEnableDesktopNotifications = async () => {
     setShowDesktopPrompt(false);
-    await requestNotificationPermission();
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      await sendTestDesktopNotification();
+    }
   };
 
   const handleDismissDesktopPrompt = () => {
@@ -285,10 +292,10 @@ export default function AppShell() {
       )}
 
       {/* ── Desktop Notification Permission Pill (One-click enable) ───────── */}
-      {showDesktopPrompt && (
-        <div className="hidden md:flex fixed bottom-6 right-6 z-40 bg-[#16161a]/95 border border-gold/30 text-paper px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl items-center gap-3 animate-in fade-in slide-in-from-bottom-4">
+      {showDesktopPrompt && !isMessages && (
+        <div className="hidden md:flex fixed bottom-6 right-6 z-50 bg-[#16161a]/95 border border-gold/40 text-paper px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl items-center gap-3 animate-in fade-in slide-in-from-bottom-4">
           <div className="w-8 h-8 rounded-full bg-gold/15 text-gold flex items-center justify-center shrink-0">
-            <MessageSquare size={16} />
+            <Bell size={16} />
           </div>
           <div className="text-xs">
             <p className="font-semibold text-paper">Desktop Notifications</p>

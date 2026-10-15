@@ -90,23 +90,117 @@ export function useGlobalMessageNotifications() {
     };
   }, [totalUnreadCount]);
 
+  // ── Unified Notification Dispatcher (Deduplicated) ────────────────────────
+  const notifiedKeysRef = useRef<Set<string>>(new Set());
+
+  const triggerIncomingAlert = useCallback(async ({
+    conversationId,
+    senderId,
+    body,
+    timestamp,
+  }: {
+    conversationId: string;
+    senderId: string;
+    body: string;
+    timestamp: string;
+  }) => {
+    if (!user || senderId === user.id) return;
+
+    // Suppress if user is currently looking at this exact chat thread in foreground
+    if (
+      conversationId === activeConvRef.current &&
+      typeof document !== 'undefined' &&
+      !document.hidden
+    ) {
+      return;
+    }
+
+    // Deduplicate within session
+    const notifyKey = `${conversationId}:${timestamp}`;
+    if (notifiedKeysRef.current.has(notifyKey)) return;
+    notifiedKeysRef.current.add(notifyKey);
+
+    // Keep memory cache constrained
+    if (notifiedKeysRef.current.size > 200) {
+      const arr = Array.from(notifiedKeysRef.current);
+      notifiedKeysRef.current = new Set(arr.slice(arr.length - 100));
+    }
+
+    // Fetch sender profile details
+    let senderName = 'New Message';
+    let senderAvatarUrl: string | null = null;
+    try {
+      const { data: senderProfile } = await supabase
+        .from('profiles')
+        .select('display_name, username, avatar_url')
+        .eq('id', senderId)
+        .maybeSingle();
+
+      if (senderProfile) {
+        senderName = senderProfile.display_name || senderProfile.username || 'New Message';
+        senderAvatarUrl = senderProfile.avatar_url || null;
+      }
+    } catch (_) {}
+
+    // Trigger audio chime, native Android alert, and desktop OS notification
+    showNewMessageNotification({
+      conversationId,
+      senderName,
+      body,
+      senderAvatarUrl,
+      userId: user.id,
+      isForegroundActive: false,
+    }).catch(() => {});
+
+    // Display in-app floating toast banner
+    setInAppToast({
+      id: notifyKey,
+      conversationId,
+      senderName,
+      senderAvatarUrl,
+      content: body,
+      timestamp,
+    });
+
+    // Refresh unread counter
+    refreshUnreadCount();
+  }, [user, refreshUnreadCount]);
+
   // ── Realtime Global Listeners ──────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
 
-    // 1. Subscribe to conversation updates (to update unread badge counts)
+    // 1. Subscribe to conversation updates (100% reliable trigger from DB handle_new_message)
     const convChannel = supabase
       .channel(`global_conv_unread:${user.id}:${Math.random().toString(36).slice(2, 7)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
-        () => {
+        (payload: any) => {
           refreshUnreadCount();
+
+          const updated = payload.new;
+          if (!updated || !updated.last_message_sender_id || updated.last_message_sender_id === user.id) {
+            return;
+          }
+
+          // Check if message timestamp is recent (within 45 seconds)
+          if (updated.last_message_at) {
+            const age = Date.now() - new Date(updated.last_message_at).getTime();
+            if (age > 45000) return;
+          }
+
+          triggerIncomingAlert({
+            conversationId: updated.id,
+            senderId: updated.last_message_sender_id,
+            body: updated.last_message_preview || 'Sent you a message',
+            timestamp: updated.last_message_at || new Date().toISOString(),
+          });
         }
       )
       .subscribe();
 
-    // 2. Subscribe to incoming messages (to trigger in-app toast, audio & system notifications)
+    // 2. Subscribe to incoming messages table
     const msgChannel = supabase
       .channel(`global_messages:${user.id}:${Math.random().toString(36).slice(2, 7)}`)
       .on(
@@ -114,58 +208,15 @@ export function useGlobalMessageNotifications() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         async (payload: any) => {
           const newMsg = payload.new;
-          if (!newMsg) return;
+          if (!newMsg || !newMsg.sender_id || newMsg.sender_id === user.id) return;
 
-          // Never notify on messages sent by current user
-          if (newMsg.sender_id === user.id) return;
-
-          // Suppress if user is currently looking at this exact chat thread in foreground
-          if (newMsg.conversation_id === activeConvRef.current && typeof document !== 'undefined' && !document.hidden) {
-            return;
-          }
-
-          // Fetch sender details
-          let senderName = 'New Message';
-          let senderAvatarUrl: string | null = null;
-          try {
-            const { data: senderProfile } = await supabase
-              .from('profiles')
-              .select('display_name, username, avatar_url')
-              .eq('id', newMsg.sender_id)
-              .single();
-
-            if (senderProfile) {
-              senderName = senderProfile.display_name || senderProfile.username || 'New Message';
-              senderAvatarUrl = senderProfile.avatar_url || null;
-            }
-          } catch (_) {}
-
-          // Format clean text
           const clean = getCleanMessagePreview(newMsg.content, newMsg.message_type, newMsg.is_deleted);
-          const bodyText = clean.text || 'Sent you a message';
-
-          // Trigger audio chime, native Android alert, and desktop OS notification
-          showNewMessageNotification({
+          triggerIncomingAlert({
             conversationId: newMsg.conversation_id,
-            senderName,
-            body: bodyText,
-            senderAvatarUrl,
-            userId: user.id,
-            isForegroundActive: false,
-          }).catch(() => {});
-
-          // Display in-app floating toast banner
-          setInAppToast({
-            id: newMsg.id || String(Date.now()),
-            conversationId: newMsg.conversation_id,
-            senderName,
-            senderAvatarUrl,
-            content: bodyText,
-            timestamp: newMsg.created_at,
+            senderId: newMsg.sender_id,
+            body: clean.text || 'Sent you a message',
+            timestamp: newMsg.created_at || new Date().toISOString(),
           });
-
-          // Update unread count
-          refreshUnreadCount();
         }
       )
       .subscribe();
@@ -174,7 +225,7 @@ export function useGlobalMessageNotifications() {
       supabase.removeChannel(convChannel);
       supabase.removeChannel(msgChannel);
     };
-  }, [user, refreshUnreadCount]);
+  }, [user, refreshUnreadCount, triggerIncomingAlert]);
 
   const dismissToast = useCallback(() => {
     setInAppToast(null);
