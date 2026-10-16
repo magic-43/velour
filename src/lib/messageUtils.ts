@@ -1,5 +1,6 @@
 import { parseStoryReply } from './storyReplies';
 import { parseVaultMediaMessage } from './creatorVault';
+import { parseUnlockRequestMessage } from './unlockRequests';
 
 export interface CleanMessagePreview {
   text: string;
@@ -63,7 +64,19 @@ export function getCleanMessagePreview(
     };
   }
 
-  // 3. Normal text: strip any comments (e.g. <!--story-reply... or <!--vault-media...)
+  // 3. Check if it's an unlock request receipt
+  const unlockReq = parseUnlockRequestMessage(content);
+  if (unlockReq.isUnlockRequest && unlockReq.request) {
+    const req = unlockReq.request;
+    const statusText = req.status === 'verified' ? '✅ Unlocked' : req.status === 'rejected' ? '❌ Declined' : '🎟️ Unlock Request';
+    return {
+      text: `${statusText} ($${req.amountUsd})`,
+      thumbnailUrl: req.thumbnailUrl || req.cardImageUrl || null,
+      mediaType: 'image',
+    };
+  }
+
+  // 4. Normal text: strip any comments (e.g. <!--story-reply... or <!--vault-media... or <!--unlock-request...)
   const clean = stripHiddenComments(content);
   return {
     text: clean || content,
@@ -167,7 +180,26 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     };
   }
 
-  // 4. Story replies
+  // 4. Unlock Request receipts
+  if (preview.includes('<!--unlock-request:')) {
+    const unlockReq = parseUnlockRequestMessage(preview);
+    const req = unlockReq.request;
+    const amount = req?.amountUsd || 10;
+    const isVerified = req?.status === 'verified';
+    const isRejected = req?.status === 'rejected';
+
+    return {
+      type: 'text',
+      badge: isVerified ? '✅' : isRejected ? '❌' : '🎟️',
+      text: isVerified
+        ? `Unlocked Exclusive Content ($${amount})`
+        : isRejected
+        ? `Declined Unlock Request ($${amount})`
+        : `Unlock Request • $${amount}`,
+    };
+  }
+
+  // 5. Story replies
   const isStory =
     preview.startsWith('🔘 ') ||
     preview.includes('<!--story-reply:') ||

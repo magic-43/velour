@@ -8,10 +8,12 @@ import { parseVaultMediaMessage } from '../../lib/creatorVault';
 import { getCleanMessagePreview } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
 import LockedAttachmentCard from './LockedAttachmentCard';
+import UnlockReceiptCard from './UnlockReceiptCard';
 import MediaLightbox from './MediaLightbox';
 import WhatsAppMediaGrid from './WhatsAppMediaGrid';
 import { getAppleEmojiUrlByChar } from '../../data/iosEmojis';
 import { triggerHaptic } from '../../lib/haptics';
+import { parseUnlockRequestMessage } from '../../lib/unlockRequests';
 
 // ── Swipe-to-reply constants ───────────────────────────────────────────────────
 const SWIPE_THRESHOLD = 65;   // px — triggers reply action
@@ -68,6 +70,7 @@ export default function MessageBubble({
   const isAttachment = message.message_type === 'attachment';
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
+  const unlockReq = parseUnlockRequestMessage(message.content);
 
   const senderDisplayName = isMine
     ? 'You'
@@ -472,6 +475,17 @@ export default function MessageBubble({
                       </p>
                     )}
                   </div>
+                ) : unlockReq.isUnlockRequest && unlockReq.request ? (
+                  <div className="space-y-1">
+                    <UnlockReceiptCard
+                      message={message}
+                      request={unlockReq.request}
+                      isMine={isMine}
+                      isCreator={isCreator}
+                      currentUserId={user?.id}
+                      onApproveSuccess={onUnlocked}
+                    />
+                  </div>
                 ) : vaultMedia.isVaultMedia && vaultMedia.media ? (
                   vaultMedia.media.isLocked ? (
                     <div className="space-y-1">
@@ -481,6 +495,7 @@ export default function MessageBubble({
                         isCreator={isCreator}
                         currentUserId={user?.id}
                         creatorId={isMine ? user?.id : message.sender_id}
+                        conversationId={message.conversation_id}
                         isUnlocked={isUnlocked}
                         isPendingVerification={isPendingVerification}
                         onUnlocked={onUnlocked}

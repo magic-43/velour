@@ -12,6 +12,7 @@ import {
   markConversationCachedAsRead,
 } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
+import { parseUnlockRequestMessage } from '../unlockRequests';
 
 export interface MessageWithSender extends Message {
   sender: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
@@ -135,13 +136,30 @@ export function useMessages(conversationId: string | null) {
         console.warn('Error fetching db attachment_unlocks:', dbErr);
       }
 
+      // 3. Scan in-chat unlock receipts in current messages
+      if (messages && messages.length > 0) {
+        for (const m of messages) {
+          const parsed = parseUnlockRequestMessage(m.content);
+          if (parsed.isUnlockRequest && parsed.request) {
+            const req = parsed.request;
+            if (req.status === 'verified') {
+              if (req.attachmentId) unlocked.add(req.attachmentId);
+              if (req.thumbnailUrl) unlocked.add(req.thumbnailUrl);
+            } else if (req.status === 'pending') {
+              if (req.attachmentId) pending.add(req.attachmentId);
+              if (req.thumbnailUrl) pending.add(req.thumbnailUrl);
+            }
+          }
+        }
+      }
+
       setUnlockedAttachmentIds(unlocked);
       setPendingAttachmentIds(pending);
     };
 
     loadUnlocks();
 
-    // 3. Realtime listener on attachment_unlocks
+    // 4. Realtime listener on attachment_unlocks
     const channel = supabase
       .channel(`fan_unlocks_${user.id}`)
       .on(
@@ -161,19 +179,26 @@ export function useMessages(conversationId: string | null) {
       )
       .subscribe();
 
-    // 4. Window event listener for cross-component / local approval sync
+    // 5. Window event listener for cross-component / local approval sync
     const handleLocalUnlockVerified = (e: any) => {
       const { attachmentId, mediaUrl } = e.detail || {};
       if (attachmentId) markAttachmentUnlocked(attachmentId);
       if (mediaUrl) markAttachmentUnlocked(mediaUrl);
     };
+    const handleLocalUnlockPending = (e: any) => {
+      const { attachmentId, mediaUrl } = e.detail || {};
+      if (attachmentId) markAttachmentPending(attachmentId);
+      if (mediaUrl) markAttachmentPending(mediaUrl);
+    };
     window.addEventListener('velour:unlock_verified', handleLocalUnlockVerified);
+    window.addEventListener('velour:unlock_pending', handleLocalUnlockPending);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('velour:unlock_verified', handleLocalUnlockVerified);
+      window.removeEventListener('velour:unlock_pending', handleLocalUnlockPending);
     };
-  }, [user?.id]);
+  }, [user?.id, messages]);
 
   const markAttachmentPending = useCallback((id: string) => {
     setPendingAttachmentIds(prev => new Set([...prev, id]));
@@ -668,6 +693,18 @@ export function useMessages(conversationId: string | null) {
 
           if (data) {
             const confirmedMsg = data as MessageWithSender;
+            if (confirmedMsg.content) {
+              const parsed = parseUnlockRequestMessage(confirmedMsg.content);
+              if (parsed.isUnlockRequest && parsed.request) {
+                if (parsed.request.status === 'verified') {
+                  if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
+                  if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+                } else if (parsed.request.status === 'pending') {
+                  if (parsed.request.attachmentId) markAttachmentPending(parsed.request.attachmentId);
+                  if (parsed.request.thumbnailUrl) markAttachmentPending(parsed.request.thumbnailUrl);
+                }
+              }
+            }
             setMessages(prev => {
               if (prev.some(m => m.id === confirmedMsg.id)) return prev;
               return [...prev, confirmedMsg];
@@ -689,6 +726,14 @@ export function useMessages(conversationId: string | null) {
         (payload) => {
           // Skip temp messages (they won't match any DB id)
           if (!payload.new.id) return;
+          const updatedRow = payload.new;
+          if (updatedRow.content) {
+            const parsed = parseUnlockRequestMessage(updatedRow.content);
+            if (parsed.isUnlockRequest && parsed.request?.status === 'verified') {
+              if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
+              if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+            }
+          }
           setMessages(prev =>
             prev.map(m => {
               if (m.id === payload.new.id) {

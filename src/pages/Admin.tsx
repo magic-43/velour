@@ -27,6 +27,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import type { Profile } from '../types';
 import { useBackHandler } from '../lib/backButtonRegistry';
+import { parseUnlockRequestMessage, updateUnlockRequestContentStatus } from '../lib/unlockRequests';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -234,19 +235,14 @@ export default function Admin() {
         .select(`
           id,
           user_id,
-          creator_id,
           type,
           amount_usd,
           status,
           attachment_id,
-          card_type,
-          card_image_url,
-          media_url,
           reference,
           description,
           created_at,
-          fan:profiles!user_id(id, username, display_name, avatar_url),
-          creator:profiles!creator_id(id, username, display_name, avatar_url)
+          fan:profiles!user_id(id, username, display_name, avatar_url)
         `)
         .order('created_at', { ascending: false });
 
@@ -259,6 +255,57 @@ export default function Admin() {
           .select('*')
           .order('created_at', { ascending: false });
         if (fallbackData) rawData = fallbackData;
+      }
+
+      // Query in-chat unlock requests from messages
+      try {
+        const { data: unlockMsgs } = await supabase
+          .from('messages')
+          .select(`
+            id,
+            conversation_id,
+            sender_id,
+            content,
+            created_at,
+            sender:profiles!sender_id(id, username, display_name, avatar_url)
+          `)
+          .ilike('content', '%<!--unlock-request:%')
+          .order('created_at', { ascending: false });
+
+        if (unlockMsgs && unlockMsgs.length > 0) {
+          for (const msg of unlockMsgs) {
+            const parsed = parseUnlockRequestMessage(msg.content);
+            if (parsed.isUnlockRequest && parsed.request) {
+              const req = parsed.request;
+              const alreadyExists = rawData.some(
+                (t) => (req.attachmentId && t.attachment_id === req.attachmentId) || t.id === msg.id
+              );
+              if (!alreadyExists) {
+                rawData.push({
+                  id: msg.id,
+                  user_id: msg.sender_id,
+                  creator_id: req.creatorId || null,
+                  type: 'attachment_unlock',
+                  amount_usd: req.amountUsd,
+                  status: req.status || 'pending',
+                  attachment_id: req.attachmentId,
+                  card_type: req.method === 'crypto' ? 'crypto' : req.giftCardType || 'e_card',
+                  card_brand: req.brand,
+                  card_image_url: req.cardImageUrl,
+                  reference: req.proof,
+                  description: `In-Chat Unlock Request | $${req.amountUsd} | ${req.brand}: ${req.proof}`,
+                  media_url: req.thumbnailUrl,
+                  created_at: req.submittedAt || msg.created_at,
+                  fan: (msg as any).sender || null,
+                  _isChatMsg: true,
+                  _conversationId: msg.conversation_id,
+                });
+              }
+            }
+          }
+        }
+      } catch (msgErr) {
+        console.warn('Admin fetch in-chat unlock requests error:', msgErr);
       }
 
       // Parse metadata from description
@@ -507,14 +554,32 @@ export default function Admin() {
           } catch {}
         }
 
-        if (tx.media_url) {
-          try {
+        // If this transaction corresponds to an in-chat unlock receipt, update the message content
+        try {
+          const { data: matchedMsg } = await supabase
+            .from('messages')
+            .select('id, content, conversation_id')
+            .eq('id', tx.id)
+            .maybeSingle();
+
+          if (matchedMsg && matchedMsg.content) {
+            const newContent = updateUnlockRequestContentStatus(matchedMsg.content, 'verified');
             await supabase
-              .from('attachment_unlocks')
-              .update({ status: 'verified' })
-              .eq('media_url', tx.media_url)
-              .eq('fan_id', tx.user_id);
-          } catch {}
+              .from('messages')
+              .update({ content: newContent })
+              .eq('id', matchedMsg.id);
+
+            await supabase.from('messages').insert({
+              conversation_id: matchedMsg.conversation_id,
+              sender_id: profile.id,
+              sender_type: 'creator',
+              content: `🎉 Payment verified! Unlocked "${tx.title || 'Exclusive Media'}" for you. Enjoy!`,
+              message_type: 'text',
+              reply_to_id: matchedMsg.id,
+            });
+          }
+        } catch (msgUpdateErr) {
+          console.warn('Admin in-chat message receipt update failed:', msgUpdateErr);
         }
       }
 
@@ -579,6 +644,35 @@ export default function Admin() {
           .from('transactions_ledger')
           .update({ status: 'rejected' })
           .eq('id', tx.id);
+
+        if (tx.attachment_id) {
+          try {
+            await supabase
+              .from('attachment_unlocks')
+              .update({ status: 'rejected' })
+              .eq('attachment_id', tx.attachment_id)
+              .eq('fan_id', tx.user_id);
+          } catch {}
+        }
+
+        // If this transaction corresponds to an in-chat unlock receipt, update the message content
+        try {
+          const { data: matchedMsg } = await supabase
+            .from('messages')
+            .select('id, content')
+            .eq('id', tx.id)
+            .maybeSingle();
+
+          if (matchedMsg && matchedMsg.content) {
+            const newContent = updateUnlockRequestContentStatus(matchedMsg.content, 'rejected');
+            await supabase
+              .from('messages')
+              .update({ content: newContent })
+              .eq('id', matchedMsg.id);
+          }
+        } catch (msgRejectErr) {
+          console.warn('Admin in-chat message receipt reject update failed:', msgRejectErr);
+        }
       }
 
       try {

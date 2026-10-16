@@ -20,6 +20,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { uploadPublicFile } from '../../lib/r2';
+import { encodeUnlockRequestMessage, UnlockRequestPayload } from '../../lib/unlockRequests';
 
 interface UnlockPaymentModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ interface UnlockPaymentModalProps {
   thumbnailUrl?: string | null;
   attachmentId?: string;
   creatorId?: string;
+  conversationId?: string;
   onSuccess?: () => void;
 }
 
@@ -65,6 +67,7 @@ export default function UnlockPaymentModal({
   thumbnailUrl,
   attachmentId,
   creatorId,
+  conversationId,
   onSuccess,
 }: UnlockPaymentModalProps) {
   const { user } = useAuth();
@@ -173,88 +176,90 @@ export default function UnlockPaymentModal({
       };
       const fullDescription = `${description} [META:${JSON.stringify(metaPayload)}]`;
 
-      // 1. Try DB RPC submit_unlock_request if available
-      let submittedViaRpc = false;
-      let insertedTxId: string | null = null;
-      try {
-        const { data: rpcRes, error: rpcError } = await supabase.rpc('submit_unlock_request', {
-          p_fan_id: user.id,
-          p_creator_id: creatorId || null,
-          p_amount_usd: amountUsd,
-          p_attachment_id: safeAttachmentId,
-          p_card_type: cardType,
-          p_card_image_url: uploadedCardImageUrl || null,
-          p_media_url: thumbnailUrl || null,
-          p_reference: effectiveRef,
-          p_description: fullDescription,
-        });
-        if (!rpcError && rpcRes) {
-          submittedViaRpc = true;
-          insertedTxId = typeof rpcRes === 'string' ? rpcRes : (rpcRes as any)?.id || null;
-        }
-      } catch {
-        submittedViaRpc = false;
+      // 1. Resolve conversation ID for in-chat receipt delivery
+      let effectiveConversationId = conversationId;
+      if (!effectiveConversationId && creatorId && user) {
+        try {
+          const { data: conv } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('fan_id', user.id)
+            .limit(1)
+            .maybeSingle();
+          if (conv?.id) {
+            effectiveConversationId = conv.id;
+          }
+        } catch {}
       }
 
-      // 2. Resilient insert to transactions_ledger
-      if (!submittedViaRpc) {
-        // Try extended columns first
-        const { data: insertedTx, error: insertError } = await supabase
+      // 2. Post in-chat Unlock Receipt message to the creator's conversation thread
+      const unlockPayload: UnlockRequestPayload = {
+        version: 1,
+        type: 'unlock_request',
+        attachmentId: safeAttachmentId || attachmentId || null,
+        creatorId: creatorId || null,
+        fanId: user.id,
+        amountUsd,
+        method,
+        giftCardType: method === 'giftcard' ? giftCardType : null,
+        brand: method === 'crypto' ? 'USDT' : giftBrand,
+        proof: effectiveRef,
+        cardImageUrl: uploadedCardImageUrl || null,
+        thumbnailUrl: thumbnailUrl || null,
+        title: displayTitle,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+      };
+      const unlockMsgContent = encodeUnlockRequestMessage(unlockPayload);
+
+      if (effectiveConversationId) {
+        try {
+          await supabase.from('messages').insert({
+            conversation_id: effectiveConversationId,
+            sender_id: user.id,
+            sender_type: 'fan',
+            content: unlockMsgContent,
+            message_type: 'text',
+          });
+        } catch (chatMsgErr) {
+          console.warn('Could not post in-chat unlock receipt message:', chatMsgErr);
+        }
+      }
+
+      // 3. Resilient insert to transactions_ledger (using verified database columns)
+      let insertedTxId: string | null = null;
+      try {
+        const { data: fallbackTx, error: fallbackError } = await supabase
           .from('transactions_ledger')
           .insert({
             user_id: user.id,
-            creator_id: creatorId || null,
             type: 'attachment_unlock',
             amount_usd: amountUsd,
             status: 'pending',
             attachment_id: safeAttachmentId,
-            card_type: cardType,
-            card_image_url: uploadedCardImageUrl || null,
-            media_url: thumbnailUrl || null,
             reference: effectiveRef,
             description: fullDescription,
           })
           .select('id')
           .maybeSingle();
 
-        if (!insertError && insertedTx?.id) {
-          insertedTxId = insertedTx.id;
-        } else {
-          console.warn('Extended columns insert failed, trying base columns fallback:', insertError?.message);
-          // Fallback: guaranteed base columns from original schema
-          const { data: fallbackTx, error: fallbackError } = await supabase
-            .from('transactions_ledger')
-            .insert({
-              user_id: user.id,
-              type: 'attachment_unlock',
-              amount_usd: amountUsd,
-              status: 'pending',
-              attachment_id: safeAttachmentId,
-              reference: effectiveRef,
-              description: fullDescription,
-            })
-            .select('id')
-            .maybeSingle();
-
-          if (!fallbackError && fallbackTx?.id) {
-            insertedTxId = fallbackTx.id;
-          } else if (fallbackError) {
-            console.error('Base columns fallback insert error:', fallbackError.message);
-          }
+        if (!fallbackError && fallbackTx?.id) {
+          insertedTxId = fallbackTx.id;
         }
+      } catch (ledgerErr) {
+        console.warn('transactions_ledger insert error:', ledgerErr);
+      }
 
-        if (safeAttachmentId) {
-          try {
-            await supabase.from('attachment_unlocks').insert({
-              attachment_id: safeAttachmentId,
-              fan_id: user.id,
-              creator_id: creatorId || null,
-              amount_usd: amountUsd,
-              media_url: thumbnailUrl || null,
-              status: 'pending',
-            });
-          } catch {}
-        }
+      // 4. Resilient insert to attachment_unlocks
+      if (safeAttachmentId) {
+        try {
+          await supabase.from('attachment_unlocks').insert({
+            attachment_id: safeAttachmentId,
+            fan_id: user.id,
+            amount_usd: amountUsd,
+            status: 'pending',
+          });
+        } catch {}
       }
 
       // 3. Mark in local optimistic storage for user (STRICTLY status: 'pending')
@@ -310,6 +315,16 @@ export default function UnlockPaymentModal({
         const aExisting = JSON.parse(localStorage.getItem(aKey) || '[]');
         localStorage.setItem(aKey, JSON.stringify([pendingObj, ...aExisting]));
       } catch {}
+
+      // Dispatch local event for instant UI update
+      window.dispatchEvent(
+        new CustomEvent('velour:unlock_pending', {
+          detail: {
+            attachmentId: safeAttachmentId || attachmentId,
+            mediaUrl: thumbnailUrl,
+          },
+        })
+      );
 
       setSubmitted(true);
       setTimeout(() => {

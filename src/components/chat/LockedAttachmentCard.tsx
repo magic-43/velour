@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Unlock, Clock, Sparkles, Check, Play, Eye, Loader2 } from 'lucide-react';
 import type { VaultMediaPayload } from '../../lib/creatorVault';
 import UnlockPaymentModal from '../monetization/UnlockPaymentModal';
@@ -17,6 +17,7 @@ interface LockedAttachmentCardProps {
   senderAvatar?: string | null;
   timestamp?: string;
   creatorId?: string;
+  conversationId?: string;
   onUnlocked?: () => void;
 }
 
@@ -32,12 +33,43 @@ export default function LockedAttachmentCard({
   senderAvatar,
   timestamp,
   creatorId,
+  conversationId,
   onUnlocked,
 }: LockedAttachmentCardProps) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [localPending, setLocalPending] = useState(isPendingVerification);
+
+  useEffect(() => {
+    const handlePending = (e: any) => {
+      const { attachmentId, mediaUrl } = e.detail || {};
+      const targetId = media.batchId || (media as any).id;
+      if (
+        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
+        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
+      ) {
+        setLocalPending(true);
+      }
+    };
+    const handleVerified = (e: any) => {
+      const { attachmentId, mediaUrl } = e.detail || {};
+      const targetId = media.batchId || (media as any).id;
+      if (
+        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
+        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
+      ) {
+        setLocalPending(false);
+        onUnlocked?.();
+      }
+    };
+    window.addEventListener('velour:unlock_pending', handlePending);
+    window.addEventListener('velour:unlock_verified', handleVerified);
+    return () => {
+      window.removeEventListener('velour:unlock_pending', handlePending);
+      window.removeEventListener('velour:unlock_verified', handleVerified);
+    };
+  }, [media.batchId, media.mediaUrl, media.thumbnailUrl, onUnlocked]);
 
   const price = media.price || 10;
   const isBatch = Boolean(media.items && media.items.length > 1);
@@ -276,6 +308,7 @@ export default function LockedAttachmentCard({
         onClose={() => setShowPaymentModal(false)}
         attachmentId={media.batchId || (items[0] && items[0].mediaUrl) || media.mediaUrl}
         creatorId={creatorId}
+        conversationId={conversationId}
         amountUsd={price}
         attachmentTitle={media.title}
         batchCount={items.length}
