@@ -8,7 +8,7 @@ import type { CreatorProfile, Profile } from '../types';
 import CreatorProfilePanel from '../components/creator/CreatorProfilePanel';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
-import { isOnline } from '../lib/offline/outboxSync';
+import { isOnline as isNetworkOnline } from '../lib/offline/outboxSync';
 
 const AVATAR_COLORS = [
   'bg-blue-500',
@@ -21,7 +21,8 @@ const AVATAR_COLORS = [
   'bg-rose-500',
 ];
 
-function getAvatarColor(name: string) {
+function getAvatarColor(name?: string | null) {
+  if (!name) return AVATAR_COLORS[0];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -71,16 +72,16 @@ export default function Explore() {
           setClientsLoading(false);
         }
       }
-      if (!isOnline()) {
+      if (!isNetworkOnline()) {
         setLoading(false);
         setClientsLoading(false);
       }
     } catch (_) {}
   }, []);
 
-  // For creators, default view is 'clients'. For fans, default is 'creators'.
+  // For creators, default view is 'all'. For fans, default is 'creators'.
   const [discoveryFilter, setDiscoveryFilter] = useState<'clients' | 'creators' | 'all'>(
-    isCreator ? 'clients' : 'creators'
+    isCreator ? 'all' : 'creators'
   );
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState(() => searchParams.get('q') || '');
@@ -128,7 +129,7 @@ export default function Explore() {
   // Sync default filter if isCreator becomes true or false on auth resolution
   useEffect(() => {
     if (isCreator) {
-      setDiscoveryFilter('clients');
+      setDiscoveryFilter('all');
     } else {
       setDiscoveryFilter('creators');
     }
@@ -146,57 +147,69 @@ export default function Explore() {
   }, []);
 
   const fetchCreators = useCallback(async () => {
-    if (!isOnline()) {
+    if (!isNetworkOnline()) {
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('creator_profiles')
-      .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, role, last_seen_at)')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('creator_profiles')
+        .select('*, owner:profiles!owner_id(id, username, display_name, avatar_url, role, last_seen_at)')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      const formatted: CreatorProfile[] = (data as any[]).map((item) => ({
-        ...item,
-        avatar_url: item.avatar_url || item.owner?.avatar_url || null,
-      }));
-      setCreators(formatted);
-      try {
-        localStorage.setItem('velour:cached-explore-creators', JSON.stringify(formatted));
-      } catch (_) {}
+      if (error) {
+        console.error('Error fetching creators on Discover page:', error);
+      } else if (data) {
+        const formatted: CreatorProfile[] = (data as any[]).map((item) => ({
+          ...item,
+          avatar_url: item.avatar_url || item.owner?.avatar_url || null,
+        }));
+        setCreators(formatted);
+        try {
+          localStorage.setItem('velour:cached-explore-creators', JSON.stringify(formatted));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('Failed fetching creators on Discover page:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const fetchClients = useCallback(async () => {
-    if (!isOnline()) {
+    if (!isNetworkOnline()) {
       setClientsLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url, bio, role, is_banned, last_seen_at, created_at')
-      .eq('role', 'fan')
-      .eq('is_banned', false)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, bio, role, is_banned, last_seen_at, created_at')
+        .eq('role', 'fan')
+        .eq('is_banned', false)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setClients(data as Profile[]);
-      try {
-        localStorage.setItem('velour:cached-explore-clients', JSON.stringify(data));
-      } catch (_) {}
+      if (error) {
+        console.error('Error fetching clients on Discover page:', error);
+      } else if (data) {
+        setClients(data as Profile[]);
+        try {
+          localStorage.setItem('velour:cached-explore-clients', JSON.stringify(data));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('Failed fetching clients on Discover page:', err);
+    } finally {
+      setClientsLoading(false);
     }
-    setClientsLoading(false);
   }, []);
 
   useEffect(() => {
     fetchCreators();
-    if (isCreator) {
-      fetchClients();
-    }
+    fetchClients();
 
     const channelId = `explore-realtime:${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
@@ -212,7 +225,7 @@ export default function Explore() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
         () => {
-          if (isCreator) fetchClients();
+          fetchClients();
           fetchCreators();
         }
       )
@@ -221,14 +234,14 @@ export default function Explore() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchCreators, fetchClients, isCreator]);
+  }, [fetchCreators, fetchClients]);
 
   const handleRefresh = useCallback(async () => {
     await Promise.all([
       fetchCreators(),
-      isCreator ? fetchClients() : Promise.resolve(),
+      fetchClients(),
     ]);
-  }, [fetchCreators, fetchClients, isCreator]);
+  }, [fetchCreators, fetchClients]);
 
   // Combine items into a unified list based on role and active filter
   const items: DiscoveryItem[] = useMemo(() => {
@@ -237,13 +250,13 @@ export default function Explore() {
     // Clients/Fans: ONLY visible to creators who explicitly filter by 'clients' or 'all'
     if (isCreator && (discoveryFilter === 'clients' || discoveryFilter === 'all')) {
       clients.forEach((c) => {
-        // Exclude any admin users
-        if (c.role !== 'admin') {
+        // Exclude current user and admin users
+        if (c.id !== user?.id && c.role !== 'admin') {
           list.push({
             id: c.id,
             type: 'client',
-            name: c.display_name || c.username,
-            username: c.username,
+            name: c.display_name || c.username || 'User',
+            username: c.username || 'user',
             avatar_url: c.avatar_url,
             bio: c.bio,
             last_seen_at: c.last_seen_at,
@@ -258,13 +271,15 @@ export default function Explore() {
       creators.forEach((cr) => {
         // Never show admin profiles as creators in Discover
         if (cr.owner?.role === 'admin' || cr.owner?.username === 'admin') return;
+        // Don't show current creator's own creator profile in discover list
+        if (cr.owner_id === user?.id) return;
 
         const avatar = cr.avatar_url || cr.owner?.avatar_url || null;
         list.push({
           id: cr.id,
           type: 'creator',
-          name: cr.display_name,
-          username: cr.owner?.username || cr.display_name.toLowerCase().replace(/\s+/g, ''),
+          name: cr.display_name || 'Creator',
+          username: cr.owner?.username || (cr.display_name ? cr.display_name.toLowerCase().replace(/\s+/g, '') : 'creator'),
           avatar_url: avatar,
           bio: cr.bio,
           last_seen_at: cr.owner?.last_seen_at,
@@ -274,7 +289,7 @@ export default function Explore() {
     }
 
     return list;
-  }, [isCreator, discoveryFilter, clients, creators]);
+  }, [isCreator, discoveryFilter, clients, creators, user?.id]);
 
   // Filter items by search query
   const filteredItems = useMemo(() => {
@@ -282,8 +297,8 @@ export default function Explore() {
     if (!q) return items;
     return items.filter((item) => {
       return (
-        item.name.toLowerCase().includes(q) ||
-        item.username.toLowerCase().includes(q) ||
+        (item.name || '').toLowerCase().includes(q) ||
+        (item.username || '').toLowerCase().includes(q) ||
         (item.bio || '').toLowerCase().includes(q)
       );
     });
@@ -393,14 +408,14 @@ export default function Explore() {
     }
   };
 
-  const isOnline = (lastSeenAt?: string | null) => {
+  const isUserOnline = (lastSeenAt?: string | null) => {
     if (!lastSeenAt) return false;
     return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
   };
 
   const formatLastSeen = (lastSeenAt?: string | null) => {
     if (!lastSeenAt) return 'last seen recently';
-    if (isOnline(lastSeenAt)) return 'online';
+    if (isUserOnline(lastSeenAt)) return 'online';
     const d = new Date(lastSeenAt);
     const diffMs = Date.now() - d.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -545,7 +560,7 @@ export default function Explore() {
             ) : (
               <div>
                 {filteredItems.map((item) => {
-                  const online = isOnline(item.last_seen_at);
+                  const online = isUserOnline(item.last_seen_at);
 
                   return (
                     <div
@@ -564,7 +579,7 @@ export default function Explore() {
                         {item.avatar_url ? (
                           <img
                             src={item.avatar_url}
-                            alt={item.name}
+                            alt={item.name || 'User'}
                             className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"
                           />
@@ -574,7 +589,7 @@ export default function Explore() {
                               item.name
                             )} flex items-center justify-center text-white font-semibold text-base select-none`}
                           >
-                            {item.name.charAt(0).toUpperCase()}
+                            {(item.name || '?').charAt(0).toUpperCase()}
                           </div>
                         )}
                       </div>
@@ -583,7 +598,7 @@ export default function Explore() {
                       <div className="flex-1 min-w-0 flex flex-col justify-center border-b border-[#1c1c1e] py-4 pr-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-base font-semibold text-paper truncate leading-tight">
-                            {item.name}
+                            {item.name || 'User'}
                           </span>
                         </div>
 
