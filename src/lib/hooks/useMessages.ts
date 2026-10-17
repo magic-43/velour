@@ -790,6 +790,17 @@ export function useMessages(conversationId: string | null) {
               if (parsed.request.batchId) markAttachmentUnlocked(parsed.request.batchId);
               if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
               for (const u of parsed.request.mediaUrls || []) markAttachmentUnlocked(u);
+
+              window.dispatchEvent(
+                new CustomEvent('velour:unlock_verified', {
+                  detail: {
+                    attachmentId: parsed.request.batchId || parsed.request.attachmentId,
+                    batchId: parsed.request.batchId,
+                    mediaUrls: parsed.request.mediaUrls,
+                    mediaUrl: parsed.request.thumbnailUrl,
+                  },
+                })
+              );
             }
           }
           setMessages(prev =>

@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import type { ConversationWithParticipants } from '../../types';
 import { getCachedConversations, saveCachedConversations, markConversationCachedAsRead } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
-import { parseConversationPreview } from '../messageUtils';
+import { getCleanMessagePreview, parseConversationPreview } from '../messageUtils';
 
 export function useConversations() {
   const { user, profile, isCreator } = useAuth();
@@ -85,28 +85,67 @@ export function useConversations() {
 
       const { data, error } = await query;
       if (!error && data) {
-        const convs = (data as ConversationWithParticipants[]).map((c) => {
-          if (
-            c.last_message_preview &&
-            (c.last_message_preview.includes('unlock_confirmed') ||
-              c.last_message_preview.includes('unlock-confirmed') ||
-              c.last_message_preview.includes('{"version":1,"type":"unlock_confirmed"'))
-          ) {
-            const parsed = parseConversationPreview(c.last_message_preview);
-            const cleanPreview = `🔓 ${parsed.text}`;
-            // Proactively heal database column in background
-            supabase
-              .from('conversations')
-              .update({ last_message_preview: cleanPreview })
-              .eq('id', c.id)
-              .then(() => {});
-            return {
-              ...c,
-              last_message_preview: cleanPreview,
-            };
-          }
-          return c;
-        });
+        const convs = await Promise.all(
+          (data as ConversationWithParticipants[]).map(async (c) => {
+            const isCorrupted =
+              c.last_message_preview &&
+              (c.last_message_preview.includes('unlock_confirmed') ||
+                c.last_message_preview.includes('unlock-confirmed') ||
+                c.last_message_preview.includes('Content unlocked') ||
+                c.last_message_preview.startsWith('{"version":1'));
+
+            if (isCorrupted) {
+              // Delete any ghost confirmation rows from messages for this conversation
+              supabase
+                .from('messages')
+                .delete()
+                .eq('conversation_id', c.id)
+                .or('content.like.%unlock_confirmed%,content.like.%unlock-confirmed%')
+                .then(() => {});
+
+              // Find the latest genuine message in this conversation
+              const { data: realMsg } = await supabase
+                .from('messages')
+                .select('content, created_at, sender_id, message_type')
+                .eq('conversation_id', c.id)
+                .not('content', 'like', '%unlock_confirmed%')
+                .not('content', 'like', '%unlock-confirmed%')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              let realPreview = '';
+              let realTime = c.last_message_at;
+              let realSenderId = c.last_message_sender_id;
+
+              if (realMsg) {
+                const parsed = getCleanMessagePreview(realMsg.content, realMsg.message_type);
+                realPreview = parsed.text || '';
+                realTime = realMsg.created_at;
+                realSenderId = realMsg.sender_id;
+              }
+
+              // Update the database conversations record to restore the real message
+              supabase
+                .from('conversations')
+                .update({
+                  last_message_preview: realPreview,
+                  last_message_at: realTime,
+                  last_message_sender_id: realSenderId,
+                })
+                .eq('id', c.id)
+                .then(() => {});
+
+              return {
+                ...c,
+                last_message_preview: realPreview,
+                last_message_at: realTime,
+                last_message_sender_id: realSenderId,
+              };
+            }
+            return c;
+          })
+        );
         setConversations(convs);
         saveCachedConversations(convs).catch(() => {});
       } else if (error) {

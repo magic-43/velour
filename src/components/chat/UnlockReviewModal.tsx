@@ -17,8 +17,7 @@ import {
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import {
   UnlockRequestPayload,
-  UnlockConfirmedPayload,
-  encodeUnlockConfirmedMessage,
+  updateUnlockRequestContentStatus,
 } from '../../lib/unlockRequests';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
@@ -83,40 +82,21 @@ export default function UnlockReviewModal({
           ? request.mediaUrls
           : (request.thumbnailUrl ? [request.thumbnailUrl] : []);
 
-      // 1. Send invisible real-time signal via Supabase Realtime
-      // Uses message_type: 'text' to comply with Postgres check constraint
-      const confirmedPayload: UnlockConfirmedPayload = {
-        version: 1,
-        type: 'unlock_confirmed',
-        fanId: request.fanId || message.sender_id,
-        batchId: targetBatchId,
-        attachmentId: request.attachmentId,
-        mediaUrls: targetUrls,
-        thumbnailUrl: request.thumbnailUrl,
-        title: request.title,
-        amountUsd: request.amountUsd,
-        confirmedAt: new Date().toISOString(),
-      };
+      // 1. Update the existing unlock request message in place (NO new message is inserted)
+      const updatedContent = updateUnlockRequestContentStatus(message.content || '', 'verified');
+      await supabase
+        .from('messages')
+        .update({ content: updatedContent })
+        .eq('id', message.id);
 
-      await supabase.from('messages').insert({
-        conversation_id: message.conversation_id,
-        sender_id: user.id,
-        sender_type: 'creator',
-        content: encodeUnlockConfirmedMessage(confirmedPayload),
-        message_type: 'text',
-      });
-
-      // Update conversations.last_message_preview to clean human text
+      // Clean up any legacy ghost confirmation rows for this conversation
       try {
         await supabase
-          .from('conversations')
-          .update({
-            last_message_preview: `🔓 Content unlocked${request.amountUsd ? ` ($${request.amountUsd})` : ''}`,
-          })
-          .eq('id', message.conversation_id);
-      } catch (convErr) {
-        console.warn('Failed to update conversation preview:', convErr);
-      }
+          .from('messages')
+          .delete()
+          .eq('conversation_id', message.conversation_id)
+          .or('content.like.%unlock_confirmed%,content.like.%unlock-confirmed%');
+      } catch {}
 
       // 2. Update transactions_ledger to verified
       try {
@@ -194,21 +174,18 @@ export default function UnlockReviewModal({
     setDeclining(true);
 
     try {
+      const updatedContent = updateUnlockRequestContentStatus(message.content || '', 'rejected');
+      await supabase
+        .from('messages')
+        .update({ content: updatedContent })
+        .eq('id', message.id);
+
       try {
         await supabase
           .from('transactions_ledger')
           .update({ status: 'rejected' })
           .eq('user_id', message.sender_id)
           .eq('status', 'pending');
-      } catch {}
-
-      try {
-        await supabase
-          .from('conversations')
-          .update({
-            last_message_preview: `❌ Declined Unlock Request${request.amountUsd ? ` ($${request.amountUsd})` : ''}`,
-          })
-          .eq('id', message.conversation_id);
       } catch {}
 
       try {
