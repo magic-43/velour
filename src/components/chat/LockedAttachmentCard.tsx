@@ -119,7 +119,7 @@ export default function LockedAttachmentCard({
   };
 
   return (
-    <div className="space-y-2 max-w-[320px] sm:max-w-[340px] select-none">
+    <div data-no-swipe="true" className="space-y-2 max-w-[320px] sm:max-w-[340px] select-none">
       {/* ── Batch bundle layout (2+ items) ─────────────────────────── */}
       {isBatch ? (
         <div className="space-y-2">

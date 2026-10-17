@@ -43,6 +43,7 @@ export default function WhatsAppMediaGrid({
 
     return (
       <div
+        data-no-swipe="true"
         onClick={() => onItemClick?.(0)}
         className="relative w-full max-w-[320px] aspect-[4/5] max-h-[340px] rounded-xl overflow-hidden cursor-pointer group bg-black/40 select-none"
       >
@@ -91,7 +92,7 @@ export default function WhatsAppMediaGrid({
   const remainingCount = items.length > 4 ? items.length - 3 : 0;
 
   return (
-    <div className="w-full max-w-[320px] sm:max-w-[340px] rounded-2xl overflow-hidden bg-black/40 select-none">
+    <div data-no-swipe="true" className="w-full max-w-[320px] sm:max-w-[340px] rounded-2xl overflow-hidden bg-black/40 select-none">
       <div className="grid grid-cols-2 gap-1 p-0.5">
         {visibleItems.map((item, idx) => {
           const isLastTile = idx === 3 && remainingCount > 0;

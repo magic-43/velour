@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { useBackHandler } from '../../lib/backButtonRegistry';
+import { parseVaultMediaMessage } from '../../lib/creatorVault';
+import { parseUnlockConfirmedMessage, parseUnlockRequestMessage } from '../../lib/unlockRequests';
 
 interface FanVaultViewProps {
   onBack: () => void;
@@ -172,6 +174,161 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
             });
           }
         }
+      }
+
+      // 4. Fetch unlocked media from the fan's conversations & messages
+      try {
+        const { data: convos } = await supabase
+          .from('conversations')
+          .select(`
+            id,
+            creator_profile_id,
+            creator:creator_profiles!creator_profile_id(
+              id,
+              display_name,
+              username,
+              avatar_url
+            )
+          `)
+          .eq('fan_id', profile.id);
+
+        if (convos && convos.length > 0) {
+          const convoIds = convos.map((c) => c.id);
+          const { data: convMessages } = await supabase
+            .from('messages')
+            .select('id, conversation_id, content, created_at, sender_id, sender_type')
+            .in('conversation_id', convoIds)
+            .order('created_at', { ascending: false });
+
+          if (convMessages && convMessages.length > 0) {
+            // Map conversations by id for creator details lookup
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const convoMap = new Map<string, any>();
+            convos.forEach((c) => convoMap.set(c.id, c.creator));
+
+            // Set of unlocked IDs / URLs per conversation
+            const unlockedKeys = new Set<string>();
+            const unlockDates = new Map<string, string>();
+
+            for (const m of convMessages) {
+              if (!m.content) continue;
+
+              // Check for unlock_confirmed
+              if (m.content.includes('unlock_confirmed') || m.content.includes('unlock-confirmed')) {
+                const conf = parseUnlockConfirmedMessage(m.content);
+                if (conf.isUnlockConfirmed && conf.payload) {
+                  const p = conf.payload;
+                  const date = p.confirmedAt || m.created_at;
+                  if (p.batchId) {
+                    unlockedKeys.add(p.batchId);
+                    unlockDates.set(p.batchId, date);
+                  }
+                  if (p.attachmentId) {
+                    unlockedKeys.add(p.attachmentId);
+                    unlockDates.set(p.attachmentId, date);
+                  }
+                  for (const u of p.mediaUrls || []) {
+                    unlockedKeys.add(u);
+                    unlockDates.set(u, date);
+                  }
+                  if (p.thumbnailUrl) {
+                    unlockedKeys.add(p.thumbnailUrl);
+                    unlockDates.set(p.thumbnailUrl, date);
+                  }
+                }
+              }
+
+              // Check for verified unlock_request
+              const req = parseUnlockRequestMessage(m.content);
+              if (req.isUnlockRequest && req.request?.status === 'verified') {
+                const r = req.request;
+                const date = r.approvedAt || r.submittedAt || m.created_at;
+                if (r.batchId) {
+                  unlockedKeys.add(r.batchId);
+                  unlockDates.set(r.batchId, date);
+                }
+                if (r.attachmentId) {
+                  unlockedKeys.add(r.attachmentId);
+                  unlockDates.set(r.attachmentId, date);
+                }
+                for (const u of r.mediaUrls || []) {
+                  unlockedKeys.add(u);
+                  unlockDates.set(u, date);
+                }
+                if (r.thumbnailUrl) {
+                  unlockedKeys.add(r.thumbnailUrl);
+                  unlockDates.set(r.thumbnailUrl, date);
+                }
+              }
+            }
+
+            // Scan all vault_media messages
+            for (const m of convMessages) {
+              if (!m.content) continue;
+              const v = parseVaultMediaMessage(m.content);
+              if (!v.isVaultMedia || !v.media) continue;
+
+              const media = v.media;
+              const creator = convoMap.get(m.conversation_id);
+
+              const k1 = media.batchId;
+              const k2 = media.mediaUrl;
+              const k3 = media.thumbnailUrl;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const itemKeys = (media.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl, it.id]).filter(Boolean);
+              const allKeys = [k1, k2, k3, ...itemKeys, m.id].filter(Boolean) as string[];
+
+              const isUnlocked = allKeys.some((k) => unlockedKeys.has(k));
+              if (!isUnlocked && media.isLocked) continue;
+
+              // Find unlock date
+              let unlockedAt = m.created_at;
+              for (const k of allKeys) {
+                if (unlockDates.has(k)) {
+                  unlockedAt = unlockDates.get(k)!;
+                  break;
+                }
+              }
+
+              // Extract all items (single or bundle)
+              const itemsToExtract = media.items && media.items.length > 0
+                ? media.items
+                : [{
+                    mediaUrl: media.mediaUrl,
+                    mediaType: media.mediaType,
+                    thumbnailUrl: media.thumbnailUrl,
+                    title: media.title,
+                  }];
+
+              itemsToExtract.forEach((it, idx) => {
+                const mediaUrl = it.mediaUrl;
+                if (!mediaUrl) return;
+
+                if (!combined.some((c) => c.mediaUrl === mediaUrl)) {
+                  const isVideo =
+                    it.mediaType === 'video' ||
+                    Boolean(mediaUrl.match(/\.(mp4|mov|webm)$/i));
+
+                  combined.push({
+                    id: it.id || `${m.id}_${idx}`,
+                    mediaUrl,
+                    thumbnailUrl: it.thumbnailUrl || (isVideo ? null : mediaUrl),
+                    mediaType: isVideo ? 'video' : 'image',
+                    title: it.title || media.title || 'Exclusive Media',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    creatorName: (creator as any)?.display_name || (creator as any)?.username || 'Creator',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    creatorAvatar: (creator as any)?.avatar_url || null,
+                    unlockedAt,
+                    amountUsd: media.price || null,
+                  });
+                }
+              });
+            }
+          }
+        }
+      } catch (convoErr) {
+        console.warn('Error fetching unlocked media from conversations:', convoErr);
       }
 
       combined.sort((a, b) => new Date(b.unlockedAt).getTime() - new Date(a.unlockedAt).getTime());

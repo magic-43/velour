@@ -160,6 +160,19 @@ export default function MessageBubble({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!canSwipe) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.closest('img') ||
+       target.closest('video') ||
+       target.closest('button') ||
+       target.closest('a') ||
+       target.closest('[data-no-swipe]') ||
+       target.closest('.no-swipe'))
+    ) {
+      touchStartX.current = 0;
+      return;
+    }
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     isHorizontal.current = null;
@@ -168,7 +181,7 @@ export default function MessageBubble({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!canSwipe) return;
+    if (!canSwipe || touchStartX.current === 0) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
 
@@ -550,6 +563,7 @@ export default function MessageBubble({
                             setFreeLightboxIndex(0);
                             setFreeLightboxOpen(true);
                           }}
+                          data-no-swipe="true"
                           className="rounded-xl overflow-hidden w-full cursor-pointer group relative"
                         >
                           {vaultMedia.media.mediaType === 'video' ? (

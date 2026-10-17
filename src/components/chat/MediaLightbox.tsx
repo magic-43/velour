@@ -237,6 +237,7 @@ export default function MediaLightbox({
 
   // Touch handlers: Swipe down from top area to dismiss & Interactive 1:1 Horizontal Carousel Swipe
   const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (e.touches.length === 1) {
       const touch = e.touches[0];
       touchStartX.current = touch.clientX;
@@ -248,6 +249,7 @@ export default function MediaLightbox({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (touchStartY.current === null || touchStartX.current === null) return;
     const currentY = e.touches[0].clientY;
     const currentX = e.touches[0].clientX;
@@ -287,6 +289,7 @@ export default function MediaLightbox({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (touchStartX.current === null || touchStartY.current === null) return;
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;

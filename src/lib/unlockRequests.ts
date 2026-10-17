@@ -101,10 +101,14 @@ export function parseUnlockRequestMessage(content: string | null | undefined): {
       const brand = brandMatch ? brandMatch[1] : 'Gift Card';
       const method = (methodMatch && methodMatch[1] === 'crypto') ? 'crypto' : 'giftcard';
 
+      const batchMatch = content.match(/"batchId"\s*:\s*"([^"]+)"/);
+      const attMatch = content.match(/"attachmentId"\s*:\s*"([^"]+)"/);
+
       const partialReq: UnlockRequestPayload = {
         version: 1,
         type: 'unlock_request',
-        attachmentId: null,
+        attachmentId: attMatch ? attMatch[1] : null,
+        batchId: batchMatch ? batchMatch[1] : null,
         creatorId: null,
         fanId: '',
         amountUsd,
