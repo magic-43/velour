@@ -201,15 +201,35 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
     }
   };
 
-  const handleVaultSelect = (item: VaultItem, price?: number, messageText?: string) => {
-    onSend(encodeVaultMediaMessage(messageText || '', {
-      mediaUrl: item.mediaUrl,
-      mediaType: item.mediaType,
-      title: item.title,
-      price,
-      isLocked: Boolean(price && price > 0),
-      durationSecs: item.durationSecs,
-    }));
+  const handleVaultSelect = (items: VaultItem[], caption?: string) => {
+    if (!items || items.length === 0) return;
+
+    if (items.length === 1) {
+      const item = items[0];
+      onSend(encodeVaultMediaMessage(caption || '', {
+        mediaUrl: item.mediaUrl,
+        mediaType: item.mediaType,
+        thumbnailUrl: item.thumbnailUrl,
+        durationSecs: item.durationSecs,
+      }));
+    } else {
+      const batchId = `vault_batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const firstItem = items[0];
+      onSend(encodeVaultMediaMessage(caption || '', {
+        mediaUrl: firstItem.mediaUrl,
+        mediaType: firstItem.mediaType,
+        thumbnailUrl: firstItem.thumbnailUrl,
+        durationSecs: firstItem.durationSecs,
+        batchId,
+        items: items.map((it) => ({
+          id: it.id,
+          mediaUrl: it.mediaUrl,
+          mediaType: it.mediaType,
+          thumbnailUrl: it.thumbnailUrl,
+          durationSecs: it.durationSecs,
+        })),
+      }));
+    }
   };
 
   const handlePlusClick = () => {

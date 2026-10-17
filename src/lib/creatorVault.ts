@@ -6,8 +6,8 @@ export interface VaultItem {
   mediaUrl: string;
   thumbnailUrl?: string | null;
   mediaType: 'video' | 'image';
-  title: string;
-  fileName: string;
+  title?: string;
+  fileName?: string;
   fileSize?: number;
   durationSecs?: number;
   defaultPrice?: number;
@@ -85,6 +85,32 @@ export function addVaultItem(
 }
 
 /**
+ * Save multiple new items into the creator's vault storage.
+ */
+export function addVaultItems(
+  creatorId: string,
+  itemsData: Array<Omit<VaultItem, 'id' | 'createdAt' | 'creatorId'>>
+): VaultItem[] {
+  const current = getVaultItems(creatorId);
+  const now = Date.now();
+  const newItems: VaultItem[] = itemsData.map((data, index) => ({
+    id: `vault_${now}_${index}_${Math.random().toString(36).slice(2, 7)}`,
+    creatorId,
+    createdAt: new Date(now + index).toISOString(),
+    ...data,
+  }));
+
+  const updated = [...newItems, ...current];
+  try {
+    localStorage.setItem(`${STORAGE_PREFIX}${creatorId}`, JSON.stringify(updated));
+  } catch (err) {
+    console.error('Error persisting vault items:', err);
+  }
+
+  return newItems;
+}
+
+/**
  * Remove an item from the creator's vault.
  */
 export function deleteVaultItem(creatorId: string, itemId: string): void {
@@ -98,7 +124,41 @@ export function deleteVaultItem(creatorId: string, itemId: string): void {
 }
 
 /**
- * Upload a media file (video or image) to Cloudflare R2 and store it in the creator's Vault.
+ * Remove multiple items from the creator's vault.
+ */
+export function deleteVaultItems(creatorId: string, itemIds: string[]): void {
+  const idsSet = new Set(itemIds);
+  const current = getVaultItems(creatorId);
+  const filtered = current.filter((item) => !idsSet.has(item.id));
+  try {
+    localStorage.setItem(`${STORAGE_PREFIX}${creatorId}`, JSON.stringify(filtered));
+  } catch (err) {
+    console.error('Error deleting vault items:', err);
+  }
+}
+
+/**
+ * Extract video duration from a File object.
+ */
+async function extractVideoDuration(file: File): Promise<number | undefined> {
+  try {
+    return await new Promise<number>((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.src = URL.createObjectURL(file);
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        resolve(Math.round(video.duration));
+      };
+      video.onerror = () => resolve(0);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Upload a single media file (video or image) to Cloudflare R2 and store it in the creator's Vault.
  */
 export async function uploadVaultMedia(
   file: File,
@@ -113,39 +173,71 @@ export async function uploadVaultMedia(
 
   // Upload to public R2 CDN
   const publicUrl = await uploadPublicFile(file, storageKey, {
-    skipCompression: isVideo, // Do not compress raw video files
+    skipCompression: isVideo,
   });
 
-  let durationSecs: number | undefined;
-
-  // Extract video duration if it's a video file
-  if (isVideo) {
-    try {
-      durationSecs = await new Promise<number>((resolve) => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.src = URL.createObjectURL(file);
-        video.onloadedmetadata = () => {
-          URL.revokeObjectURL(video.src);
-          resolve(Math.round(video.duration));
-        };
-        video.onerror = () => resolve(0);
-      });
-    } catch {
-      durationSecs = undefined;
-    }
-  }
+  const durationSecs = isVideo ? await extractVideoDuration(file) : undefined;
 
   return addVaultItem(creatorId, {
     mediaUrl: publicUrl,
     thumbnailUrl: isVideo ? null : publicUrl,
     mediaType,
-    title: title?.trim() || file.name.replace(/\.[^/.]+$/, ''),
+    title: title?.trim() || undefined,
     fileName: file.name,
     fileSize: file.size,
     durationSecs,
     defaultPrice: price && price > 0 ? Math.round(price) : undefined,
   });
+}
+
+/**
+ * Upload multiple media files to Cloudflare R2 and save them to the creator's Vault.
+ * Processes in batches of 3 to avoid overwhelming client network.
+ */
+export async function uploadMultipleVaultMedia(
+  files: File[],
+  creatorId: string,
+  onProgress?: (completed: number, total: number) => void
+): Promise<VaultItem[]> {
+  if (files.length === 0) return [];
+
+  const results: Array<Omit<VaultItem, 'id' | 'createdAt' | 'creatorId'>> = [];
+  const total = files.length;
+  let completed = 0;
+
+  // Process files in batches of 3
+  const batchSize = 3;
+  for (let i = 0; i < files.length; i += batchSize) {
+    const batch = files.slice(i, i + batchSize);
+    const batchPromises = batch.map(async (file) => {
+      const isVideo = file.type.startsWith('video/');
+      const mediaType: 'video' | 'image' = isVideo ? 'video' : 'image';
+      const cleanName = file.name.replace(/\s+/g, '_');
+      const storageKey = `vault/${creatorId}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${cleanName}`;
+
+      const [publicUrl, durationSecs] = await Promise.all([
+        uploadPublicFile(file, storageKey, { skipCompression: isVideo }),
+        isVideo ? extractVideoDuration(file) : Promise.resolve(undefined),
+      ]);
+
+      completed++;
+      if (onProgress) onProgress(completed, total);
+
+      return {
+        mediaUrl: publicUrl,
+        thumbnailUrl: isVideo ? null : publicUrl,
+        mediaType,
+        fileName: file.name,
+        fileSize: file.size,
+        durationSecs,
+      };
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+  }
+
+  return addVaultItems(creatorId, results);
 }
 
 /**
@@ -160,11 +252,6 @@ export function encodeVaultMediaMessage(
     type: 'vault_media',
     ...payload,
   };
-
-  const isLocked = Boolean(payload.isLocked);
-  const price = payload.price || 10;
-  const itemCount = payload.items && payload.items.length > 1 ? payload.items.length : 1;
-  const isVideo = payload.mediaType === 'video';
 
   const cleanText = text?.trim() || '';
   return cleanText
