@@ -472,23 +472,31 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       // Determine if message attachment is unlocked or pending
       let isUnlocked = false;
       let isPendingVerification = false;
+      let targetBatchId: string | undefined;
+      let targetMediaUrl: string | undefined;
+      let targetFirstMediaUrl: string | undefined;
+
       if (msg.content?.includes('"type":"vault_media"')) {
         try {
           const parsed = JSON.parse(msg.content);
           const m = parsed?.media;
-          const k1 = m?.batchId;
-          const k2 = m?.mediaUrl;
-          const k3 = m?.items?.[0]?.mediaUrl;
+          targetBatchId = m?.batchId;
+          targetMediaUrl = m?.mediaUrl;
+          targetFirstMediaUrl = m?.items?.[0]?.mediaUrl;
+          const anyItemUnlocked = Array.isArray(m?.items) && m.items.some((it: any) => it?.mediaUrl && unlockedAttachmentIds.has(it.mediaUrl));
           isUnlocked = Boolean(
-            (k1 && unlockedAttachmentIds.has(k1)) ||
-            (k2 && unlockedAttachmentIds.has(k2)) ||
-            (k3 && unlockedAttachmentIds.has(k3)) ||
+            (targetBatchId && unlockedAttachmentIds.has(targetBatchId)) ||
+            (targetMediaUrl && unlockedAttachmentIds.has(targetMediaUrl)) ||
+            (targetFirstMediaUrl && unlockedAttachmentIds.has(targetFirstMediaUrl)) ||
+            anyItemUnlocked ||
             unlockedAttachmentIds.has(msg.id)
           );
+          const anyItemPending = Array.isArray(m?.items) && m.items.some((it: any) => it?.mediaUrl && pendingAttachmentIds.has(it.mediaUrl));
           isPendingVerification = Boolean(
-            (k1 && pendingAttachmentIds.has(k1)) ||
-            (k2 && pendingAttachmentIds.has(k2)) ||
-            (k3 && pendingAttachmentIds.has(k3)) ||
+            (targetBatchId && pendingAttachmentIds.has(targetBatchId)) ||
+            (targetMediaUrl && pendingAttachmentIds.has(targetMediaUrl)) ||
+            (targetFirstMediaUrl && pendingAttachmentIds.has(targetFirstMediaUrl)) ||
+            anyItemPending ||
             pendingAttachmentIds.has(msg.id)
           );
         } catch {}
@@ -509,7 +517,12 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               isSelected={selectedMessageIds.has(msg.id)}
               isUnlocked={isUnlocked}
               isPendingVerification={isPendingVerification}
-              onUnlocked={() => markAttachmentPending(msg.id)}
+              onUnlocked={() => {
+                if (targetBatchId) markAttachmentUnlocked(targetBatchId);
+                if (targetMediaUrl) markAttachmentUnlocked(targetMediaUrl);
+                if (targetFirstMediaUrl) markAttachmentUnlocked(targetFirstMediaUrl);
+                markAttachmentUnlocked(msg.id);
+              }}
               onToggleSelect={handleToggleSelect}
               onDelete={handleDelete}
               onReveal={isCreator ? handleToggleReveal : undefined}

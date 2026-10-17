@@ -2,6 +2,8 @@ export interface UnlockRequestPayload {
   version: number;
   type: 'unlock_request';
   attachmentId: string | null;
+  batchId?: string | null;
+  mediaUrls?: string[] | null;
   creatorId: string | null;
   fanId: string;
   amountUsd: number;
@@ -17,9 +19,21 @@ export interface UnlockRequestPayload {
   approvedAt?: string | null;
 }
 
+export interface UnlockConfirmedPayload {
+  version: number;
+  type: 'unlock_confirmed';
+  attachmentId?: string | null;
+  batchId?: string | null;
+  mediaUrls?: string[];
+  thumbnailUrl?: string | null;
+  fanId: string;
+  creatorId: string;
+  amountUsd: number;
+  unlockedAt: string;
+}
+
 /**
- * Encodes an unlock request payload into message content with a clean human prefix
- * and a hidden JSON comment tag.
+ * Encodes an unlock request payload into message content.
  */
 export function encodeUnlockRequestMessage(payload: UnlockRequestPayload): string {
   const methodLabel = payload.method === 'crypto'
@@ -28,6 +42,37 @@ export function encodeUnlockRequestMessage(payload: UnlockRequestPayload): strin
 
   const prefix = `🎟️ Unlock Request: ${methodLabel} • $${payload.amountUsd}`;
   return `${prefix}\n<!--unlock-request:${JSON.stringify(payload)}-->`;
+}
+
+/**
+ * Encodes an unlock confirmation payload into a silent protocol message.
+ */
+export function encodeUnlockConfirmedMessage(payload: UnlockConfirmedPayload): string {
+  return `<!--unlock-confirmed:${JSON.stringify(payload)}-->`;
+}
+
+/**
+ * Detects and parses an unlock confirmation payload from message content.
+ */
+export function parseUnlockConfirmedMessage(content: string | null | undefined): {
+  isUnlockConfirmed: boolean;
+  confirmed: UnlockConfirmedPayload | null;
+} {
+  if (!content) {
+    return { isUnlockConfirmed: false, confirmed: null };
+  }
+
+  const match = content.match(/<!--unlock-confirmed:(.*?)-->/);
+  if (match) {
+    try {
+      const confirmed = JSON.parse(match[1]) as UnlockConfirmedPayload;
+      return { isUnlockConfirmed: true, confirmed };
+    } catch {
+      // ignore
+    }
+  }
+
+  return { isUnlockConfirmed: false, confirmed: null };
 }
 
 /**
@@ -65,6 +110,7 @@ export function parseUnlockRequestMessage(content: string | null | undefined): {
       const proofMatch = content.match(/"proof"\s*:\s*"([^"]+)"/);
       const titleMatch = content.match(/"title"\s*:\s*"([^"]+)"/);
       const cardTypeMatch = content.match(/"giftCardType"\s*:\s*"([^"]+)"/);
+      const batchIdMatch = content.match(/"batchId"\s*:\s*"([^"]+)"/);
 
       const status = (statusMatch ? statusMatch[1] : 'pending') as 'pending' | 'verified' | 'rejected';
       const amountUsd = amountMatch ? parseFloat(amountMatch[1]) : 10;
@@ -75,6 +121,7 @@ export function parseUnlockRequestMessage(content: string | null | undefined): {
         version: 1,
         type: 'unlock_request',
         attachmentId: null,
+        batchId: batchIdMatch ? batchIdMatch[1] : null,
         creatorId: null,
         fanId: '',
         amountUsd,

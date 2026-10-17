@@ -30,6 +30,8 @@ interface UnlockPaymentModalProps {
   batchCount?: number;
   thumbnailUrl?: string | null;
   attachmentId?: string;
+  batchId?: string;
+  mediaUrls?: string[];
   creatorId?: string;
   conversationId?: string;
   onSuccess?: () => void;
@@ -66,6 +68,8 @@ export default function UnlockPaymentModal({
   batchCount = 1,
   thumbnailUrl,
   attachmentId,
+  batchId,
+  mediaUrls,
   creatorId,
   conversationId,
   onSuccess,
@@ -197,6 +201,8 @@ export default function UnlockPaymentModal({
         version: 1,
         type: 'unlock_request',
         attachmentId: safeAttachmentId || attachmentId || null,
+        batchId: batchId || null,
+        mediaUrls: mediaUrls || null,
         creatorId: creatorId || null,
         fanId: user.id,
         amountUsd,
@@ -321,6 +327,8 @@ export default function UnlockPaymentModal({
         new CustomEvent('velour:unlock_pending', {
           detail: {
             attachmentId: safeAttachmentId || attachmentId,
+            batchId: batchId || null,
+            mediaUrls: mediaUrls || null,
             mediaUrl: thumbnailUrl,
           },
         })

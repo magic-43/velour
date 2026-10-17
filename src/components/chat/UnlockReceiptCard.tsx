@@ -1,17 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  Lock,
+  Check,
+  Copy,
   CheckCircle2,
   XCircle,
-  Clock,
-  CreditCard,
-  ChevronRight,
-  ShieldCheck,
+  Loader2,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
-import { UnlockRequestPayload } from '../../lib/unlockRequests';
+import {
+  UnlockRequestPayload,
+  UnlockConfirmedPayload,
+  encodeUnlockConfirmedMessage,
+} from '../../lib/unlockRequests';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
-import UnlockReviewModal from './UnlockReviewModal';
 
 interface UnlockReceiptCardProps {
   message: MessageWithSender;
@@ -27,141 +31,267 @@ export default function UnlockReceiptCard({
   request,
   isMine,
   isCreator,
-  currentUserId,
   onApproveSuccess,
 }: UnlockReceiptCardProps) {
   const { user } = useAuth();
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [localStatus, setLocalStatus] = useState<'pending' | 'verified' | 'rejected'>(
     request.status || 'pending'
   );
 
-  // Sync if message content changes remotely
-  useEffect(() => {
-    if (request.status) {
-      setLocalStatus(request.status);
-    }
-  }, [request.status]);
+  // The fan MUST NOT see this payment request message. Only the creator sees it.
+  if (!isCreator && isMine) {
+    return null;
+  }
 
   const isPending = localStatus === 'pending';
   const isVerified = localStatus === 'verified';
   const isRejected = localStatus === 'rejected';
 
-  // Approver is true if current user is the creator or the recipient of the unlock request
-  const isApprover = Boolean(
-    user?.id &&
-      (!isMine || isCreator) &&
-      (request.creatorId === user?.id || isCreator || !isMine)
-  );
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleApprove = async () => {
+    if (!user || approving) return;
+    setApproving(true);
+
+    try {
+      // 1. Send silent real-time unlock confirmation message into chat
+      // This is invisible in chat, but triggers instant unblur on the fan's device
+      const confirmedPayload: UnlockConfirmedPayload = {
+        version: 1,
+        type: 'unlock_confirmed',
+        attachmentId: request.attachmentId,
+        batchId: request.batchId,
+        mediaUrls: request.mediaUrls || (request.thumbnailUrl ? [request.thumbnailUrl] : []),
+        thumbnailUrl: request.thumbnailUrl,
+        fanId: message.sender_id,
+        creatorId: user.id,
+        amountUsd: request.amountUsd,
+        unlockedAt: new Date().toISOString(),
+      };
+
+      await supabase.from('messages').insert({
+        conversation_id: message.conversation_id,
+        sender_id: user.id,
+        sender_type: 'creator',
+        content: encodeUnlockConfirmedMessage(confirmedPayload),
+        message_type: 'system',
+      });
+
+      // 2. Update creator total_earned in user_balances
+      try {
+        const { data: curBal } = await supabase
+          .from('user_balances')
+          .select('total_earned')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const currentEarned = curBal?.total_earned ?? 0;
+        await supabase
+          .from('user_balances')
+          .upsert({
+            user_id: user.id,
+            total_earned: currentEarned + request.amountUsd,
+            updated_at: new Date().toISOString(),
+          });
+      } catch {}
+
+      // 3. Update transactions_ledger if table available
+      try {
+        await supabase
+          .from('transactions_ledger')
+          .update({ status: 'verified' })
+          .eq('user_id', message.sender_id)
+          .eq('status', 'pending');
+      } catch {}
+
+      // 4. Update attachment_unlocks
+      if (request.attachmentId) {
+        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (UUID_REGEX.test(request.attachmentId)) {
+          try {
+            await supabase
+              .from('attachment_unlocks')
+              .update({ status: 'verified' })
+              .eq('attachment_id', request.attachmentId)
+              .eq('fan_id', message.sender_id);
+          } catch {}
+        }
+      }
+
+      // 5. Broadcast local event so creator's screen unblurs immediately too
+      window.dispatchEvent(
+        new CustomEvent('velour:unlock_verified', {
+          detail: {
+            attachmentId: request.attachmentId,
+            batchId: request.batchId,
+            mediaUrl: request.thumbnailUrl,
+          },
+        })
+      );
+
+      setLocalStatus('verified');
+      onApproveSuccess?.(request.attachmentId);
+    } catch (err) {
+      console.error('Failed to approve unlock:', err);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!user || declining) return;
+    setDeclining(true);
+    try {
+      try {
+        await supabase
+          .from('transactions_ledger')
+          .update({ status: 'rejected' })
+          .eq('user_id', message.sender_id)
+          .eq('status', 'pending');
+      } catch {}
+      setLocalStatus('rejected');
+    } catch (err) {
+      console.error('Failed to decline unlock:', err);
+    } finally {
+      setDeclining(false);
+    }
+  };
 
   const methodDisplay =
     request.method === 'crypto'
       ? 'USDT Crypto'
-      : request.brand
-      ? `${request.brand} Card`
-      : 'Gift Card';
+      : request.giftCardType === 'physical_card'
+      ? `${request.brand || 'Card'} (Physical)`
+      : `${request.brand || 'Card'} (E-Card)`;
 
   return (
     <>
-      <div
-        onClick={() => setShowReviewModal(true)}
-        className="w-full min-w-[270px] max-w-[320px] sm:max-w-[340px] p-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 active:border-gold/40 shadow-md cursor-pointer transition-all select-none group text-white my-0.5"
-      >
-        {/* Top Row: Thumbnail + Title + Price */}
-        <div className="flex items-center gap-3">
-          {/* Media Thumbnail or Icon */}
-          {request.thumbnailUrl ? (
-            <div className="w-11 h-11 rounded-xl overflow-hidden bg-black/40 border border-white/10 shrink-0 relative">
-              <img
-                src={request.thumbnailUrl}
-                alt=""
-                className={`w-full h-full object-cover filter ${!isVerified ? 'blur-[1.5px]' : ''} scale-105`}
-              />
-              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                {isVerified ? (
-                  <CheckCircle2 size={16} className="text-emerald-400" />
-                ) : (
-                  <Lock size={14} className="text-gold" />
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="w-11 h-11 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center text-gold shrink-0">
-              {isVerified ? (
-                <CheckCircle2 size={18} className="text-emerald-400" />
-              ) : (
-                <CreditCard size={18} />
-              )}
-            </div>
-          )}
-
-          {/* Details */}
-          <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-xs text-white truncate group-hover:text-gold transition-colors">
-              {request.title || 'Exclusive Media'}
-            </h4>
-            <p className="text-[11px] text-white/50 mt-0.5 flex items-center gap-1.5 truncate">
-              <span>{methodDisplay}</span>
-            </p>
-          </div>
-
-          {/* Price Tag */}
-          <div className="text-right shrink-0">
-            <span className="text-[10px] text-white/40 block leading-tight">Price</span>
-            <span className="text-sm font-bold text-gold font-serif">
-              ${request.amountUsd.toFixed(2)}
+      <div className="w-full max-w-[300px] sm:max-w-[320px] p-3 rounded-2xl bg-[#1c1c1e] border border-white/10 text-white text-xs select-none space-y-2.5 my-1">
+        {/* Simple Header */}
+        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div>
+            <span className="font-bold text-sm text-gold font-serif block">
+              Unlock Request • ${request.amountUsd}
+            </span>
+            <span className="text-[11px] text-white/50 block">
+              {request.title || 'Exclusive Media'} · {methodDisplay}
             </span>
           </div>
+
+          {isVerified && (
+            <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 size={13} /> Unlocked
+            </span>
+          )}
+          {isRejected && (
+            <span className="text-[11px] text-red-400 font-semibold flex items-center gap-1">
+              <XCircle size={13} /> Declined
+            </span>
+          )}
         </div>
 
-        {/* Subtle Divider */}
-        <div className="h-px bg-white/5 my-2.5" />
-
-        {/* Bottom Row: Status / Action on Left, space for Timestamp on Right */}
-        <div className="flex items-center justify-between pr-14">
-          <div className="flex items-center gap-1.5">
-            {isPending ? (
-              isApprover ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gold text-ink shadow-sm group-hover:brightness-110 active:scale-95 transition-all">
-                  <ShieldCheck size={12} strokeWidth={2.4} /> Review Proof
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  <Clock size={10} className="animate-spin" /> Pending Review
-                </span>
-              )
-            ) : isVerified ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                <CheckCircle2 size={10} /> Unlocked
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-300 border border-red-500/30">
-                <XCircle size={10} /> Declined
-              </span>
-            )}
+        {/* Claim Code (if present) */}
+        {request.proof && (
+          <div className="space-y-1">
+            <span className="text-[10px] text-white/40 uppercase font-semibold">
+              {request.method === 'crypto' ? 'TxID' : 'Code / PIN'}
+            </span>
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/60 border border-white/10">
+              <code className="font-mono text-gold-light text-xs truncate select-all">
+                {request.proof}
+              </code>
+              <button
+                type="button"
+                onClick={() => handleCopy(request.proof)}
+                className="shrink-0 p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"
+                title="Copy"
+              >
+                {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+              </button>
+            </div>
           </div>
+        )}
 
-          {/* Details chevron */}
-          <span className="text-[10px] text-white/40 group-hover:text-white/70 flex items-center gap-0.5 transition-colors">
-            Details <ChevronRight size={11} />
-          </span>
-        </div>
+        {/* Physical Card Photo (if uploaded) */}
+        {request.cardImageUrl && (
+          <div className="space-y-1">
+            <span className="text-[10px] text-white/40 uppercase font-semibold">
+              Card Photo
+            </span>
+            <div
+              onClick={() => setShowPhotoModal(true)}
+              className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 cursor-pointer max-h-36 group"
+            >
+              <img
+                src={request.cardImageUrl}
+                alt="Card Proof"
+                className="w-full h-32 object-cover group-hover:scale-105 transition-transform"
+              />
+              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] text-white font-medium transition-opacity">
+                Tap to expand
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Direct Action Buttons (pending state) */}
+        {isPending && (
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={approving || declining}
+              onClick={handleApprove}
+              className="flex-1 py-2 px-3 rounded-xl bg-gold hover:bg-gold-light text-ink text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {approving ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" /> Unlocking…
+                </>
+              ) : (
+                'Approve & Unlock'
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={approving || declining}
+              onClick={handleDecline}
+              className="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-red-400 text-xs font-medium transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              {declining ? <Loader2 size={13} className="animate-spin" /> : 'Decline'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Verification Modal Sheet */}
-      <UnlockReviewModal
-        isOpen={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
-        message={message}
-        request={{ ...request, status: localStatus }}
-        isMine={isMine}
-        isCreator={isCreator}
-        currentUserId={currentUserId}
-        onApproveSuccess={(attId) => {
-          setLocalStatus('verified');
-          onApproveSuccess?.(attId);
-        }}
-      />
+      {/* Full Photo Modal */}
+      {showPhotoModal && request.cardImageUrl && (
+        <div
+          className="fixed inset-0 z-[100000] bg-black/95 flex flex-col items-center justify-center p-4"
+          onClick={() => setShowPhotoModal(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setShowPhotoModal(false)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={request.cardImageUrl}
+            alt="Card Full View"
+            className="max-w-full max-h-[85vh] object-contain rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

@@ -12,7 +12,10 @@ import {
   markConversationCachedAsRead,
 } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
-import { parseUnlockRequestMessage } from '../unlockRequests';
+import {
+  parseUnlockRequestMessage,
+  parseUnlockConfirmedMessage,
+} from '../unlockRequests';
 
 export interface MessageWithSender extends Message {
   sender: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
@@ -144,11 +147,23 @@ export function useMessages(conversationId: string | null) {
             const req = parsed.request;
             if (req.status === 'verified') {
               if (req.attachmentId) unlocked.add(req.attachmentId);
+              if (req.batchId) unlocked.add(req.batchId);
               if (req.thumbnailUrl) unlocked.add(req.thumbnailUrl);
+              if (req.mediaUrls) req.mediaUrls.forEach((u) => unlocked.add(u));
             } else if (req.status === 'pending') {
               if (req.attachmentId) pending.add(req.attachmentId);
+              if (req.batchId) pending.add(req.batchId);
               if (req.thumbnailUrl) pending.add(req.thumbnailUrl);
             }
+          }
+
+          const conf = parseUnlockConfirmedMessage(m.content);
+          if (conf.isUnlockConfirmed && conf.confirmed) {
+            const c = conf.confirmed;
+            if (c.attachmentId) unlocked.add(c.attachmentId);
+            if (c.batchId) unlocked.add(c.batchId);
+            if (c.thumbnailUrl) unlocked.add(c.thumbnailUrl);
+            if (c.mediaUrls) c.mediaUrls.forEach((u) => unlocked.add(u));
           }
         }
       }
@@ -254,7 +269,20 @@ export function useMessages(conversationId: string | null) {
         .limit(PAGE_SIZE);
 
       if (!error && data) {
-        const sorted = [...data].reverse() as MessageWithSender[];
+        for (const m of data) {
+          const conf = parseUnlockConfirmedMessage(m.content);
+          if (conf.isUnlockConfirmed && conf.confirmed) {
+            const c = conf.confirmed;
+            if (c.attachmentId) markAttachmentUnlocked(c.attachmentId);
+            if (c.batchId) markAttachmentUnlocked(c.batchId);
+            if (c.thumbnailUrl) markAttachmentUnlocked(c.thumbnailUrl);
+            if (c.mediaUrls) c.mediaUrls.forEach((u) => markAttachmentUnlocked(u));
+          }
+        }
+
+        const sorted = [...data]
+          .reverse()
+          .filter((m) => !parseUnlockConfirmedMessage(m.content).isUnlockConfirmed) as MessageWithSender[];
         setMessages(sorted);
         saveCachedMessages(sorted).catch(() => {});
         setHasMore(data.length === PAGE_SIZE);
@@ -284,10 +312,22 @@ export function useMessages(conversationId: string | null) {
       .limit(PAGE_SIZE);
 
     if (!error && data && data.length > 0) {
-      const sorted = [...data].reverse() as MessageWithSender[];
+      for (const m of data) {
+        const conf = parseUnlockConfirmedMessage(m.content);
+        if (conf.isUnlockConfirmed && conf.confirmed) {
+          const c = conf.confirmed;
+          if (c.attachmentId) markAttachmentUnlocked(c.attachmentId);
+          if (c.batchId) markAttachmentUnlocked(c.batchId);
+          if (c.thumbnailUrl) markAttachmentUnlocked(c.thumbnailUrl);
+          if (c.mediaUrls) c.mediaUrls.forEach((u) => markAttachmentUnlocked(u));
+        }
+      }
+      const sorted = [...data]
+        .reverse()
+        .filter((m) => !parseUnlockConfirmedMessage(m.content).isUnlockConfirmed) as MessageWithSender[];
       setMessages(prev => [...sorted, ...prev]);
       setHasMore(data.length === PAGE_SIZE);
-      oldestCursorRef.current = sorted[0].created_at;
+      oldestCursorRef.current = sorted[0]?.created_at ?? null;
     } else {
       setHasMore(false);
     }
@@ -680,6 +720,29 @@ export function useMessages(conversationId: string | null) {
         async (payload) => {
           const incoming = payload.new as Message;
 
+          // Silent unlock confirmation messages trigger instant unblur across all devices
+          if (incoming.content) {
+            const conf = parseUnlockConfirmedMessage(incoming.content);
+            if (conf.isUnlockConfirmed && conf.confirmed) {
+              const c = conf.confirmed;
+              if (c.attachmentId) markAttachmentUnlocked(c.attachmentId);
+              if (c.batchId) markAttachmentUnlocked(c.batchId);
+              if (c.thumbnailUrl) markAttachmentUnlocked(c.thumbnailUrl);
+              if (c.mediaUrls) c.mediaUrls.forEach((u) => markAttachmentUnlocked(u));
+              window.dispatchEvent(
+                new CustomEvent('velour:unlock_verified', {
+                  detail: {
+                    attachmentId: c.attachmentId,
+                    batchId: c.batchId,
+                    mediaUrls: c.mediaUrls,
+                    mediaUrl: c.thumbnailUrl,
+                  },
+                })
+              );
+              return;
+            }
+          }
+
           // Own messages are handled optimistically in sendMessage — skip.
           // (The confirmed swap already replaced the temp with the real row.)
           if (incoming.sender_id === user.id) return;
@@ -699,9 +762,12 @@ export function useMessages(conversationId: string | null) {
                 if (parsed.request.status === 'verified') {
                   if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
                   if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+                  if (parsed.request.batchId) markAttachmentUnlocked(parsed.request.batchId);
+                  if (parsed.request.mediaUrls) parsed.request.mediaUrls.forEach((u) => markAttachmentUnlocked(u));
                 } else if (parsed.request.status === 'pending') {
                   if (parsed.request.attachmentId) markAttachmentPending(parsed.request.attachmentId);
                   if (parsed.request.thumbnailUrl) markAttachmentPending(parsed.request.thumbnailUrl);
+                  if (parsed.request.batchId) markAttachmentPending(parsed.request.batchId);
                 }
               }
             }
@@ -732,6 +798,8 @@ export function useMessages(conversationId: string | null) {
             if (parsed.isUnlockRequest && parsed.request?.status === 'verified') {
               if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
               if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+              if (parsed.request.batchId) markAttachmentUnlocked(parsed.request.batchId);
+              if (parsed.request.mediaUrls) parsed.request.mediaUrls.forEach((u) => markAttachmentUnlocked(u));
             }
           }
           setMessages(prev =>

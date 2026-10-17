@@ -199,6 +199,15 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     };
   }
 
+  // 5. Silent Unlock Confirmed events
+  if (preview.includes('<!--unlock-confirmed:')) {
+    return {
+      type: 'text',
+      badge: '✅',
+      text: 'Exclusive Content Unlocked',
+    };
+  }
+
   // 5. Story replies
   const isStory =
     preview.startsWith('🔘 ') ||
