@@ -15,6 +15,28 @@ export interface UnlockRequestPayload {
   status: 'pending' | 'verified' | 'rejected';
   submittedAt: string;
   approvedAt?: string | null;
+  // batch fields (added in rewrite)
+  batchId?: string | null;
+  mediaUrls?: string[];
+}
+
+/**
+ * Payload inserted by the creator when they approve an unlock request.
+ * Stored as a message with message_type: 'unlock_confirmed'.
+ * Both sides' MessageBubble returns null for this type — it is invisible.
+ * The fan's useMessages Realtime handler detects it and marks media as unlocked.
+ */
+export interface UnlockConfirmedPayload {
+  version: 1;
+  type: 'unlock_confirmed';
+  fanId: string;
+  batchId?: string | null;
+  attachmentId?: string | null;
+  mediaUrls: string[];
+  thumbnailUrl?: string | null;
+  title?: string;
+  amountUsd: number;
+  confirmedAt: string;
 }
 
 /**
@@ -42,6 +64,14 @@ export function parseUnlockRequestMessage(content: string | null | undefined): {
   if (!content) {
     return { isUnlockRequest: false, request: null, cleanText: '' };
   }
+
+  // 0. Direct JSON match
+  try {
+    const directObj = JSON.parse(content);
+    if (directObj?.type === 'unlock_request') {
+      return { isUnlockRequest: true, request: directObj as UnlockRequestPayload, cleanText: '' };
+    }
+  } catch {}
 
   // 1. Complete comment match
   const match = content.match(/<!--unlock-request:(.*?)-->/);
@@ -119,4 +149,30 @@ export function updateUnlockRequestContentStatus(
   const newPrefix = parsed.cleanText.replace(/🎟️ Unlock Request:/, `${statusLabel}:`);
 
   return `${newPrefix}\n<!--unlock-request:${JSON.stringify(updatedReq)}-->`;
+}
+
+/**
+ * Encodes an unlock-confirmed payload as a JSON string.
+ * This is stored as the `content` of a message with message_type: 'unlock_confirmed'.
+ */
+export function encodeUnlockConfirmedMessage(payload: UnlockConfirmedPayload): string {
+  return JSON.stringify(payload);
+}
+
+/**
+ * Parses an unlock-confirmed payload from message content.
+ * Reliable: pure JSON.parse, no regex tricks.
+ */
+export function parseUnlockConfirmedMessage(content: string | null | undefined): {
+  isUnlockConfirmed: boolean;
+  payload: UnlockConfirmedPayload | null;
+} {
+  if (!content) return { isUnlockConfirmed: false, payload: null };
+  try {
+    const obj = JSON.parse(content);
+    if (obj?.type === 'unlock_confirmed') {
+      return { isUnlockConfirmed: true, payload: obj as UnlockConfirmedPayload };
+    }
+  } catch {}
+  return { isUnlockConfirmed: false, payload: null };
 }

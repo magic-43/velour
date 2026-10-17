@@ -30,6 +30,7 @@ interface UnlockPaymentModalProps {
   batchCount?: number;
   thumbnailUrl?: string | null;
   attachmentId?: string;
+  mediaUrls?: string[];
   creatorId?: string;
   conversationId?: string;
   onSuccess?: () => void;
@@ -66,6 +67,7 @@ export default function UnlockPaymentModal({
   batchCount = 1,
   thumbnailUrl,
   attachmentId,
+  mediaUrls,
   creatorId,
   conversationId,
   onSuccess,
@@ -197,6 +199,8 @@ export default function UnlockPaymentModal({
         version: 1,
         type: 'unlock_request',
         attachmentId: safeAttachmentId || attachmentId || null,
+        batchId: attachmentId || null,
+        mediaUrls: mediaUrls || (thumbnailUrl ? [thumbnailUrl] : []),
         creatorId: creatorId || null,
         fanId: user.id,
         amountUsd,
@@ -219,7 +223,7 @@ export default function UnlockPaymentModal({
             sender_id: user.id,
             sender_type: 'fan',
             content: unlockMsgContent,
-            message_type: 'text',
+            message_type: 'unlock_request',
           });
         } catch (chatMsgErr) {
           console.warn('Could not post in-chat unlock receipt message:', chatMsgErr);
@@ -321,6 +325,8 @@ export default function UnlockPaymentModal({
         new CustomEvent('velour:unlock_pending', {
           detail: {
             attachmentId: safeAttachmentId || attachmentId,
+            batchId: attachmentId,
+            mediaUrls: mediaUrls || (thumbnailUrl ? [thumbnailUrl] : []),
             mediaUrl: thumbnailUrl,
           },
         })

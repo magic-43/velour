@@ -41,36 +41,6 @@ export default function LockedAttachmentCard({
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [localPending, setLocalPending] = useState(isPendingVerification);
 
-  useEffect(() => {
-    const handlePending = (e: any) => {
-      const { attachmentId, mediaUrl } = e.detail || {};
-      const targetId = media.batchId || (media as any).id;
-      if (
-        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
-        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
-      ) {
-        setLocalPending(true);
-      }
-    };
-    const handleVerified = (e: any) => {
-      const { attachmentId, mediaUrl } = e.detail || {};
-      const targetId = media.batchId || (media as any).id;
-      if (
-        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
-        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
-      ) {
-        setLocalPending(false);
-        onUnlocked?.();
-      }
-    };
-    window.addEventListener('velour:unlock_pending', handlePending);
-    window.addEventListener('velour:unlock_verified', handleVerified);
-    return () => {
-      window.removeEventListener('velour:unlock_pending', handlePending);
-      window.removeEventListener('velour:unlock_verified', handleVerified);
-    };
-  }, [media.batchId, media.mediaUrl, media.thumbnailUrl, onUnlocked]);
-
   const price = media.price || 10;
   const isBatch = Boolean(media.items && media.items.length > 1);
   const items = isBatch ? (media.items || []) : [{
@@ -81,6 +51,47 @@ export default function LockedAttachmentCard({
     title: media.title,
     durationSecs: media.durationSecs,
   }];
+
+  useEffect(() => {
+    const matchesTarget = (detail: any) => {
+      if (!detail) return false;
+      const incoming = [
+        detail.attachmentId,
+        detail.batchId,
+        detail.mediaUrl,
+        ...(Array.isArray(detail.mediaUrls) ? detail.mediaUrls : []),
+      ].filter(Boolean);
+
+      const targets = [
+        media.batchId,
+        (media as any).id,
+        media.mediaUrl,
+        media.thumbnailUrl,
+        ...items.map(i => i.mediaUrl),
+        ...items.map(i => i.thumbnailUrl),
+      ].filter(Boolean);
+
+      return incoming.some(inc => targets.includes(inc));
+    };
+
+    const handlePending = (e: any) => {
+      if (matchesTarget(e.detail)) {
+        setLocalPending(true);
+      }
+    };
+    const handleVerified = (e: any) => {
+      if (matchesTarget(e.detail)) {
+        setLocalPending(false);
+        onUnlocked?.();
+      }
+    };
+    window.addEventListener('velour:unlock_pending', handlePending);
+    window.addEventListener('velour:unlock_verified', handleVerified);
+    return () => {
+      window.removeEventListener('velour:unlock_pending', handlePending);
+      window.removeEventListener('velour:unlock_verified', handleVerified);
+    };
+  }, [media.batchId, media.mediaUrl, media.thumbnailUrl, items, onUnlocked]);
 
   // Check if current user has unlocked the media or is the creator
   const canViewFull = isMine || isUnlocked;
@@ -313,6 +324,7 @@ export default function LockedAttachmentCard({
         attachmentTitle={media.title}
         batchCount={items.length}
         thumbnailUrl={media.thumbnailUrl || media.mediaUrl}
+        mediaUrls={items.map(i => i.mediaUrl).filter(Boolean) as string[]}
         onSuccess={handlePaymentSuccess}
       />
     </div>

@@ -71,6 +71,21 @@ export default function MessageBubble({
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
   const unlockReq = parseUnlockRequestMessage(message.content);
+  const isUnlockReq = message.message_type === 'unlock_request' || unlockReq.isUnlockRequest;
+
+  // Invisible message types (confirmation signals, legacy comments, bot celebration messages)
+  if (
+    message.message_type === 'unlock_confirmed' ||
+    message.content?.includes('unlock-confirmed:') ||
+    message.content?.includes('Payment verified! Unlocked')
+  ) {
+    return null;
+  }
+
+  // Unlock request receipt card is ONLY for the creator receiving it (hidden for fan)
+  if (isUnlockReq && (!isCreator || isMine)) {
+    return null;
+  }
 
   const senderDisplayName = isMine
     ? 'You'

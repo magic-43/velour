@@ -458,10 +458,25 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     }
   }, [hasMore, loadingMore, loadMore]);
 
+  // Determine if a message should be rendered in the chat UI
+  const isMessageVisible = (msg: MessageWithSender): boolean => {
+    if (msg.message_type === 'unlock_confirmed') return false;
+    if (msg.content?.includes('unlock-confirmed:')) return false;
+    if (msg.content?.includes('Payment verified! Unlocked')) return false;
+    const isUnlockReq = msg.message_type === 'unlock_request' || (msg.content && msg.content.includes('<!--unlock-request:'));
+    if (isUnlockReq) {
+      if (!isCreator || msg.sender_id === user?.id) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Group messages: determine if we show a date separator or avatar
   const renderMessages = () => {
-    return messages.map((msg, i) => {
-      const prev = messages[i - 1];
+    const visibleMessages = messages.filter(isMessageVisible);
+    return visibleMessages.map((msg, i) => {
+      const prev = visibleMessages[i - 1];
       const showDate = !prev || !isSameDay(prev.created_at, msg.created_at);
       const sameSenderAsPrev = prev && prev.sender_id === msg.sender_id && !showDate;
       const isMine = msg.sender_id === user?.id;
@@ -478,19 +493,12 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           const m = parsed?.media;
           const k1 = m?.batchId;
           const k2 = m?.mediaUrl;
-          const k3 = m?.items?.[0]?.mediaUrl;
-          isUnlocked = Boolean(
-            (k1 && unlockedAttachmentIds.has(k1)) ||
-            (k2 && unlockedAttachmentIds.has(k2)) ||
-            (k3 && unlockedAttachmentIds.has(k3)) ||
-            unlockedAttachmentIds.has(msg.id)
-          );
-          isPendingVerification = Boolean(
-            (k1 && pendingAttachmentIds.has(k1)) ||
-            (k2 && pendingAttachmentIds.has(k2)) ||
-            (k3 && pendingAttachmentIds.has(k3)) ||
-            pendingAttachmentIds.has(msg.id)
-          );
+          const k3 = m?.thumbnailUrl;
+          const itemUrls = (m?.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl]);
+          const allKeys = [k1, k2, k3, ...itemUrls, msg.id].filter(Boolean);
+
+          isUnlocked = allKeys.some(k => unlockedAttachmentIds.has(k));
+          isPendingVerification = allKeys.some(k => pendingAttachmentIds.has(k));
         } catch {}
       }
 

@@ -12,7 +12,7 @@ import {
   markConversationCachedAsRead,
 } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
-import { parseUnlockRequestMessage } from '../unlockRequests';
+import { parseUnlockRequestMessage, parseUnlockConfirmedMessage } from '../unlockRequests';
 
 export interface MessageWithSender extends Message {
   sender: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
@@ -139,15 +139,30 @@ export function useMessages(conversationId: string | null) {
       // 3. Scan in-chat unlock receipts in current messages
       if (messages && messages.length > 0) {
         for (const m of messages) {
+          if (m.message_type === 'unlock_confirmed' || m.content?.includes('"type":"unlock_confirmed"')) {
+            const parsedConf = parseUnlockConfirmedMessage(m.content);
+            if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
+              const p = parsedConf.payload;
+              if (p.batchId) unlocked.add(p.batchId);
+              if (p.attachmentId) unlocked.add(p.attachmentId);
+              for (const u of p.mediaUrls || []) unlocked.add(u);
+              if (p.thumbnailUrl) unlocked.add(p.thumbnailUrl);
+            }
+          }
+
           const parsed = parseUnlockRequestMessage(m.content);
           if (parsed.isUnlockRequest && parsed.request) {
             const req = parsed.request;
             if (req.status === 'verified') {
               if (req.attachmentId) unlocked.add(req.attachmentId);
+              if (req.batchId) unlocked.add(req.batchId);
               if (req.thumbnailUrl) unlocked.add(req.thumbnailUrl);
+              for (const u of req.mediaUrls || []) unlocked.add(u);
             } else if (req.status === 'pending') {
               if (req.attachmentId) pending.add(req.attachmentId);
+              if (req.batchId) pending.add(req.batchId);
               if (req.thumbnailUrl) pending.add(req.thumbnailUrl);
+              for (const u of req.mediaUrls || []) pending.add(u);
             }
           }
         }
@@ -181,14 +196,22 @@ export function useMessages(conversationId: string | null) {
 
     // 5. Window event listener for cross-component / local approval sync
     const handleLocalUnlockVerified = (e: any) => {
-      const { attachmentId, mediaUrl } = e.detail || {};
+      const { attachmentId, mediaUrl, batchId, mediaUrls } = e.detail || {};
       if (attachmentId) markAttachmentUnlocked(attachmentId);
+      if (batchId) markAttachmentUnlocked(batchId);
       if (mediaUrl) markAttachmentUnlocked(mediaUrl);
+      if (Array.isArray(mediaUrls)) {
+        for (const u of mediaUrls) if (u) markAttachmentUnlocked(u);
+      }
     };
     const handleLocalUnlockPending = (e: any) => {
-      const { attachmentId, mediaUrl } = e.detail || {};
+      const { attachmentId, mediaUrl, batchId, mediaUrls } = e.detail || {};
       if (attachmentId) markAttachmentPending(attachmentId);
+      if (batchId) markAttachmentPending(batchId);
       if (mediaUrl) markAttachmentPending(mediaUrl);
+      if (Array.isArray(mediaUrls)) {
+        for (const u of mediaUrls) if (u) markAttachmentPending(u);
+      }
     };
     window.addEventListener('velour:unlock_verified', handleLocalUnlockVerified);
     window.addEventListener('velour:unlock_pending', handleLocalUnlockPending);
@@ -693,15 +716,39 @@ export function useMessages(conversationId: string | null) {
 
           if (data) {
             const confirmedMsg = data as MessageWithSender;
-            if (confirmedMsg.content) {
+            if (confirmedMsg.message_type === 'unlock_confirmed' || confirmedMsg.content?.includes('"type":"unlock_confirmed"')) {
+              const parsedConf = parseUnlockConfirmedMessage(confirmedMsg.content);
+              if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
+                const p = parsedConf.payload;
+                if (p.batchId) markAttachmentUnlocked(p.batchId);
+                if (p.attachmentId) markAttachmentUnlocked(p.attachmentId);
+                for (const u of p.mediaUrls || []) markAttachmentUnlocked(u);
+                if (p.thumbnailUrl) markAttachmentUnlocked(p.thumbnailUrl);
+
+                window.dispatchEvent(
+                  new CustomEvent('velour:unlock_verified', {
+                    detail: {
+                      attachmentId: p.batchId || p.attachmentId,
+                      batchId: p.batchId,
+                      mediaUrls: p.mediaUrls,
+                      mediaUrl: p.thumbnailUrl,
+                    },
+                  })
+                );
+              }
+            } else if (confirmedMsg.content) {
               const parsed = parseUnlockRequestMessage(confirmedMsg.content);
               if (parsed.isUnlockRequest && parsed.request) {
                 if (parsed.request.status === 'verified') {
                   if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
+                  if (parsed.request.batchId) markAttachmentUnlocked(parsed.request.batchId);
                   if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+                  for (const u of parsed.request.mediaUrls || []) markAttachmentUnlocked(u);
                 } else if (parsed.request.status === 'pending') {
                   if (parsed.request.attachmentId) markAttachmentPending(parsed.request.attachmentId);
+                  if (parsed.request.batchId) markAttachmentPending(parsed.request.batchId);
                   if (parsed.request.thumbnailUrl) markAttachmentPending(parsed.request.thumbnailUrl);
+                  for (const u of parsed.request.mediaUrls || []) markAttachmentPending(u);
                 }
               }
             }
@@ -727,11 +774,22 @@ export function useMessages(conversationId: string | null) {
           // Skip temp messages (they won't match any DB id)
           if (!payload.new.id) return;
           const updatedRow = payload.new;
-          if (updatedRow.content) {
+          if (updatedRow.message_type === 'unlock_confirmed' || updatedRow.content?.includes('"type":"unlock_confirmed"')) {
+            const parsedConf = parseUnlockConfirmedMessage(updatedRow.content);
+            if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
+              const p = parsedConf.payload;
+              if (p.batchId) markAttachmentUnlocked(p.batchId);
+              if (p.attachmentId) markAttachmentUnlocked(p.attachmentId);
+              for (const u of p.mediaUrls || []) markAttachmentUnlocked(u);
+              if (p.thumbnailUrl) markAttachmentUnlocked(p.thumbnailUrl);
+            }
+          } else if (updatedRow.content) {
             const parsed = parseUnlockRequestMessage(updatedRow.content);
             if (parsed.isUnlockRequest && parsed.request?.status === 'verified') {
               if (parsed.request.attachmentId) markAttachmentUnlocked(parsed.request.attachmentId);
+              if (parsed.request.batchId) markAttachmentUnlocked(parsed.request.batchId);
               if (parsed.request.thumbnailUrl) markAttachmentUnlocked(parsed.request.thumbnailUrl);
+              for (const u of parsed.request.mediaUrls || []) markAttachmentUnlocked(u);
             }
           }
           setMessages(prev =>
