@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import type { ConversationWithParticipants } from '../../types';
 import { getCachedConversations, saveCachedConversations, markConversationCachedAsRead } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
+import { parseConversationPreview } from '../messageUtils';
 
 export function useConversations() {
   const { user, profile, isCreator } = useAuth();
@@ -84,7 +85,28 @@ export function useConversations() {
 
       const { data, error } = await query;
       if (!error && data) {
-        const convs = data as ConversationWithParticipants[];
+        const convs = (data as ConversationWithParticipants[]).map((c) => {
+          if (
+            c.last_message_preview &&
+            (c.last_message_preview.includes('unlock_confirmed') ||
+              c.last_message_preview.includes('unlock-confirmed') ||
+              c.last_message_preview.includes('{"version":1,"type":"unlock_confirmed"'))
+          ) {
+            const parsed = parseConversationPreview(c.last_message_preview);
+            const cleanPreview = `🔓 ${parsed.text}`;
+            // Proactively heal database column in background
+            supabase
+              .from('conversations')
+              .update({ last_message_preview: cleanPreview })
+              .eq('id', c.id)
+              .then(() => {});
+            return {
+              ...c,
+              last_message_preview: cleanPreview,
+            };
+          }
+          return c;
+        });
         setConversations(convs);
         saveCachedConversations(convs).catch(() => {});
       } else if (error) {

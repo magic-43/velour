@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, Check, CheckCheck, Lock, Camera, Video, Bell, BellOff } from 'lucide-react';
+import { Search, X, Check, CheckCheck, Lock, Unlock, Camera, Video, Bell, BellOff } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useConversations } from '../../lib/hooks/useConversations';
 import { useIsOtherTyping } from '../../lib/hooks/useIsOtherTyping';
@@ -380,6 +380,20 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
                     • {preview.detail}
                   </span>
                 )}
+              </span>
+            ) : preview.type === 'unlocked' ? (
+              <span className="flex items-center gap-1.5 truncate">
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.66rem] font-bold shrink-0 ${
+                  hasUnread
+                    ? 'bg-gold/20 text-gold border border-gold/40'
+                    : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                }`}>
+                  <Unlock size={10} className="shrink-0" strokeWidth={2.4} />
+                  <span>{preview.badge || 'UNLOCKED'}</span>
+                </span>
+                <span className={`truncate ${hasUnread ? 'text-paper font-medium' : 'text-muted font-normal'}`}>
+                  {preview.text}
+                </span>
               </span>
             ) : preview.type === 'media' ? (
               <span className="flex items-center gap-1.5 truncate">

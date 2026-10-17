@@ -1,6 +1,6 @@
 import { parseStoryReply } from './storyReplies';
 import { parseVaultMediaMessage } from './creatorVault';
-import { parseUnlockRequestMessage } from './unlockRequests';
+import { parseUnlockRequestMessage, parseUnlockConfirmedMessage } from './unlockRequests';
 
 export interface CleanMessagePreview {
   text: string;
@@ -76,6 +76,22 @@ export function getCleanMessagePreview(
     };
   }
 
+  // 3b. Check if it's an unlock confirmation
+  if (
+    content.includes('unlock_confirmed') ||
+    content.includes('unlock-confirmed') ||
+    content.includes('<!--velour:unlock_confirmed-->')
+  ) {
+    const conf = parseUnlockConfirmedMessage(content);
+    const amount = conf.payload?.amountUsd;
+    const amountStr = amount ? ` ($${amount})` : '';
+    return {
+      text: conf.payload?.title ? `🔓 Unlocked ${conf.payload.title}${amountStr}` : `🔓 Content unlocked${amountStr}`,
+      thumbnailUrl: conf.payload?.thumbnailUrl || null,
+      mediaType: 'image',
+    };
+  }
+
   // 4. Normal text: strip any comments (e.g. <!--story-reply... or <!--vault-media... or <!--unlock-request...)
   const clean = stripHiddenComments(content);
   return {
@@ -84,7 +100,7 @@ export function getCleanMessagePreview(
 }
 
 export interface ConversationPreviewResult {
-  type: 'reaction' | 'story' | 'locked' | 'media' | 'voice_note' | 'attachment' | 'text';
+  type: 'reaction' | 'story' | 'locked' | 'unlocked' | 'media' | 'voice_note' | 'attachment' | 'text';
   text: string;
   badge?: string;
   detail?: string;
@@ -180,20 +196,45 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     };
   }
 
-  // 4. Unlock Request receipts
-  if (preview.includes('<!--unlock-request:')) {
+  // 4a. Unlock Confirmation (silent protocol message or preview)
+  if (
+    preview.includes('unlock_confirmed') ||
+    preview.includes('unlock-confirmed') ||
+    preview.includes('<!--velour:unlock_confirmed-->')
+  ) {
+    const conf = parseUnlockConfirmedMessage(preview);
+    const amount = conf.payload?.amountUsd;
+    const title = conf.payload?.title;
+
+    return {
+      type: 'unlocked',
+      badge: amount ? `$${amount}` : 'UNLOCKED',
+      text: title ? `Unlocked ${title}` : 'Exclusive content unlocked',
+      price: amount,
+    };
+  }
+
+  // 4b. Unlock Request receipts
+  if (preview.includes('<!--unlock-request:') || preview.includes('unlock_request')) {
     const unlockReq = parseUnlockRequestMessage(preview);
     const req = unlockReq.request;
     const amount = req?.amountUsd || 10;
     const isVerified = req?.status === 'verified';
     const isRejected = req?.status === 'rejected';
 
+    if (isVerified) {
+      return {
+        type: 'unlocked',
+        badge: `$${amount}`,
+        text: req?.title ? `Unlocked ${req.title}` : 'Exclusive content unlocked',
+        price: amount,
+      };
+    }
+
     return {
       type: 'text',
-      badge: isVerified ? '✅' : isRejected ? '❌' : '🎟️',
-      text: isVerified
-        ? `Unlocked Exclusive Content ($${amount})`
-        : isRejected
+      badge: isRejected ? '❌' : '🎟️',
+      text: isRejected
         ? `Declined Unlock Request ($${amount})`
         : `Unlock Request • $${amount}`,
     };
@@ -214,11 +255,11 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     };
   }
 
-  // 5. Standard Voice Note or Attachment indicators
+  // 6. Standard Voice Note or Attachment indicators
   if (preview === '🎤 Voice note') return { type: 'voice_note', text: 'Voice note' };
   if (preview === '📎 Attachment') return { type: 'attachment', text: 'Attachment' };
 
-  // 6. Regular clean text
+  // 7. Regular clean text
   const clean = stripHiddenComments(preview);
   return {
     type: 'text',
@@ -231,6 +272,19 @@ export function parseConversationPreview(preview: string | null | undefined): Co
  */
 export function stripHiddenComments(text: string): string {
   if (!text) return '';
+  const trimmed = text.trim();
+  if (
+    trimmed.startsWith('{"version":1,"type":"unlock_confirmed"') ||
+    (trimmed.startsWith('{') && trimmed.includes('"type":"unlock_confirmed"'))
+  ) {
+    return 'Content unlocked';
+  }
+  if (
+    trimmed.startsWith('{"version":1,"type":"unlock_request"') ||
+    (trimmed.startsWith('{') && trimmed.includes('"type":"unlock_request"'))
+  ) {
+    return 'Unlock request';
+  }
   return text
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<!--[\s\S]*$/, '')

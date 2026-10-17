@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import { showNewMessageNotification } from '../notificationService';
-import { getCleanMessagePreview } from '../messageUtils';
+import { getCleanMessagePreview, parseConversationPreview } from '../messageUtils';
 import { getCachedConversations } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
 import type { InAppToastData } from '../../components/chat/InAppMessageToast';
@@ -239,7 +239,7 @@ export function useGlobalMessageNotifications() {
           triggerIncomingAlert({
             conversationId: updated.id,
             senderId: updated.last_message_sender_id,
-            body: updated.last_message_preview || 'Sent you a message',
+            body: parseConversationPreview(updated.last_message_preview).text || 'Sent you a message',
             timestamp: updated.last_message_at || new Date().toISOString(),
           });
         }

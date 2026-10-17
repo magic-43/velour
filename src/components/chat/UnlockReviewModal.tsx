@@ -106,6 +106,18 @@ export default function UnlockReviewModal({
         message_type: 'text',
       });
 
+      // Update conversations.last_message_preview to clean human text
+      try {
+        await supabase
+          .from('conversations')
+          .update({
+            last_message_preview: `🔓 Content unlocked${request.amountUsd ? ` ($${request.amountUsd})` : ''}`,
+          })
+          .eq('id', message.conversation_id);
+      } catch (convErr) {
+        console.warn('Failed to update conversation preview:', convErr);
+      }
+
       // 2. Update transactions_ledger to verified
       try {
         await supabase
@@ -188,6 +200,15 @@ export default function UnlockReviewModal({
           .update({ status: 'rejected' })
           .eq('user_id', message.sender_id)
           .eq('status', 'pending');
+      } catch {}
+
+      try {
+        await supabase
+          .from('conversations')
+          .update({
+            last_message_preview: `❌ Declined Unlock Request${request.amountUsd ? ` ($${request.amountUsd})` : ''}`,
+          })
+          .eq('id', message.conversation_id);
       } catch {}
 
       try {

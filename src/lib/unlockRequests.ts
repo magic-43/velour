@@ -158,7 +158,9 @@ export function updateUnlockRequestContentStatus(
 export const UNLOCK_CONFIRMED_PREFIX = '<!--velour:unlock_confirmed-->';
 
 export function encodeUnlockConfirmedMessage(payload: UnlockConfirmedPayload): string {
-  return `${UNLOCK_CONFIRMED_PREFIX}${JSON.stringify(payload)}`;
+  const amountStr = payload.amountUsd ? ` ($${payload.amountUsd})` : '';
+  const textPrefix = payload.title ? `🔓 Unlocked ${payload.title}${amountStr}` : `🔓 Content unlocked${amountStr}`;
+  return `${textPrefix}\n${UNLOCK_CONFIRMED_PREFIX}${JSON.stringify(payload)}`;
 }
 
 export function parseUnlockConfirmedMessage(content: string | null | undefined): {
