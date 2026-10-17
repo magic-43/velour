@@ -43,46 +43,22 @@ export default function LockedAttachmentCard({
 
   useEffect(() => {
     const handlePending = (e: any) => {
-      const { attachmentId, mediaUrl, batchId, mediaUrls } = e.detail || {};
+      const { attachmentId, mediaUrl } = e.detail || {};
       const targetId = media.batchId || (media as any).id;
-      const matchAttachment = attachmentId && (
-        attachmentId === targetId ||
-        attachmentId === media.mediaUrl ||
-        attachmentId === media.batchId
-      );
-      const matchBatch = batchId && batchId === media.batchId;
-      const matchUrl = mediaUrl && (
-        mediaUrl === media.mediaUrl ||
-        mediaUrl === media.thumbnailUrl
-      );
-      const matchMediaUrls = Array.isArray(mediaUrls) && (
-        mediaUrls.includes(media.mediaUrl) ||
-        items.some((it) => mediaUrls.includes(it.mediaUrl))
-      );
-
-      if (matchAttachment || matchBatch || matchUrl || matchMediaUrls) {
+      if (
+        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
+        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
+      ) {
         setLocalPending(true);
       }
     };
     const handleVerified = (e: any) => {
-      const { attachmentId, mediaUrl, batchId, mediaUrls } = e.detail || {};
+      const { attachmentId, mediaUrl } = e.detail || {};
       const targetId = media.batchId || (media as any).id;
-      const matchAttachment = attachmentId && (
-        attachmentId === targetId ||
-        attachmentId === media.mediaUrl ||
-        attachmentId === media.batchId
-      );
-      const matchBatch = batchId && batchId === media.batchId;
-      const matchUrl = mediaUrl && (
-        mediaUrl === media.mediaUrl ||
-        mediaUrl === media.thumbnailUrl
-      );
-      const matchMediaUrls = Array.isArray(mediaUrls) && (
-        mediaUrls.includes(media.mediaUrl) ||
-        items.some((it) => mediaUrls.includes(it.mediaUrl))
-      );
-
-      if (matchAttachment || matchBatch || matchUrl || matchMediaUrls) {
+      if (
+        (attachmentId && (attachmentId === targetId || attachmentId === media.mediaUrl)) ||
+        (mediaUrl && (mediaUrl === media.mediaUrl || mediaUrl === media.thumbnailUrl))
+      ) {
         setLocalPending(false);
         onUnlocked?.();
       }
@@ -331,8 +307,6 @@ export default function LockedAttachmentCard({
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         attachmentId={media.batchId || (items[0] && items[0].mediaUrl) || media.mediaUrl}
-        batchId={media.batchId}
-        mediaUrls={items.map((it) => it.mediaUrl).filter(Boolean) as string[]}
         creatorId={creatorId}
         conversationId={conversationId}
         amountUsd={price}

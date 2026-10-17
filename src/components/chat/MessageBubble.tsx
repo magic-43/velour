@@ -13,7 +13,7 @@ import MediaLightbox from './MediaLightbox';
 import WhatsAppMediaGrid from './WhatsAppMediaGrid';
 import { getAppleEmojiUrlByChar } from '../../data/iosEmojis';
 import { triggerHaptic } from '../../lib/haptics';
-import { parseUnlockRequestMessage, parseUnlockConfirmedMessage } from '../../lib/unlockRequests';
+import { parseUnlockRequestMessage } from '../../lib/unlockRequests';
 
 // ── Swipe-to-reply constants ───────────────────────────────────────────────────
 const SWIPE_THRESHOLD = 65;   // px — triggers reply action
@@ -71,22 +71,6 @@ export default function MessageBubble({
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
   const unlockReq = parseUnlockRequestMessage(message.content);
-  const unlockConfirmed = parseUnlockConfirmedMessage(message.content);
-
-  // Silent confirmation messages are internal real-time events
-  if (unlockConfirmed.isUnlockConfirmed) {
-    return null;
-  }
-
-  // Hide old automated celebration bot messages
-  if (message.content?.startsWith('🎉 Payment verified! Unlocked')) {
-    return null;
-  }
-
-  // The fan must NOT see the unlock payment message in chat; only the creator sees it.
-  if (unlockReq.isUnlockRequest && (!isCreator || isMine)) {
-    return null;
-  }
 
   const senderDisplayName = isMine
     ? 'You'

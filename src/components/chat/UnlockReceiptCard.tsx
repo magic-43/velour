@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   CheckCircle2,
   XCircle,
+  Clock,
+  CreditCard,
+  ChevronRight,
   ShieldCheck,
 } from 'lucide-react';
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import { UnlockRequestPayload } from '../../lib/unlockRequests';
+import { useAuth } from '../../lib/AuthContext';
 import UnlockReviewModal from './UnlockReviewModal';
 
 interface UnlockReceiptCardProps {
@@ -26,88 +30,121 @@ export default function UnlockReceiptCard({
   currentUserId,
   onApproveSuccess,
 }: UnlockReceiptCardProps) {
+  const { user } = useAuth();
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [localStatus, setLocalStatus] = useState<'pending' | 'verified' | 'rejected'>(
     request.status || 'pending'
   );
 
-  // The fan MUST NOT see this payment request message. Only the creator sees it.
-  if (!isCreator && isMine) {
-    return null;
-  }
+  // Sync if message content changes remotely
+  useEffect(() => {
+    if (request.status) {
+      setLocalStatus(request.status);
+    }
+  }, [request.status]);
 
   const isPending = localStatus === 'pending';
   const isVerified = localStatus === 'verified';
   const isRejected = localStatus === 'rejected';
 
+  // Approver is true if current user is the creator or the recipient of the unlock request
+  const isApprover = Boolean(
+    user?.id &&
+      (!isMine || isCreator) &&
+      (request.creatorId === user?.id || isCreator || !isMine)
+  );
+
   const methodDisplay =
     request.method === 'crypto'
       ? 'USDT Crypto'
-      : request.giftCardType === 'physical_card'
-      ? `${request.brand || 'Card'} (Physical)`
-      : `${request.brand || 'Card'} (E-Card)`;
+      : request.brand
+      ? `${request.brand} Card`
+      : 'Gift Card';
 
   return (
     <>
       <div
-        onClick={() => isPending && setShowReviewModal(true)}
-        className="w-full max-w-[310px] sm:max-w-[330px] p-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 active:scale-[0.98] transition-all cursor-pointer select-none text-white my-1 group"
+        onClick={() => setShowReviewModal(true)}
+        className="w-full min-w-[270px] max-w-[320px] sm:max-w-[340px] p-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 active:border-gold/40 shadow-md cursor-pointer transition-all select-none group text-white my-0.5"
       >
+        {/* Top Row: Thumbnail + Title + Price */}
         <div className="flex items-center gap-3">
-          {/* Thumbnail with lock */}
-          <div className="w-12 h-12 rounded-xl overflow-hidden bg-black/40 border border-white/10 shrink-0 relative">
-            {request.thumbnailUrl ? (
+          {/* Media Thumbnail or Icon */}
+          {request.thumbnailUrl ? (
+            <div className="w-11 h-11 rounded-xl overflow-hidden bg-black/40 border border-white/10 shrink-0 relative">
               <img
                 src={request.thumbnailUrl}
                 alt=""
-                className="w-full h-full object-cover filter blur-[2px] scale-105"
+                className={`w-full h-full object-cover filter ${!isVerified ? 'blur-[1.5px]' : ''} scale-105`}
               />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gold bg-gold/10">
-                <Lock size={18} />
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                {isVerified ? (
+                  <CheckCircle2 size={16} className="text-emerald-400" />
+                ) : (
+                  <Lock size={14} className="text-gold" />
+                )}
               </div>
-            )}
-            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+            </div>
+          ) : (
+            <div className="w-11 h-11 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center text-gold shrink-0">
               {isVerified ? (
-                <CheckCircle2 size={16} className="text-emerald-400" />
-              ) : isRejected ? (
-                <XCircle size={16} className="text-red-400" />
+                <CheckCircle2 size={18} className="text-emerald-400" />
               ) : (
-                <Lock size={15} className="text-gold" />
+                <CreditCard size={18} />
               )}
             </div>
-          </div>
+          )}
 
           {/* Details */}
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold text-xs text-white truncate group-hover:text-gold transition-colors">
               {request.title || 'Exclusive Media'}
             </h4>
-            <p className="text-[11px] text-white/50 truncate mt-0.5">
-              {methodDisplay}
+            <p className="text-[11px] text-white/50 mt-0.5 flex items-center gap-1.5 truncate">
+              <span>{methodDisplay}</span>
             </p>
+          </div>
+
+          {/* Price Tag */}
+          <div className="text-right shrink-0">
+            <span className="text-[10px] text-white/40 block leading-tight">Price</span>
+            <span className="text-sm font-bold text-gold font-serif">
+              ${request.amountUsd.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {/* Subtle Divider */}
+        <div className="h-px bg-white/5 my-2.5" />
+
+        {/* Bottom Row: Status / Action on Left, space for Timestamp on Right */}
+        <div className="flex items-center justify-between pr-14">
+          <div className="flex items-center gap-1.5">
             {isPending ? (
-              <span className="inline-flex items-center gap-1 text-[10px] text-gold font-medium mt-1">
-                <ShieldCheck size={11} /> Tap to review & unlock →
-              </span>
+              isApprover ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gold text-ink shadow-sm group-hover:brightness-110 active:scale-95 transition-all">
+                  <ShieldCheck size={12} strokeWidth={2.4} /> Review Proof
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <Clock size={10} className="animate-spin" /> Pending Review
+                </span>
+              )
             ) : isVerified ? (
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium mt-1">
-                <CheckCircle2 size={11} /> Unlocked
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                <CheckCircle2 size={10} /> Unlocked
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-medium mt-1">
-                <XCircle size={11} /> Declined
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-300 border border-red-500/30">
+                <XCircle size={10} /> Declined
               </span>
             )}
           </div>
 
-          {/* Price */}
-          <div className="text-right shrink-0">
-            <span className="text-[10px] text-white/40 block leading-tight">Price</span>
-            <span className="text-base font-bold text-gold font-serif">
-              ${request.amountUsd}
-            </span>
-          </div>
+          {/* Details chevron */}
+          <span className="text-[10px] text-white/40 group-hover:text-white/70 flex items-center gap-0.5 transition-colors">
+            Details <ChevronRight size={11} />
+          </span>
         </div>
       </div>
 
