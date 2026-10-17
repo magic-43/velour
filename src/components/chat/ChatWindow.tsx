@@ -460,10 +460,14 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
 
   // Determine if a message should be rendered in the chat UI
   const isMessageVisible = (msg: MessageWithSender): boolean => {
-    if (msg.message_type === 'unlock_confirmed') return false;
-    if (msg.content?.includes('unlock-confirmed:')) return false;
-    if (msg.content?.includes('Payment verified! Unlocked')) return false;
-    const isUnlockReq = msg.message_type === 'unlock_request' || (msg.content && msg.content.includes('<!--unlock-request:'));
+    if (
+      msg.content?.includes('unlock_confirmed') ||
+      msg.content?.includes('unlock-confirmed') ||
+      msg.content?.includes('Payment verified! Unlocked')
+    ) {
+      return false;
+    }
+    const isUnlockReq = msg.content && (msg.content.includes('<!--unlock-request:') || msg.content.includes('"type":"unlock_request"'));
     if (isUnlockReq) {
       if (!isCreator || msg.sender_id === user?.id) {
         return false;

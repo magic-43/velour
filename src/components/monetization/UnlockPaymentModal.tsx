@@ -218,15 +218,18 @@ export default function UnlockPaymentModal({
 
       if (effectiveConversationId) {
         try {
-          await supabase.from('messages').insert({
+          const { error: insertErr } = await supabase.from('messages').insert({
             conversation_id: effectiveConversationId,
             sender_id: user.id,
             sender_type: 'fan',
             content: unlockMsgContent,
-            message_type: 'unlock_request',
+            message_type: 'text',
           });
+          if (insertErr) {
+            console.error('Failed to post in-chat unlock receipt message:', insertErr);
+          }
         } catch (chatMsgErr) {
-          console.warn('Could not post in-chat unlock receipt message:', chatMsgErr);
+          console.error('Could not post in-chat unlock receipt message:', chatMsgErr);
         }
       }
 

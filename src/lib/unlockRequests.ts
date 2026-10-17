@@ -151,28 +151,29 @@ export function updateUnlockRequestContentStatus(
   return `${newPrefix}\n<!--unlock-request:${JSON.stringify(updatedReq)}-->`;
 }
 
-/**
- * Encodes an unlock-confirmed payload as a JSON string.
- * This is stored as the `content` of a message with message_type: 'unlock_confirmed'.
- */
+export const UNLOCK_CONFIRMED_PREFIX = '<!--velour:unlock_confirmed-->';
+
 export function encodeUnlockConfirmedMessage(payload: UnlockConfirmedPayload): string {
-  return JSON.stringify(payload);
+  return `${UNLOCK_CONFIRMED_PREFIX}${JSON.stringify(payload)}`;
 }
 
-/**
- * Parses an unlock-confirmed payload from message content.
- * Reliable: pure JSON.parse, no regex tricks.
- */
 export function parseUnlockConfirmedMessage(content: string | null | undefined): {
   isUnlockConfirmed: boolean;
   payload: UnlockConfirmedPayload | null;
 } {
   if (!content) return { isUnlockConfirmed: false, payload: null };
-  try {
-    const obj = JSON.parse(content);
-    if (obj?.type === 'unlock_confirmed') {
-      return { isUnlockConfirmed: true, payload: obj as UnlockConfirmedPayload };
-    }
-  } catch {}
+  if (content.includes('unlock_confirmed') || content.includes('unlock-confirmed')) {
+    try {
+      const jsonStart = content.indexOf('{');
+      const jsonEnd = content.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        const jsonStr = content.slice(jsonStart, jsonEnd + 1);
+        const obj = JSON.parse(jsonStr);
+        if (obj?.type === 'unlock_confirmed') {
+          return { isUnlockConfirmed: true, payload: obj as UnlockConfirmedPayload };
+        }
+      }
+    } catch {}
+  }
   return { isUnlockConfirmed: false, payload: null };
 }

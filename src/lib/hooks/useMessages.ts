@@ -139,7 +139,7 @@ export function useMessages(conversationId: string | null) {
       // 3. Scan in-chat unlock receipts in current messages
       if (messages && messages.length > 0) {
         for (const m of messages) {
-          if (m.message_type === 'unlock_confirmed' || m.content?.includes('"type":"unlock_confirmed"')) {
+          if (m.content && (m.content.includes('unlock_confirmed') || m.content.includes('unlock-confirmed'))) {
             const parsedConf = parseUnlockConfirmedMessage(m.content);
             if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
               const p = parsedConf.payload;
@@ -716,7 +716,7 @@ export function useMessages(conversationId: string | null) {
 
           if (data) {
             const confirmedMsg = data as MessageWithSender;
-            if (confirmedMsg.message_type === 'unlock_confirmed' || confirmedMsg.content?.includes('"type":"unlock_confirmed"')) {
+            if (confirmedMsg.content && (confirmedMsg.content.includes('unlock_confirmed') || confirmedMsg.content.includes('unlock-confirmed'))) {
               const parsedConf = parseUnlockConfirmedMessage(confirmedMsg.content);
               if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
                 const p = parsedConf.payload;
@@ -774,7 +774,7 @@ export function useMessages(conversationId: string | null) {
           // Skip temp messages (they won't match any DB id)
           if (!payload.new.id) return;
           const updatedRow = payload.new;
-          if (updatedRow.message_type === 'unlock_confirmed' || updatedRow.content?.includes('"type":"unlock_confirmed"')) {
+          if (updatedRow.content && (updatedRow.content.includes('unlock_confirmed') || updatedRow.content.includes('unlock-confirmed'))) {
             const parsedConf = parseUnlockConfirmedMessage(updatedRow.content);
             if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
               const p = parsedConf.payload;

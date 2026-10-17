@@ -71,12 +71,12 @@ export default function MessageBubble({
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
   const unlockReq = parseUnlockRequestMessage(message.content);
-  const isUnlockReq = message.message_type === 'unlock_request' || unlockReq.isUnlockRequest;
+  const isUnlockReq = unlockReq.isUnlockRequest || Boolean(message.content && (message.content.includes('<!--unlock-request:') || message.content.includes('"type":"unlock_request"')));
 
   // Invisible message types (confirmation signals, legacy comments, bot celebration messages)
   if (
-    message.message_type === 'unlock_confirmed' ||
-    message.content?.includes('unlock-confirmed:') ||
+    message.content?.includes('unlock_confirmed') ||
+    message.content?.includes('unlock-confirmed') ||
     message.content?.includes('Payment verified! Unlocked')
   ) {
     return null;
