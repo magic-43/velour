@@ -337,8 +337,8 @@ export default function MessageBubble({
 
           <div
             className={`rounded-2xl break-words transition-all relative
-              ${vaultMedia.isVaultMedia && vaultMedia.media
-                ? `p-1 overflow-hidden max-w-[320px] ${
+              ${(vaultMedia.isVaultMedia && vaultMedia.media) || unlockReq.isUnlockRequest
+                ? `p-1 overflow-hidden max-w-[320px] sm:max-w-[340px] ${
                     isMine
                       ? 'bg-[#18181b] border border-white/10 text-paper rounded-br-sm'
                       : 'bg-[#18181b] border border-white/10 text-paper rounded-bl-sm'
