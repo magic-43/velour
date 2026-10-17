@@ -40,6 +40,11 @@ export default function LockedAttachmentCard({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [localPending, setLocalPending] = useState(isPendingVerification);
+  const [localUnlocked, setLocalUnlocked] = useState(isUnlocked);
+
+  useEffect(() => {
+    if (isUnlocked) setLocalUnlocked(true);
+  }, [isUnlocked]);
 
   const price = media.price || 10;
   const isBatch = Boolean(media.items && media.items.length > 1);
@@ -82,6 +87,7 @@ export default function LockedAttachmentCard({
     const handleVerified = (e: any) => {
       if (matchesTarget(e.detail)) {
         setLocalPending(false);
+        setLocalUnlocked(true);
         onUnlocked?.();
       }
     };
@@ -94,8 +100,8 @@ export default function LockedAttachmentCard({
   }, [media.batchId, media.mediaUrl, media.thumbnailUrl, items, onUnlocked]);
 
   // Check if current user has unlocked the media or is the creator
-  const canViewFull = isMine || isUnlocked;
-  const isPending = localPending || isPendingVerification;
+  const canViewFull = isMine || isUnlocked || localUnlocked;
+  const isPending = !canViewFull && (localPending || isPendingVerification);
 
   const handleMediaClick = (idx: number) => {
     if (isSending) return;

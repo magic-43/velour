@@ -13,6 +13,7 @@ import HomeStoryFeed from '../stories/HomeStoryFeed';
 import { supabase } from '../../lib/supabase';
 import type { Story, CreatorProfile, HomeStorySession } from '../../types';
 import { StoryReplyMetadata } from '../../lib/storyReplies';
+import { parseVaultMediaMessage } from '../../lib/creatorVault';
 import { getCleanMessagePreview } from '../../lib/messageUtils';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 
@@ -491,19 +492,17 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       // Determine if message attachment is unlocked or pending
       let isUnlocked = false;
       let isPendingVerification = false;
-      if (msg.content?.includes('"type":"vault_media"')) {
-        try {
-          const parsed = JSON.parse(msg.content);
-          const m = parsed?.media;
-          const k1 = m?.batchId;
-          const k2 = m?.mediaUrl;
-          const k3 = m?.thumbnailUrl;
-          const itemUrls = (m?.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl]);
-          const allKeys = [k1, k2, k3, ...itemUrls, msg.id].filter(Boolean);
+      const vaultData = parseVaultMediaMessage(msg.content);
+      if (vaultData.isVaultMedia && vaultData.media) {
+        const m = vaultData.media;
+        const k1 = m.batchId;
+        const k2 = m.mediaUrl;
+        const k3 = m.thumbnailUrl;
+        const itemUrls = (m.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl, it.id]);
+        const allKeys = [k1, k2, k3, ...itemUrls, msg.id].filter(Boolean);
 
-          isUnlocked = allKeys.some(k => unlockedAttachmentIds.has(k));
-          isPendingVerification = allKeys.some(k => pendingAttachmentIds.has(k));
-        } catch {}
+        isUnlocked = allKeys.some(k => unlockedAttachmentIds.has(k));
+        isPendingVerification = !isUnlocked && allKeys.some(k => pendingAttachmentIds.has(k));
       }
 
       return (
@@ -521,7 +520,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               isSelected={selectedMessageIds.has(msg.id)}
               isUnlocked={isUnlocked}
               isPendingVerification={isPendingVerification}
-              onUnlocked={() => markAttachmentPending(msg.id)}
+              onUnlocked={() => markAttachmentUnlocked(msg.id)}
               onToggleSelect={handleToggleSelect}
               onDelete={handleDelete}
               onReveal={isCreator ? handleToggleReveal : undefined}

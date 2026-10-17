@@ -162,15 +162,32 @@ export function parseUnlockConfirmedMessage(content: string | null | undefined):
   payload: UnlockConfirmedPayload | null;
 } {
   if (!content) return { isUnlockConfirmed: false, payload: null };
-  if (content.includes('unlock_confirmed') || content.includes('unlock-confirmed')) {
+  if (
+    content.includes('unlock_confirmed') ||
+    content.includes('unlock-confirmed') ||
+    content.includes('<!--unlock-confirmed:') ||
+    content.includes('<!--velour:unlock_confirmed-->')
+  ) {
     try {
       const jsonStart = content.indexOf('{');
       const jsonEnd = content.lastIndexOf('}');
       if (jsonStart !== -1 && jsonEnd !== -1) {
         const jsonStr = content.slice(jsonStart, jsonEnd + 1);
         const obj = JSON.parse(jsonStr);
-        if (obj?.type === 'unlock_confirmed') {
-          return { isUnlockConfirmed: true, payload: obj as UnlockConfirmedPayload };
+        if (obj && (obj.type === 'unlock_confirmed' || obj.unlockedAt || obj.confirmedAt || obj.attachmentId || obj.batchId)) {
+          const payload: UnlockConfirmedPayload = {
+            version: 1,
+            type: 'unlock_confirmed',
+            fanId: obj.fanId || '',
+            batchId: obj.batchId || obj.attachmentId || null,
+            attachmentId: obj.attachmentId || null,
+            mediaUrls: Array.isArray(obj.mediaUrls) ? obj.mediaUrls : (obj.thumbnailUrl ? [obj.thumbnailUrl] : []),
+            thumbnailUrl: obj.thumbnailUrl || null,
+            title: obj.title,
+            amountUsd: obj.amountUsd || 0,
+            confirmedAt: obj.confirmedAt || obj.unlockedAt || new Date().toISOString(),
+          };
+          return { isUnlockConfirmed: true, payload };
         }
       }
     } catch {}
