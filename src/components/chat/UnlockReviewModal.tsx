@@ -19,7 +19,8 @@ import {
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import {
   UnlockRequestPayload,
-  updateUnlockRequestContentStatus,
+  UnlockConfirmedPayload,
+  encodeUnlockConfirmedMessage,
 } from '../../lib/unlockRequests';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
@@ -79,37 +80,30 @@ export default function UnlockReviewModal({
     setApproving(true);
 
     try {
-      // 1. Update message content in database
-      const newContent = updateUnlockRequestContentStatus(message.content || '', 'verified');
-      await supabase
-        .from('messages')
-        .update({ content: newContent })
-        .eq('id', message.id);
+      // 1. Send silent real-time unlock confirmation message into chat
+      // This is invisible in chat, but triggers instant unblur on the fan's device
+      const confirmedPayload: UnlockConfirmedPayload = {
+        version: 1,
+        type: 'unlock_confirmed',
+        attachmentId: request.attachmentId,
+        batchId: request.batchId,
+        mediaUrls: request.mediaUrls || (request.thumbnailUrl ? [request.thumbnailUrl] : []),
+        thumbnailUrl: request.thumbnailUrl,
+        fanId: message.sender_id,
+        creatorId: user.id,
+        amountUsd: request.amountUsd,
+        unlockedAt: new Date().toISOString(),
+      };
 
-      // 2. Update attachment_unlocks
-      if (request.attachmentId) {
-        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        if (UUID_REGEX.test(request.attachmentId)) {
-          try {
-            await supabase
-              .from('attachment_unlocks')
-              .update({ status: 'verified' })
-              .eq('attachment_id', request.attachmentId)
-              .eq('fan_id', message.sender_id);
-          } catch {}
-        }
-      }
+      await supabase.from('messages').insert({
+        conversation_id: message.conversation_id,
+        sender_id: user.id,
+        sender_type: 'creator',
+        content: encodeUnlockConfirmedMessage(confirmedPayload),
+        message_type: 'system',
+      });
 
-      // 3. Update transactions_ledger
-      try {
-        await supabase
-          .from('transactions_ledger')
-          .update({ status: 'verified' })
-          .eq('user_id', message.sender_id)
-          .eq('status', 'pending');
-      } catch {}
-
-      // 4. Update creator total_earned in user_balances
+      // 2. Update creator total_earned in user_balances
       try {
         const { data: curBal } = await supabase
           .from('user_balances')
@@ -127,23 +121,36 @@ export default function UnlockReviewModal({
           });
       } catch {}
 
-      // 5. Post in-chat confirmation message
+      // 3. Update transactions_ledger if table available
       try {
-        await supabase.from('messages').insert({
-          conversation_id: message.conversation_id,
-          sender_id: user.id,
-          sender_type: 'creator',
-          content: `🎉 Payment verified! Unlocked "${request.title || 'Exclusive Media'}" for you. Enjoy!`,
-          message_type: 'text',
-          reply_to_id: message.id,
-        });
+        await supabase
+          .from('transactions_ledger')
+          .update({ status: 'verified' })
+          .eq('user_id', message.sender_id)
+          .eq('status', 'pending');
       } catch {}
 
-      // 6. Broadcast local custom event so locked media unblurs immediately
+      // 4. Update attachment_unlocks
+      if (request.attachmentId) {
+        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (UUID_REGEX.test(request.attachmentId)) {
+          try {
+            await supabase
+              .from('attachment_unlocks')
+              .update({ status: 'verified' })
+              .eq('attachment_id', request.attachmentId)
+              .eq('fan_id', message.sender_id);
+          } catch {}
+        }
+      }
+
+      // 5. Broadcast local event so creator's screen unblurs immediately too
       window.dispatchEvent(
         new CustomEvent('velour:unlock_verified', {
           detail: {
             attachmentId: request.attachmentId,
+            batchId: request.batchId,
+            mediaUrls: request.mediaUrls,
             mediaUrl: request.thumbnailUrl,
           },
         })
@@ -164,12 +171,6 @@ export default function UnlockReviewModal({
     setDeclining(true);
 
     try {
-      const newContent = updateUnlockRequestContentStatus(message.content || '', 'rejected');
-      await supabase
-        .from('messages')
-        .update({ content: newContent })
-        .eq('id', message.id);
-
       try {
         await supabase
           .from('transactions_ledger')
