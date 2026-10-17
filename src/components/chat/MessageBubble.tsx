@@ -260,7 +260,7 @@ export default function MessageBubble({
 
   return (
     // Outer wrapper: stays fixed — the reply and options icons live here
-    <div className="relative mb-0.5">
+    <div className="relative">
 
       {/* ── Reply icon — revealed as bubble slides right ───────────────── */}
       {onReply && !isSelectMode && (

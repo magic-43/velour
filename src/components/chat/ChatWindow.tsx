@@ -505,8 +505,14 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
         isPendingVerification = !isUnlocked && allKeys.some(k => pendingAttachmentIds.has(k));
       }
 
+      const spacingClass = showDate || i === 0
+        ? ''
+        : sameSenderAsPrev
+          ? 'mt-1.5'
+          : 'mt-3.5';
+
       return (
-        <div key={msg.id} id={`msg-${msg.id}`}>
+        <div key={msg.id} id={`msg-${msg.id}`} className={spacingClass}>
           {showDate && <DateSeparator date={msg.created_at} />}
           <div className="px-4">
             <MessageBubble
@@ -654,7 +660,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       <div
         ref={listRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden py-2 no-scrollbar flex flex-col"
+        className="flex-1 overflow-y-auto overflow-x-hidden py-3 no-scrollbar flex flex-col"
       >
         {/* Load more spinner */}
         {(hasMore || loadingMore) && (
@@ -699,7 +705,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           />
         )}
 
-        <div ref={bottomRef} data-chat-bottom="true" className="h-px shrink-0" />
+        <div ref={bottomRef} data-chat-bottom="true" className="h-2 shrink-0" />
       </div>
 
       {/* ── Input or Multi-Select Actions ─────────────────────────── */}
