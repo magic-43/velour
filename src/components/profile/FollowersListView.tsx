@@ -3,6 +3,7 @@ import { ArrowLeft, Users, Search, X, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { usePresence } from '../../lib/hooks/usePresence';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { Profile } from '../../types';
 
@@ -216,22 +217,7 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
     }
   };
 
-  const isOnline = (lastSeenAt?: string | null): boolean => {
-    if (!lastSeenAt) return false;
-    return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
-  };
-
-  const formatLastSeen = (lastSeenAt?: string | null) => {
-    if (!lastSeenAt) return 'last seen recently';
-    if (isOnline(lastSeenAt)) return 'online';
-    const d = new Date(lastSeenAt);
-    const diffMs = Date.now() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 60) return `active ${diffMins}m ago`;
-    const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `active ${diffHrs}h ago`;
-    return `active ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
-  };
+  const { isUserOnline, formatUserLastSeen } = usePresence();
 
   const filtered = followers.filter(({ fan }) => {
     const q = search.trim().toLowerCase();
@@ -311,7 +297,7 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
         ) : (
           <div className="overflow-hidden space-y-1">
             {filtered.map(({ fan }) => {
-              const online = isOnline(fan.last_seen_at);
+              const online = isUserOnline(fan.id, fan.last_seen_at);
               const name = fan.display_name || fan.username || 'User';
 
               return (
@@ -322,22 +308,27 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
                     {/* Avatar */}
-                    <div className="w-11 h-11 rounded-full shrink-0 overflow-hidden bg-zinc-800 flex items-center justify-center">
-                      {fan.avatar_url ? (
-                        <img
-                          src={fan.avatar_url}
-                          alt={name}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div
-                          className={`w-full h-full ${getAvatarColor(
-                            name
-                          )} flex items-center justify-center text-white font-semibold text-base select-none`}
-                        >
-                          {name.charAt(0).toUpperCase()}
-                        </div>
+                    <div className="relative shrink-0">
+                      <div className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center">
+                        {fan.avatar_url ? (
+                          <img
+                            src={fan.avatar_url}
+                            alt={name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div
+                            className={`w-full h-full ${getAvatarColor(
+                              name
+                            )} flex items-center justify-center text-white font-semibold text-base select-none`}
+                          >
+                            {name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      {online && (
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-ink shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
                       )}
                     </div>
 
@@ -354,10 +345,10 @@ export default function FollowersListView({ onBack }: FollowersListViewProps) {
 
                       <span
                         className={`text-xs truncate leading-tight mt-0.5 block ${
-                          online ? 'text-gold font-medium' : 'text-zinc-500'
+                          online ? 'text-emerald-400 font-medium' : 'text-zinc-500'
                         }`}
                       >
-                        {formatLastSeen(fan.last_seen_at)}
+                        {formatUserLastSeen(fan.last_seen_at, online)}
                       </span>
                     </div>
                   </div>

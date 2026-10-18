@@ -72,7 +72,7 @@ export function useConversations() {
           fan:profiles!fan_id(id, username, display_name, avatar_url, last_seen_at),
           creator_profile:creator_profiles!creator_profile_id(
             id, owner_id, display_name, avatar_url,
-            owner:profiles!owner_id(avatar_url, username, display_name)
+            owner:profiles!owner_id(id, avatar_url, username, display_name, last_seen_at)
           )
         `)
         .order('last_message_at', { ascending: false, nullsFirst: false });
@@ -180,13 +180,15 @@ export function useConversations() {
 
     if (isFanInThisConv) {
       const cp = conv.creator_profile;
-      const avatar = cp?.avatar_url || (cp as any)?.owner?.avatar_url || null;
+      const owner = (cp as any)?.owner;
+      const avatar = cp?.avatar_url || owner?.avatar_url || null;
       return {
         id: cp?.id ?? conv.creator_profile_id ?? '',
-        name: cp?.display_name || 'Creator',
-        username: cp?.display_name || 'creator',
+        userId: cp?.owner_id || owner?.id || '',
+        name: cp?.display_name || owner?.display_name || 'Creator',
+        username: cp?.display_name || owner?.username || 'creator',
         avatar_url: avatar,
-        last_seen_at: null,
+        last_seen_at: owner?.last_seen_at || null,
       };
     }
 
@@ -194,6 +196,7 @@ export function useConversations() {
     const f = conv.fan;
     return {
       id: f?.id ?? conv.fan_id ?? '',
+      userId: f?.id ?? conv.fan_id ?? '',
       name: f?.display_name || f?.username || 'Client',
       username: f?.username || 'client',
       avatar_url: f?.avatar_url || null,

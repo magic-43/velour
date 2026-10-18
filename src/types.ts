@@ -117,6 +117,7 @@ export interface ConversationWithParticipants extends Conversation {
     owner_id: string;
     display_name: string;
     avatar_url: string | null;
+    owner?: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url' | 'last_seen_at'>;
   };
 }
 

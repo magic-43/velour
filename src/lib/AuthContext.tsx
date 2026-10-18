@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { Profile, UserRole } from '../types';
@@ -10,6 +10,8 @@ import {
   type SavedAccount,
 } from './multiAccount';
 import { getCachedProfile, saveCachedProfile } from './offline/db';
+import { globalPresenceManager } from './presenceManager';
+import { getMyLastSeenPrivacy } from './utils/presenceUtils';
 
 interface AuthContextType {
   user: User | null;
@@ -101,13 +103,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSavedAccounts(getSavedAccounts());
   }, []);
 
-  // Update last_seen_at on page focus
+  // Update last_seen_at on page focus, heartbeats, and unload
+  const lastSeenPingRef = useRef<number>(0);
   const updateLastSeen = useCallback(async () => {
     if (!user) return;
-    await supabase
-      .from('profiles')
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq('id', user.id);
+    if (getMyLastSeenPrivacy(user.id) === 'nobody') return;
+    lastSeenPingRef.current = Date.now();
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', user.id);
+    } catch (_) {}
   }, [user]);
 
   useEffect(() => {
@@ -116,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        globalPresenceManager.initialize(session.user.id);
         // Optimistically populate profile from IndexedDB immediately so UI renders offline
         try {
           const cached = await getCachedProfile(session.user.id);
@@ -126,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (_) {}
         fetchProfile(session.user.id, session).finally(() => setLoading(false));
       } else {
+        globalPresenceManager.cleanup();
         setLoading(false);
       }
     });
@@ -135,8 +144,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        globalPresenceManager.initialize(session.user.id);
         fetchProfile(session.user.id, session);
       } else {
+        globalPresenceManager.cleanup();
         setProfile(null);
       }
     });
@@ -144,17 +155,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
 
-  // Update last_seen_at on page visibility change
+  // Robust presence lifecycle: periodic heartbeat + visibility + unload
   useEffect(() => {
+    if (!user) return;
+
+    // 1. Initial ping on mount/auth
+    updateLastSeen();
+
+    // 2. Active heartbeat while visible (every 45s)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        updateLastSeen();
+      }
+    }, 45000);
+
+    // 3. User activity ping (debounced 30s)
+    const handleActivity = () => {
+      if (Date.now() - lastSeenPingRef.current > 30000 && document.visibilityState === 'visible') {
+        updateLastSeen();
+      }
+    };
+
+    window.addEventListener('mousemove', handleActivity, { passive: true });
+    window.addEventListener('keydown', handleActivity, { passive: true });
+    window.addEventListener('touchstart', handleActivity, { passive: true });
+
+    // 4. Page visibility change
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') updateLastSeen();
+      updateLastSeen();
     };
     document.addEventListener('visibilitychange', handleVisibility);
-    updateLastSeen(); // on mount
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [updateLastSeen]);
+
+    // 5. Before unload / background exit
+    const handleUnload = () => {
+      updateLastSeen();
+    };
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [user, updateLastSeen]);
 
   const signOut = async () => {
+    globalPresenceManager.cleanup();
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);

@@ -3,6 +3,7 @@ import { ArrowLeft, Compass, Search, X, MessageSquare, CheckCircle2, UserMinus }
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { usePresence } from '../../lib/hooks/usePresence';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 import type { CreatorProfile } from '../../types';
 
@@ -252,10 +253,7 @@ export default function FanFollowingView({ onBack }: FanFollowingViewProps) {
     }
   };
 
-  const isOnline = (lastSeenAt?: string | null): boolean => {
-    if (!lastSeenAt) return false;
-    return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
-  };
+  const { isUserOnline } = usePresence();
 
   const filteredFollowing = following.filter((item) => {
     const q = search.trim().toLowerCase();
@@ -347,7 +345,7 @@ export default function FanFollowingView({ onBack }: FanFollowingViewProps) {
           <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
             {filteredFollowing.map((item) => {
               const { creator } = item;
-              const online = isOnline(creator.owner?.last_seen_at);
+              const online = isUserOnline(creator.owner_id || (creator.owner as any)?.id, creator.owner?.last_seen_at);
               const initial = creator.display_name.charAt(0).toUpperCase();
 
               return (

@@ -17,33 +17,20 @@ import { parseVaultMediaMessage } from '../../lib/creatorVault';
 import { getCleanMessagePreview } from '../../lib/messageUtils';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 
+import { usePresence } from '../../lib/hooks/usePresence';
+import { formatLastSeen } from '../../lib/utils/presenceUtils';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000; // 5 min
-}
-
-function formatLastSeen(lastSeenAt: string | null): string {
-  if (!lastSeenAt) return 'last seen unknown';
-  if (isOnline(lastSeenAt)) return 'online';
-  const d = new Date(lastSeenAt);
-  const diffMs = Date.now() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 60) return `last seen ${diffMins}m ago`;
-  const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `last seen ${diffHrs}h ago`;
-  return `last seen ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface OtherParticipant {
   id?: string;
+  userId?: string;
   name: string;
   username: string;
   avatar_url: string | null;
@@ -544,7 +531,34 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     });
   };
 
-  const online = isOnline(other.last_seen_at);
+  const { isUserOnline, formatUserLastSeen } = usePresence();
+  const targetUserId = other.userId || other.id;
+
+  const [liveLastSeen, setLiveLastSeen] = useState<string | null>(other.last_seen_at);
+  useEffect(() => {
+    setLiveLastSeen(other.last_seen_at);
+  }, [other.last_seen_at]);
+
+  useEffect(() => {
+    if (!targetUserId) return;
+    const channel = supabase
+      .channel(`profile_presence_${targetUserId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${targetUserId}` },
+        (payload) => {
+          if (payload.new && (payload.new as any).last_seen_at) {
+            setLiveLastSeen((payload.new as any).last_seen_at);
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [targetUserId]);
+
+  const online = isUserOnline(targetUserId, liveLastSeen);
 
   return (
     <div id="chat-window-root" className="flex flex-col h-full max-h-[100dvh] bg-ink relative overflow-hidden md:border-r border-border-subtle">
@@ -602,18 +616,23 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               )}
             </div>
             {online && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-ink" />
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-ink shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
             )}
           </div>
 
           {/* Name + status */}
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-paper text-base truncate leading-tight">{other.name}</p>
-            <p className="text-xs text-muted truncate mt-0.5">
+            <p className="text-xs truncate mt-0.5">
               {otherIsTyping ? (
                 <span className="text-gold font-medium animate-pulse">typing…</span>
+              ) : online ? (
+                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                  online
+                </span>
               ) : (
-                formatLastSeen(other.last_seen_at)
+                <span className="text-muted">{formatUserLastSeen(liveLastSeen, false)}</span>
               )}
             </p>
           </div>

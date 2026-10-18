@@ -82,7 +82,7 @@ export default function Conversation() {
             fan:profiles!fan_id(id, username, display_name, avatar_url, last_seen_at),
             creator_profile:creator_profiles!creator_profile_id(
               id, owner_id, display_name, avatar_url,
-              owner:profiles!owner_id(avatar_url, username, display_name)
+              owner:profiles!owner_id(id, avatar_url, username, display_name, last_seen_at)
             )
           `)
           .eq('id', conversationId)
@@ -129,6 +129,8 @@ export default function Conversation() {
     activeConv?.fan?.display_name,
     activeConv?.creator_profile?.display_name,
     activeConv?.fan?.last_seen_at,
+    (activeConv?.creator_profile as any)?.owner?.last_seen_at,
+    (activeConv?.creator_profile as any)?.owner_id,
     getOtherParticipant,
   ]);
 

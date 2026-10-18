@@ -13,6 +13,7 @@ import {
 } from '../../lib/notificationService';
 import StoryStatusIcon from './StoryStatusIcon';
 import PullToRefresh from '../common/PullToRefresh';
+import { usePresence } from '../../lib/hooks/usePresence';
 import type { ConversationWithParticipants } from '../../types';
 
 function formatMessageTime(iso: string | null): string {
@@ -26,15 +27,11 @@ function formatMessageTime(iso: string | null): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ConversationList() {
   const { user } = useAuth();
+  const { isUserOnline } = usePresence();
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState('');
@@ -92,13 +89,13 @@ export default function ConversationList() {
     });
   }, [conversations, search, getOtherParticipant]);
 
-  // Active (online) users strip — people last seen < 5 min
+  // Active (online) users strip
   const activeUsers = useMemo(() => {
     return conversations
       .map(c => ({ ...getOtherParticipant(c), convId: c.id }))
-      .filter(p => isOnline(p.last_seen_at))
+      .filter(p => isUserOnline((p as any).userId || p.id, p.last_seen_at))
       .slice(0, 12);
-  }, [conversations, getOtherParticipant]);
+  }, [conversations, getOtherParticipant, isUserOnline]);
 
   const openConversation = (conv: ConversationWithParticipants) => {
     markConversationViewed(conv.id);
@@ -252,17 +249,22 @@ export default function ConversationList() {
             </p>
           </div>
         ) : (
-          filtered.map(conv => (
-            <ConversationRow
-              key={conv.id}
-              conv={conv}
-              isActive={conv.id === activeId}
-              user={user}
-              getOtherParticipant={getOtherParticipant}
-              getUnread={getUnread}
-              onOpen={openConversation}
-            />
-          ))
+          filtered.map(conv => {
+            const other = getOtherParticipant(conv);
+            const isRowOnline = isUserOnline((other as any)?.userId || other?.id, other?.last_seen_at);
+            return (
+              <ConversationRow
+                key={conv.id}
+                conv={conv}
+                isActive={conv.id === activeId}
+                user={user}
+                getOtherParticipant={getOtherParticipant}
+                getUnread={getUnread}
+                onOpen={openConversation}
+                isOnline={isRowOnline}
+              />
+            );
+          })
         )}
       </PullToRefresh>
     </div>
@@ -277,10 +279,11 @@ interface RowProps {
   isActive: boolean;
   user: { id: string } | null;
   getOtherParticipant: (conv: ConversationWithParticipants) => {
-    id: string; name: string; username: string; avatar_url: string | null; last_seen_at: string | null;
+    id: string; userId?: string; name: string; username: string; avatar_url: string | null; last_seen_at: string | null;
   };
   getUnread: (conv: ConversationWithParticipants) => number;
   onOpen: (conv: ConversationWithParticipants) => void;
+  isOnline: boolean;
 }
 
 function parseReactionPreview(text: string | null): { isReaction: boolean; emoji?: string; detail?: string } {
@@ -296,7 +299,7 @@ function parseReactionPreview(text: string | null): { isReaction: boolean; emoji
   return { isReaction: false };
 }
 
-function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread, onOpen }: RowProps) {
+function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread, onOpen, isOnline }: RowProps) {
   const other = getOtherParticipant(conv);
   const isFromMe = conv.last_message_sender_id === user?.id;
   // Unread badge and highlighted text only apply if the last message is NOT from me and not active
@@ -341,8 +344,8 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
               </span>
           }
         </div>
-        {isOnline(other.last_seen_at) && (
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-ink" />
+        {isOnline && (
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-ink shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
         )}
       </div>
 
