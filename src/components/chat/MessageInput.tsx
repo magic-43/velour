@@ -245,7 +245,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
   }, [value]);
 
   const handleSend = () => {
@@ -308,9 +308,9 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         </div>
       )}
 
-      {/* Capsule Input Row (Styled matching reference Image 3) */}
+      {/* Input Row matching WhatsApp multiline layout */}
       <div className="px-3 py-2 sm:py-2.5">
-        <div className="w-full min-h-[48px] rounded-full bg-[#242426] border border-white/5 focus-within:border-gold/40 px-4 py-1.5 flex items-center gap-2.5 transition-all shadow-lg">
+        <div className="w-full min-h-[48px] rounded-[24px] bg-[#242426] border border-white/5 focus-within:border-gold/40 px-3.5 sm:px-4 py-1.5 flex items-end gap-2.5 transition-all shadow-lg">
           {/* Text input */}
           <textarea
             ref={textareaRef}
@@ -323,11 +323,11 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
             placeholder="Message…"
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent text-white text-sm sm:text-base placeholder:text-neutral-400 focus:outline-none resize-none no-scrollbar leading-snug py-1.5 max-h-[120px]"
+            className="flex-1 bg-transparent text-white text-sm sm:text-base placeholder:text-neutral-400 focus:outline-none resize-none overflow-y-auto no-scrollbar leading-snug py-2 max-h-[140px]"
           />
 
-          {/* Right Action Icons: Mic, Emoji, Plus/Send */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Right Action Icons: Mic, and Plus/Send (pinned to bottom right when multiline) */}
+          <div className="flex items-center gap-1.5 shrink-0 self-end pb-1">
             {/* Voice / Mic button */}
             <button
               type="button"
@@ -338,23 +338,22 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
               <Mic size={20} />
             </button>
 
-
             {/* Plus / Send button */}
             {hasText ? (
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={disabled}
-                className="w-8 h-8 rounded-full bg-gold hover:bg-gold-light text-ink flex items-center justify-center font-bold shrink-0 shadow-lg active:scale-95 transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full bg-gold hover:bg-gold-light text-ink flex items-center justify-center font-bold shrink-0 shadow-lg active:scale-95 transition-all cursor-pointer mb-0.5"
                 title="Send message"
               >
-                <Send size={15} className="translate-x-[1px]" strokeWidth={2.4} />
+                <Send size={15} className="translate-x-[0.5px]" strokeWidth={2.4} />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handlePlusClick}
-                className="w-8 h-8 rounded-full bg-white text-black hover:bg-neutral-200 flex items-center justify-center font-bold shrink-0 shadow active:scale-95 transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white text-black hover:bg-neutral-200 flex items-center justify-center font-bold shrink-0 shadow active:scale-95 transition-all cursor-pointer mb-0.5"
                 title="Add attachment"
                 disabled={disabled}
               >
