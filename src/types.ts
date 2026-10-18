@@ -121,8 +121,8 @@ export interface ConversationWithParticipants extends Conversation {
 }
 
 export type MessageType = 'text' | 'attachment' | 'voice_note' | 'system';
-/** DB values: 'sent' | 'delivered' | 'read'. 'sending' is frontend-only for optimistic UI. */
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
+/** DB values: 'sent' | 'delivered' | 'read'. 'sending' and 'failed' are frontend-only for optimistic UI. */
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface Message {
   id: string;

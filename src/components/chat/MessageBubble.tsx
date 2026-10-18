@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2 } from 'lucide-react';
+import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import type { MessageStatus } from '../../types';
@@ -815,6 +815,13 @@ function QuotedReplyBanner({
 function ReadReceipt({ status, isOverlay = false }: { status: MessageStatus; isOverlay?: boolean }) {
   if (status === 'sending') {
     return <Clock size={11} className={`${isOverlay ? 'text-white/80' : 'text-paper/40'} shrink-0`} />;
+  }
+  if (status === 'failed') {
+    return (
+      <span title="Upload failed" className="inline-flex items-center shrink-0">
+        <AlertCircle size={12} strokeWidth={2.4} className="text-red-400 shrink-0" />
+      </span>
+    );
   }
   if (status === 'read') {
     return <CheckCheck size={14} strokeWidth={2.4} className="text-gold shrink-0" />;

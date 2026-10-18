@@ -289,6 +289,22 @@ export async function updateCachedMessage(tempId: string, confirmed: MessageWith
   }
 }
 
+export async function deleteCachedMessage(id: string): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('messages', 'readwrite');
+    const store = tx.objectStore('messages');
+    store.delete(id);
+
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn('Failed deleting cached message:', err);
+  }
+}
+
 // ── Stories Cache ────────────────────────────────────────────────────────────
 
 export async function getCachedStories(): Promise<HomeStorySession[]> {

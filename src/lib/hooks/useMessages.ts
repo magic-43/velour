@@ -8,10 +8,12 @@ import {
   saveCachedMessages,
   appendCachedMessage,
   updateCachedMessage,
+  deleteCachedMessage,
   queueOutboxMessage,
   markConversationCachedAsRead,
 } from '../offline/db';
 import { isOnline } from '../offline/outboxSync';
+import { mediaUploadManager } from '../mediaUploadManager';
 import { parseUnlockRequestMessage, parseUnlockConfirmedMessage } from '../unlockRequests';
 
 export interface MessageWithSender extends Message {
@@ -48,9 +50,20 @@ export function useMessages(conversationId: string | null) {
     let isSubscribed = true;
     getCachedMessages(conversationId).then((cached) => {
       if (isSubscribed) {
-        if (cached && cached.length > 0) {
-          setMessages(cached);
-          oldestCursorRef.current = cached[0]?.created_at ?? null;
+        // Merge any in-flight active uploads from mediaUploadManager
+        const activeUploads = mediaUploadManager.getActiveUploads(conversationId);
+        const merged = [...(cached || [])];
+        for (const up of activeUploads) {
+          const idx = merged.findIndex(m => m.id === up.id);
+          if (idx >= 0) {
+            merged[idx] = up;
+          } else {
+            merged.push(up);
+          }
+        }
+        if (merged.length > 0) {
+          setMessages(merged);
+          oldestCursorRef.current = merged[0]?.created_at ?? null;
           hasLoadedRef.current = true;
         }
         setLoading(false);
@@ -67,7 +80,7 @@ export function useMessages(conversationId: string | null) {
     hasLoadedRef.current = false;
   }, [conversationId]);
 
-  // Listen for outbox synchronizer confirmation events
+  // Listen for outbox synchronizer confirmation events and background upload events
   useEffect(() => {
     if (!conversationId) return;
 
@@ -78,8 +91,38 @@ export function useMessages(conversationId: string | null) {
       }
     };
 
+    const handleUploadComplete = (e: any) => {
+      const { tempId, confirmed, conversationId: uploadConvId } = e.detail || {};
+      if (uploadConvId === conversationId && tempId && confirmed) {
+        setMessages(prev => prev.map(m => m.id === tempId ? confirmed : m));
+      }
+    };
+
+    const handleUploadFailed = (e: any) => {
+      const { tempId, conversationId: uploadConvId } = e.detail || {};
+      if (uploadConvId === conversationId && tempId) {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'failed' } : m));
+      }
+    };
+
+    const handleUploadCancelled = (e: any) => {
+      const { tempId } = e.detail || {};
+      if (tempId) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+      }
+    };
+
     window.addEventListener('velour:message_synced', handleSynced);
-    return () => window.removeEventListener('velour:message_synced', handleSynced);
+    window.addEventListener('velour:media_upload_complete', handleUploadComplete);
+    window.addEventListener('velour:media_upload_failed', handleUploadFailed);
+    window.addEventListener('velour:media_upload_cancelled', handleUploadCancelled);
+
+    return () => {
+      window.removeEventListener('velour:message_synced', handleSynced);
+      window.removeEventListener('velour:media_upload_complete', handleUploadComplete);
+      window.removeEventListener('velour:media_upload_failed', handleUploadFailed);
+      window.removeEventListener('velour:media_upload_cancelled', handleUploadCancelled);
+    };
   }, [conversationId]);
 
   // ── Unlocked & Pending Attachment IDs (from DB + optimistic localStorage) ──
@@ -278,7 +321,22 @@ export function useMessages(conversationId: string | null) {
 
       if (!error && data) {
         const sorted = [...data].reverse() as MessageWithSender[];
-        setMessages(sorted);
+        const activeUploads = mediaUploadManager.getActiveUploads(conversationId);
+
+        setMessages(prev => {
+          const pendingFromState = prev.filter(m => m.status === 'sending' || m.status === 'failed');
+          const combined = [...sorted];
+          const seenIds = new Set(sorted.map(m => m.id));
+
+          for (const item of [...activeUploads, ...pendingFromState]) {
+            if (!seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              combined.push(item);
+            }
+          }
+          return combined;
+        });
+
         saveCachedMessages(sorted).catch(() => {});
         setHasMore(data.length === PAGE_SIZE);
         oldestCursorRef.current = sorted[0]?.created_at ?? null;
@@ -549,58 +607,17 @@ export function useMessages(conversationId: string | null) {
     // Show media card right away in chat
     setMessages(prev => [...prev, tempMessage]);
 
-    try {
-      // 2. Perform background upload
-      const finalContent = await uploadFn();
-      if (!finalContent) {
-        // Upload failed
-        setMessages(prev => prev.filter(m => m.id !== tempId));
-        return null;
-      }
-
-      // 3. Persist confirmed message to DB
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: user.id,
-          sender_type: isCreator ? 'creator' : 'fan',
-          content: finalContent,
-          message_type: 'text',
-          reply_to_id: replyTo ? replyTo.id : null,
-        })
-        .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
-        .single();
-
-      if (error || !data) {
-        console.error('Send media message error:', error);
-        setMessages(prev => prev.filter(m => m.id !== tempId));
-        return null;
-      }
-
-      // 4. Swap temp message with real confirmed message
-      const confirmed = data as MessageWithSender;
-      if (replyTo && !confirmed.reply_to) {
-        confirmed.reply_to = {
-          id: replyTo.id,
-          content: replyTo.content,
-          message_type: replyTo.message_type,
-          sender_id: replyTo.sender_id,
-          is_deleted: replyTo.is_deleted,
-          sender: replyTo.sender,
-        };
-      }
-
-      setMessages(prev =>
-        prev.map(m => m.id === tempId ? confirmed : m)
-      );
-
-      return confirmed;
-    } catch (err) {
-      console.error('sendMediaMessage error:', err);
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      return null;
-    }
+    // 2. Delegate to the global background mediaUploadManager.
+    // This runs completely independently of component lifecycles so navigating away
+    // will NEVER kill or lose track of the upload!
+    return mediaUploadManager.startUpload({
+      tempId,
+      conversationId,
+      userId: user.id,
+      tempMessage,
+      uploadFn,
+      replyToId: replyTo ? replyTo.id : null,
+    });
   }, [conversationId, user?.id, isCreator, profile?.username, profile?.display_name, profile?.avatar_url]);
 
   // ── Toggle reaction on a message ──────────────────────────────────────────
@@ -675,6 +692,11 @@ export function useMessages(conversationId: string | null) {
   // ── Soft-delete a message ─────────────────────────────────────────────────
   const deleteMessage = useCallback(async (messageId: string) => {
     if (!user?.id) return;
+    if (messageId.startsWith('temp_')) {
+      mediaUploadManager.cancelOrRemove(messageId);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      return;
+    }
     await supabase
       .from('messages')
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
@@ -703,11 +725,7 @@ export function useMessages(conversationId: string | null) {
         async (payload) => {
           const incoming = payload.new as Message;
 
-          // Own messages are handled optimistically in sendMessage — skip.
-          // (The confirmed swap already replaced the temp with the real row.)
-          if (incoming.sender_id === user.id) return;
-
-          // Fetch with sender join for messages from the other participant.
+          // Fetch with sender join
           const { data } = await supabase
             .from('messages')
             .select(`*, sender:profiles!sender_id(id, username, display_name, avatar_url)`)
@@ -754,11 +772,25 @@ export function useMessages(conversationId: string | null) {
             }
             setMessages(prev => {
               if (prev.some(m => m.id === confirmedMsg.id)) return prev;
+
+              // If own message, swap pending sending placeholder if present
+              if (confirmedMsg.sender_id === user.id) {
+                const tempIndex = prev.findIndex(m => m.status === 'sending' && m.id.startsWith('temp_'));
+                if (tempIndex !== -1) {
+                  const updated = [...prev];
+                  updated[tempIndex] = confirmedMsg;
+                  return updated;
+                }
+              }
+
               return [...prev, confirmedMsg];
             });
             appendCachedMessage(confirmedMsg).catch(() => {});
-            markRead();
-            await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
+
+            if (confirmedMsg.sender_id !== user.id) {
+              markRead();
+              await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
+            }
           }
         }
       )

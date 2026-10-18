@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, Check, CheckCheck, Lock, Unlock, Camera, Video, Bell, BellOff } from 'lucide-react';
+import { Search, X, Check, CheckCheck, Lock, Unlock, Camera, Video, Bell, BellOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useConversations } from '../../lib/hooks/useConversations';
 import { useIsOtherTyping } from '../../lib/hooks/useIsOtherTyping';
+import { mediaUploadManager } from '../../lib/mediaUploadManager';
 import { parseConversationPreview } from '../../lib/messageUtils';
 import {
   getNotificationPermissionState,
@@ -304,6 +305,26 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
   const preview = parseConversationPreview(conv.last_message_preview);
   const otherIsTyping = useIsOtherTyping(conv.id);
 
+  const [isUploading, setIsUploading] = useState(() => mediaUploadManager.isUploading(conv.id));
+
+  useEffect(() => {
+    const handleCheck = () => {
+      setIsUploading(mediaUploadManager.isUploading(conv.id));
+    };
+    window.addEventListener('velour:media_upload_complete', handleCheck);
+    window.addEventListener('velour:media_upload_failed', handleCheck);
+    window.addEventListener('velour:media_upload_cancelled', handleCheck);
+
+    const interval = setInterval(handleCheck, 1500);
+
+    return () => {
+      window.removeEventListener('velour:media_upload_complete', handleCheck);
+      window.removeEventListener('velour:media_upload_failed', handleCheck);
+      window.removeEventListener('velour:media_upload_cancelled', handleCheck);
+      clearInterval(interval);
+    };
+  }, [conv.id]);
+
   return (
     <button
       onClick={() => onOpen(conv)}
@@ -339,7 +360,7 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
         <div className="flex items-center gap-1.5">
           {/* Preview — dimmer view for sent and read messages; bright for unread incoming messages */}
           <div className={`text-sm truncate flex-1 flex items-center gap-1.5 min-w-0 ${
-            otherIsTyping
+            otherIsTyping || isUploading
               ? 'text-gold'
               : hasUnread
                 ? 'text-paper font-medium'
@@ -349,6 +370,11 @@ function ConversationRow({ conv, isActive, user, getOtherParticipant, getUnread,
           }`}>
             {otherIsTyping ? (
               <TypingDots />
+            ) : isUploading ? (
+              <span className="flex items-center gap-1.5 truncate text-gold font-medium">
+                <Loader2 size={13} className="shrink-0 animate-spin text-gold" />
+                <span className="truncate">Sending media...</span>
+              </span>
             ) : preview.type === 'reaction' ? (
               <span className="flex items-center gap-1.5 truncate">
                 <span className="text-sm shrink-0 leading-none">{preview.badge}</span>
