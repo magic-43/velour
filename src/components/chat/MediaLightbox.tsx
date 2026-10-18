@@ -510,8 +510,14 @@ export default function MediaLightbox({
     formattedDisplayTime = `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
   }
 
-  // Caption text (from item or message text)
-  const displayCaption = current.caption || caption || current.title || null;
+  // Caption text (from item or message text) — ignore raw filenames
+  const rawCandidate = current.caption || caption || current.title || null;
+  const isFilename = Boolean(
+    rawCandidate &&
+    (/\.(jpe?g|png|webp|gif|mp4|mov|webm|quicktime)$/i.test(rawCandidate.trim()) ||
+     /^(IMG_|VID_|chat_img_|vault_|batch_)/i.test(rawCandidate.trim()))
+  );
+  const displayCaption = isFilename ? null : rawCandidate;
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const remainingTime = Math.max(0, duration - currentTime);

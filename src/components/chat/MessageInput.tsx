@@ -31,6 +31,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const [showVaultPicker, setShowVaultPicker] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [selectedEditorFiles, setSelectedEditorFiles] = useState<File[]>([]);
+  const [selectedEditorVaultItems, setSelectedEditorVaultItems] = useState<VaultItem[]>([]);
   const [showEditorModal, setShowEditorModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,8 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   // Android hardware back button handlers for chat input sheets and modals
   useBackHandler(() => {
     setShowEditorModal(false);
+    setSelectedEditorFiles([]);
+    setSelectedEditorVaultItems([]);
     return true;
   }, showEditorModal, 120);
 
@@ -59,6 +62,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const handleDeviceFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    setSelectedEditorVaultItems([]);
     setSelectedEditorFiles(files);
     setShowEditorModal(true);
     e.target.value = '';
@@ -74,29 +78,29 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         : data.batchId;
     const finalPrice = data.isLocked ? Math.max(5, data.price ?? 25) : undefined;
 
-    // 1. Build optimistic media payload immediately using local preview URLs
+    // 1. Build optimistic media payload immediately using local preview URLs (no raw filenames)
     const optimisticItems = data.items.map((it) => ({
       mediaUrl: it.previewUrl,
       mediaType: it.mediaType,
-      title: it.caption,
       thumbnailUrl: it.thumbnailUrl || it.previewUrl,
       blurredThumbnailUrl: it.thumbnailUrl || it.previewUrl,
+      durationSecs: it.durationSecs,
     }));
 
     const firstOptItem = optimisticItems[0];
     const optimisticContent = encodeVaultMediaMessage(data.caption || '', {
       mediaUrl: firstOptItem.mediaUrl,
       mediaType: firstOptItem.mediaType,
-      title: firstOptItem.title,
       thumbnailUrl: firstOptItem.thumbnailUrl,
       blurredThumbnailUrl: firstOptItem.blurredThumbnailUrl,
       price: finalPrice,
       isLocked: data.isLocked,
+      durationSecs: firstOptItem.durationSecs,
       batchId,
       items: optimisticItems,
     });
 
-    // 2. Define background upload worker that returns the confirmed DB content
+    // 2. Define background upload worker that returns confirmed DB content
     const creatorId = profile?.id || 'creator';
     const uploadFn = async (): Promise<string | null> => {
       try {
@@ -105,11 +109,33 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
           mediaType: 'image' | 'video';
           thumbnailUrl?: string | null;
           blurredThumbnailUrl?: string | null;
-          title?: string;
           durationSecs?: number;
         }> = [];
 
         for (const item of data.items) {
+          // If media already exists in Cloudflare R2 from Vault and has no canvas overlay edits:
+          if (item.existingMediaUrl && !item.bakedBlob) {
+            const persistentThumbUrl: string | null = item.thumbnailUrl || item.existingMediaUrl;
+            let blurredThumbUrl: string | null = null;
+            if (data.isLocked) {
+              try {
+                blurredThumbUrl = await generateBlurredThumbnail(item.existingMediaUrl);
+              } catch (blurErr) {
+                console.warn('Could not generate blurred thumbnail:', blurErr);
+                blurredThumbUrl = persistentThumbUrl;
+              }
+            }
+
+            uploadedItems.push({
+              mediaUrl: item.existingMediaUrl,
+              mediaType: item.mediaType,
+              thumbnailUrl: persistentThumbUrl,
+              blurredThumbnailUrl: blurredThumbUrl ?? persistentThumbUrl,
+              durationSecs: item.durationSecs,
+            });
+            continue;
+          }
+
           let fileToUpload: File;
 
           if (item.mediaType === 'image' && item.bakedBlob) {
@@ -122,11 +148,11 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
             fileToUpload = item.file;
           }
 
-          // Upload main media
+          // Upload main media — do not pass filename as title
           const vaultItem = await uploadVaultMedia(
             fileToUpload,
             creatorId,
-            item.caption || fileToUpload.name,
+            undefined,
             finalPrice
           );
 
@@ -161,7 +187,6 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
             mediaType: item.mediaType,
             thumbnailUrl: persistentThumbUrl,
             blurredThumbnailUrl: blurredThumbUrl ?? persistentThumbUrl,
-            title: item.caption || vaultItem.title,
             durationSecs: vaultItem.durationSecs,
           });
         }
@@ -170,7 +195,6 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         return encodeVaultMediaMessage(data.caption || '', {
           mediaUrl: firstItem.mediaUrl,
           mediaType: firstItem.mediaType,
-          title: firstItem.title,
           thumbnailUrl: firstItem.thumbnailUrl,
           blurredThumbnailUrl: firstItem.blurredThumbnailUrl,
           price: finalPrice,
@@ -180,7 +204,6 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
           items: uploadedItems.map((it) => ({
             mediaUrl: it.mediaUrl,
             mediaType: it.mediaType,
-            title: it.title,
             thumbnailUrl: it.thumbnailUrl,
             blurredThumbnailUrl: it.blurredThumbnailUrl,
             durationSecs: it.durationSecs,
@@ -201,35 +224,12 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
     }
   };
 
-  const handleVaultSelect = (items: VaultItem[], caption?: string) => {
+  const handleVaultSelect = (items: VaultItem[]) => {
     if (!items || items.length === 0) return;
-
-    if (items.length === 1) {
-      const item = items[0];
-      onSend(encodeVaultMediaMessage(caption || '', {
-        mediaUrl: item.mediaUrl,
-        mediaType: item.mediaType,
-        thumbnailUrl: item.thumbnailUrl,
-        durationSecs: item.durationSecs,
-      }));
-    } else {
-      const batchId = `vault_batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      const firstItem = items[0];
-      onSend(encodeVaultMediaMessage(caption || '', {
-        mediaUrl: firstItem.mediaUrl,
-        mediaType: firstItem.mediaType,
-        thumbnailUrl: firstItem.thumbnailUrl,
-        durationSecs: firstItem.durationSecs,
-        batchId,
-        items: items.map((it) => ({
-          id: it.id,
-          mediaUrl: it.mediaUrl,
-          mediaType: it.mediaType,
-          thumbnailUrl: it.thumbnailUrl,
-          durationSecs: it.durationSecs,
-        })),
-      }));
-    }
+    setSelectedEditorFiles([]);
+    setSelectedEditorVaultItems(items);
+    setShowVaultPicker(false);
+    setShowEditorModal(true);
   };
 
   const handlePlusClick = () => {
@@ -415,10 +415,12 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         <ChatMediaEditorModal
           isOpen={showEditorModal}
           initialFiles={selectedEditorFiles}
+          initialVaultItems={selectedEditorVaultItems}
           isCreator={Boolean(isCreator)}
           onClose={() => {
             setShowEditorModal(false);
             setSelectedEditorFiles([]);
+            setSelectedEditorVaultItems([]);
           }}
           onSend={handleEditorSend}
         />

@@ -284,6 +284,9 @@ export function parseVaultMediaMessage(content: string | null | undefined): {
   if (match) {
     try {
       const media = JSON.parse(match[1]) as VaultMediaPayload;
+      if (media && media.title && (/\.(jpe?g|png|webp|gif|mp4|mov|webm)$/i.test(media.title) || /^(IMG_|VID_|chat_img_|vault_|batch_)/i.test(media.title))) {
+        media.title = undefined;
+      }
       const rawText = content.replace(/<!--vault-media:[\s\S]*?-->/, '').trim();
       const text = isSystemGeneratedMediaLabel(rawText) ? '' : rawText;
       return { isVaultMedia: true, text, media };
@@ -306,6 +309,11 @@ export function parseVaultMediaMessage(content: string | null | undefined): {
     const rawText = content.replace(/<!--[\s\S]*$/, '').trim();
     const text = isSystemGeneratedMediaLabel(rawText) ? '' : rawText;
 
+    const rawTitle = titleMatch ? titleMatch[1] : undefined;
+    const cleanTitle = (rawTitle && (/\.(jpe?g|png|webp|gif|mp4|mov|webm)$/i.test(rawTitle) || /^(IMG_|VID_|chat_img_|vault_|batch_)/i.test(rawTitle)))
+      ? undefined
+      : rawTitle;
+
     return {
       isVaultMedia: true,
       text,
@@ -314,7 +322,7 @@ export function parseVaultMediaMessage(content: string | null | undefined): {
         type: 'vault_media',
         mediaUrl: mediaUrlMatch ? mediaUrlMatch[1] : '',
         mediaType,
-        title: titleMatch ? titleMatch[1] : undefined,
+        title: cleanTitle,
         isLocked,
         price,
       },

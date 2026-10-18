@@ -189,14 +189,14 @@ export default function LockedAttachmentCard({
         <div className="space-y-2">
           <div
             onClick={() => handleMediaClick(0)}
-            className={`relative rounded-xl overflow-hidden cursor-pointer group transition-all ${
+            className={`relative rounded-2xl overflow-hidden cursor-pointer group transition-all ${
               canViewFull
-                ? 'border border-white/5 hover:border-white/15'
-                : 'border border-gold/20 hover:border-gold/30 shadow-md shadow-black/30'
+                ? 'border border-white/10 hover:border-white/20'
+                : 'border border-gold/30 hover:border-gold/50 shadow-lg shadow-black/40'
             }`}
           >
             {/* Media thumbnail */}
-            <div className="aspect-[4/5] sm:aspect-square max-h-[300px] w-full overflow-hidden relative">
+            <div className="aspect-[4/5] sm:aspect-square max-h-[320px] w-full overflow-hidden relative bg-black">
               <img
                 src={
                   canViewFull
@@ -204,16 +204,35 @@ export default function LockedAttachmentCard({
                     : (media.blurredThumbnailUrl || media.thumbnailUrl || media.mediaUrl)
                 }
                 alt=""
-                className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                  !canViewFull ? 'filter blur-[14px] scale-110' : ''
+                className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-102 ${
+                  !canViewFull ? 'filter blur-[16px] scale-110' : ''
                 }`}
               />
+
+              {/* Creator lock indicator pill (top-right) */}
+              {canViewFull && isMine && media.price && (
+                <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-gold/40 text-gold text-[10px] font-semibold flex items-center gap-1 shadow">
+                  <Lock size={10} />
+                  <span>${price}</span>
+                </div>
+              )}
+
+              {/* Video duration badge (bottom-left) */}
+              {media.mediaType === 'video' && media.durationSecs !== undefined && (
+                <div className="absolute bottom-2.5 left-2.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-white/95 text-[10px] font-medium flex items-center gap-1 shadow">
+                  <Play size={8} fill="currentColor" />
+                  <span>
+                    {Math.floor(media.durationSecs / 60)}:
+                    {(media.durationSecs % 60).toString().padStart(2, '0')}
+                  </span>
+                </div>
+              )}
 
               {/* Sending / uploading overlay */}
               {isSending ? (
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center">
-                  <div className="w-13 h-13 rounded-full bg-black/80 border border-gold/40 text-gold flex items-center justify-center shadow-2xl mb-2">
-                    <Loader2 size={24} className="animate-spin text-gold" />
+                  <div className="w-12 h-12 rounded-full bg-black/80 border border-gold/40 text-gold flex items-center justify-center shadow-2xl mb-2">
+                    <Loader2 size={22} className="animate-spin text-gold" />
                   </div>
                   <span className="text-xs font-semibold text-white/90">
                     Uploading media…
@@ -221,15 +240,11 @@ export default function LockedAttachmentCard({
                 </div>
               ) : !canViewFull ? (
                 <div className="absolute inset-0 bg-black/45 backdrop-blur-[3px] flex flex-col items-center justify-center p-4 text-center">
-                  <div className="w-13 h-13 rounded-full bg-black/75 border border-gold/40 text-gold flex items-center justify-center shadow-2xl mb-2 group-hover:scale-110 transition-transform">
-                    {isPending ? <Clock size={24} className="animate-spin" /> : <Lock size={24} />}
+                  <div className="w-13 h-13 rounded-full bg-black/80 border border-gold/50 text-gold flex items-center justify-center shadow-2xl mb-2 group-hover:scale-110 transition-transform">
+                    {isPending ? <Clock size={22} className="animate-spin" /> : <Lock size={22} />}
                   </div>
 
-                  <span className="text-xs font-bold text-white uppercase tracking-wider mb-1">
-                    {media.mediaType === 'video' ? 'Locked Video' : 'Locked Photo'}
-                  </span>
-
-                  <span className="text-xl font-extrabold text-gold font-serif">
+                  <span className="text-xl font-extrabold text-gold font-serif drop-shadow-sm">
                     ${price}
                   </span>
                 </div>
@@ -238,7 +253,7 @@ export default function LockedAttachmentCard({
               {/* Play icon for video when unlocked */}
               {canViewFull && media.mediaType === 'video' && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-12 h-12 rounded-full bg-black/65 backdrop-blur text-white flex items-center justify-center shadow-xl">
+                  <div className="w-12 h-12 rounded-full bg-black/70 backdrop-blur-sm text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
                     <Play size={20} fill="currentColor" />
                   </div>
                 </div>
@@ -246,54 +261,36 @@ export default function LockedAttachmentCard({
 
               {/* Tap to expand badge when unlocked */}
               {canViewFull && (
-                <div className="absolute bottom-2 right-2 px-2 py-1 rounded-full bg-black/60 backdrop-blur text-white/80 text-[0.62rem] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/80 text-[0.62rem] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Eye size={11} />
-                  <span>View</span>
+                  <span>Expand</span>
                 </div>
               )}
             </div>
 
-            {/* Bottom action bar */}
-            <div className="p-3 bg-[#18181a]/95 border-t border-white/10 flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-paper truncate">
-                  {media.title || (media.mediaType === 'video' ? 'Exclusive Video' : 'Exclusive Photo')}
-                </p>
-                <p className="text-[0.68rem] text-muted">
-                  {canViewFull ? (
-                    <span className="text-emerald-400 font-medium">Unlocked content</span>
-                  ) : (
-                    <span>One-time unlock • $1 = 1 Star</span>
-                  )}
-                </p>
+            {/* Bottom action button only when locked for viewer */}
+            {!canViewFull && (
+              <div>
+                {isPending ? (
+                  <div className="w-full py-2.5 px-3 bg-[#18181a] border-t border-white/10 text-gold text-xs font-semibold flex items-center justify-center gap-2">
+                    <Clock size={13} className="animate-spin" />
+                    <span>Payment submitted — unlocking soon</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowPaymentModal(true);
+                    }}
+                    className="w-full py-2.5 px-3 bg-gold hover:bg-gold-light text-ink text-xs font-bold transition-all shadow-md active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles size={13} />
+                    <span>Unlock for ${price}</span>
+                  </button>
+                )}
               </div>
-
-              {!canViewFull && !isPending && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowPaymentModal(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-gold hover:bg-gold-light text-ink font-bold text-xs shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
-                >
-                  Unlock ${price}
-                </button>
-              )}
-
-              {isPending && (
-                <div className="px-2.5 py-1 rounded-lg bg-gold/15 text-gold text-[0.68rem] font-medium flex items-center gap-1 shrink-0">
-                  <Clock size={11} className="animate-spin" />
-                  <span>Pending</span>
-                </div>
-              )}
-
-              {isMine && (
-                <span className="text-[0.68rem] text-gold font-medium px-2 py-0.5 rounded-md bg-gold/10 shrink-0">
-                  Locked (${price})
-                </span>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -306,8 +303,7 @@ export default function LockedAttachmentCard({
           mediaUrl: it.mediaUrl,
           mediaType: it.mediaType,
           thumbnailUrl: it.thumbnailUrl,
-          title: it.title,
-          caption: it.title || null,
+          caption: null,
           senderName: senderName || (isMine ? 'You' : 'Creator'),
           senderAvatar: senderAvatar,
           timestamp: timestamp,
@@ -316,7 +312,7 @@ export default function LockedAttachmentCard({
         senderName={senderName || (isMine ? 'You' : 'Creator')}
         senderAvatar={senderAvatar}
         timestamp={timestamp}
-        caption={media.title || null}
+        caption={null}
       />
 
       {/* Unlock payment modal */}

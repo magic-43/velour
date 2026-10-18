@@ -505,11 +505,11 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
         isPendingVerification = !isUnlocked && allKeys.some(k => pendingAttachmentIds.has(k));
       }
 
-      const spacingClass = showDate || i === 0
-        ? ''
+      const spacingClass = showDate
+        ? (i === 0 ? 'mt-1' : 'mt-5')
         : sameSenderAsPrev
-          ? 'mt-1.5'
-          : 'mt-3.5';
+          ? 'mt-2'
+          : 'mt-4.5';
 
       return (
         <div key={msg.id} id={`msg-${msg.id}`} className={spacingClass}>

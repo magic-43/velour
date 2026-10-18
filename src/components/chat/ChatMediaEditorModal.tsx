@@ -16,16 +16,19 @@ import StoryCanvasEditor, { type StoryMediaItem } from '../stories/StoryCanvasEd
 import { captureVideoThumbnail } from '../../lib/videoThumbnail';
 import { useAuth } from '../../lib/AuthContext';
 import { useBackHandler } from '../../lib/backButtonRegistry';
+import type { VaultItem } from '../../lib/creatorVault';
 
 // Raw unprocessed item passed to parent for background upload
 export interface ChatMediaSendItem {
   file: File;
+  existingMediaUrl?: string;
   previewUrl: string;
   thumbnailUrl?: string;
   thumbnailFile?: File;           // captured thumbnail for videos
   bakedBlob?: Blob;               // pre-baked image blob with overlays applied
   caption?: string;
   mediaType: 'image' | 'video';
+  durationSecs?: number;
 }
 
 export interface ChatMediaSendData {
@@ -40,6 +43,7 @@ interface ChatMediaEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialFiles?: File[];
+  initialVaultItems?: VaultItem[];
   isCreator: boolean;
   // Receives raw file data — editor closes immediately, upload runs in parent
   onSend: (data: ChatMediaSendData) => void;
@@ -60,6 +64,7 @@ export default function ChatMediaEditorModal({
   isOpen,
   onClose,
   initialFiles,
+  initialVaultItems,
   isCreator,
   onSend,
 }: ChatMediaEditorModalProps) {
@@ -102,7 +107,7 @@ export default function ChatMediaEditorModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const appendInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Initialize queue when opened with initialFiles
+  // Initialize queue when opened with initialFiles or initialVaultItems
   useEffect(() => {
     if (!isOpen) {
       setMediaQueue([]);
@@ -114,7 +119,9 @@ export default function ChatMediaEditorModal({
       return;
     }
 
-    if (initialFiles && initialFiles.length > 0) {
+    if (initialVaultItems && initialVaultItems.length > 0) {
+      loadVaultItemsIntoQueue(initialVaultItems);
+    } else if (initialFiles && initialFiles.length > 0) {
       loadFilesIntoQueue(initialFiles, false);
     } else {
       // Prompt user to pick files if none provided
@@ -123,7 +130,28 @@ export default function ChatMediaEditorModal({
       }, 80);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, initialFiles]);
+  }, [isOpen, initialFiles, initialVaultItems]);
+
+  const loadVaultItemsIntoQueue = (vaultItems: VaultItem[]) => {
+    setError(null);
+    const validItems: StoryMediaItem[] = vaultItems.map((item) => ({
+      id: item.id || `vault-media-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      file: new File([], item.fileName || (item.mediaType === 'video' ? 'video.mp4' : 'image.jpg'), {
+        type: item.mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+      }),
+      previewUrl: item.mediaUrl,
+      mediaType: item.mediaType,
+      caption: '',
+      rotation: 0,
+      overlays: [],
+      thumbnailUrl: item.thumbnailUrl || undefined,
+      existingMediaUrl: item.mediaUrl,
+      durationSecs: item.durationSecs,
+    }));
+
+    setMediaQueue(validItems);
+    setActiveIndex(0);
+  };
 
   const loadFilesIntoQueue = async (files: File[], append = false) => {
     setError(null);
@@ -295,25 +323,46 @@ export default function ChatMediaEditorModal({
       // Bake images (fast, in-browser canvas) before dismissing
       for (let i = 0; i < mediaQueue.length; i++) {
         const item = mediaQueue[i];
+        const hasCanvasEdits = Boolean(
+          item.rotation !== 0 ||
+          (item.overlays && item.overlays.length > 0) ||
+          item.drawingDataUrl
+        );
+
         if (item.mediaType === 'image') {
-          const bakedBlob = await bakeImageToBlob(item);
-          const bakedUrl = URL.createObjectURL(bakedBlob);
-          sendItems.push({
-            file: item.file,
-            previewUrl: bakedUrl,
-            thumbnailUrl: bakedUrl,
-            bakedBlob,
-            caption: item.caption,
-            mediaType: 'image',
-          });
+          if (hasCanvasEdits || !item.existingMediaUrl) {
+            const bakedBlob = await bakeImageToBlob(item);
+            const bakedUrl = URL.createObjectURL(bakedBlob);
+            sendItems.push({
+              file: item.file,
+              previewUrl: bakedUrl,
+              thumbnailUrl: bakedUrl,
+              bakedBlob,
+              caption: item.caption,
+              mediaType: 'image',
+              durationSecs: item.durationSecs,
+            });
+          } else {
+            sendItems.push({
+              file: item.file,
+              existingMediaUrl: item.existingMediaUrl,
+              previewUrl: item.existingMediaUrl || item.previewUrl,
+              thumbnailUrl: item.thumbnailUrl || item.existingMediaUrl || item.previewUrl,
+              caption: item.caption,
+              mediaType: 'image',
+              durationSecs: item.durationSecs,
+            });
+          }
         } else {
           sendItems.push({
             file: item.file,
+            existingMediaUrl: item.existingMediaUrl,
             previewUrl: item.previewUrl,
             thumbnailUrl: item.thumbnailUrl,
             thumbnailFile: item.thumbnailFile,
             caption: item.caption,
             mediaType: 'video',
+            durationSecs: item.durationSecs,
           });
         }
       }

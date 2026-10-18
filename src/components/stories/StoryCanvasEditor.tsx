@@ -60,6 +60,8 @@ export interface StoryMediaItem {
   isHD?: boolean;
   thumbnailFile?: File;
   thumbnailUrl?: string;
+  existingMediaUrl?: string;
+  durationSecs?: number;
 }
 
 interface CropRect {

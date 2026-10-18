@@ -7,7 +7,7 @@ import { useBackHandler } from '../../lib/backButtonRegistry';
 interface VaultMediaPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (items: VaultItem[], caption?: string) => void;
+  onSelect: (items: VaultItem[]) => void;
 }
 
 export default function VaultMediaPickerModal({
@@ -18,7 +18,6 @@ export default function VaultMediaPickerModal({
   const { profile } = useAuth();
   const [items, setItems] = useState<VaultItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<VaultItem[]>([]);
-  const [caption, setCaption] = useState<string>('');
 
   // Android hardware back button handlers
   useBackHandler(() => {
@@ -35,7 +34,6 @@ export default function VaultMediaPickerModal({
     const list = getVaultItems(profile.id);
     setItems(list);
     setSelectedItems([]);
-    setCaption('');
   }, [profile, isOpen]);
 
   if (!isOpen) return null;
@@ -52,7 +50,7 @@ export default function VaultMediaPickerModal({
 
   const handleConfirmSend = () => {
     if (selectedItems.length === 0) return;
-    onSelect(selectedItems, caption.trim() || undefined);
+    onSelect(selectedItems);
     onClose();
   };
 
@@ -160,24 +158,15 @@ export default function VaultMediaPickerModal({
           </div>
         )}
 
-        {/* Footer / Caption Input and Send */}
+        {/* Footer / Continue to Editor */}
         {selectedItems.length > 0 && (
-          <div className="pt-3 border-t border-white/10 shrink-0 space-y-2.5">
-            <input
-              type="text"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="Add a message (optional)..."
-              className="w-full bg-[#101012] border border-white/10 focus:border-gold/50 rounded-xl px-3 py-2 text-xs text-paper placeholder:text-muted/40 outline-none"
-            />
-
+          <div className="pt-3 border-t border-white/10 shrink-0">
             <button
               onClick={handleConfirmSend}
               className="w-full py-2.5 rounded-xl bg-gold hover:bg-gold-light text-ink font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.99] cursor-pointer"
             >
-              <Send size={13} className="fill-ink" />
               <span>
-                Send {selectedItems.length} {selectedItems.length === 1 ? 'Media' : 'Items'}
+                Select {selectedItems.length} {selectedItems.length === 1 ? 'Item' : 'Items'}
               </span>
             </button>
           </div>
