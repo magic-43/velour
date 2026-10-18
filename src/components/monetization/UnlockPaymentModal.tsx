@@ -22,6 +22,15 @@ import { useAuth } from '../../lib/AuthContext';
 import { uploadPublicFile } from '../../lib/r2';
 import { encodeUnlockRequestMessage, UnlockRequestPayload } from '../../lib/unlockRequests';
 
+export interface UnlockMediaItem {
+  id?: string;
+  mediaUrl: string;
+  mediaType?: 'image' | 'video';
+  thumbnailUrl?: string | null;
+  title?: string;
+  durationSecs?: number;
+}
+
 interface UnlockPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -31,6 +40,7 @@ interface UnlockPaymentModalProps {
   thumbnailUrl?: string | null;
   attachmentId?: string;
   mediaUrls?: string[];
+  mediaItems?: UnlockMediaItem[];
   creatorId?: string;
   conversationId?: string;
   onSuccess?: () => void;
@@ -68,6 +78,7 @@ export default function UnlockPaymentModal({
   thumbnailUrl,
   attachmentId,
   mediaUrls,
+  mediaItems,
   creatorId,
   conversationId,
   onSuccess,
@@ -195,12 +206,16 @@ export default function UnlockPaymentModal({
       }
 
       // 2. Post in-chat Unlock Receipt message to the creator's conversation thread
+      const targetMediaUrls = (mediaItems && mediaItems.length > 0)
+        ? mediaItems.map(i => i.mediaUrl).filter(Boolean)
+        : (mediaUrls || (thumbnailUrl ? [thumbnailUrl] : []));
+
       const unlockPayload: UnlockRequestPayload = {
         version: 1,
         type: 'unlock_request',
         attachmentId: safeAttachmentId || attachmentId || null,
         batchId: attachmentId || null,
-        mediaUrls: mediaUrls || (thumbnailUrl ? [thumbnailUrl] : []),
+        mediaUrls: targetMediaUrls,
         creatorId: creatorId || null,
         fanId: user.id,
         amountUsd,
@@ -284,21 +299,61 @@ export default function UnlockPaymentModal({
       }
 
       // 3. Mark in local optimistic storage for user (STRICTLY status: 'pending')
-      if (attachmentId || thumbnailUrl) {
+      if (attachmentId || thumbnailUrl || (mediaItems && mediaItems.length > 0) || (mediaUrls && mediaUrls.length > 0)) {
         try {
           const key = `velour_unlocked_media_${user.id}`;
           const existing = JSON.parse(localStorage.getItem(key) || '[]');
-          const newEntry = {
-            id: attachmentId || `unlock_${Date.now()}`,
-            mediaUrl: thumbnailUrl || '',
-            thumbnailUrl: thumbnailUrl || '',
-            mediaType: 'image',
-            title: displayTitle,
-            amountUsd,
-            unlockedAt: new Date().toISOString(),
-            status: 'pending',
-          };
-          localStorage.setItem(key, JSON.stringify([newEntry, ...existing.filter((e: any) => e.id !== newEntry.id)]));
+
+          let entriesToAdd: any[] = [];
+          if (mediaItems && mediaItems.length > 0) {
+            entriesToAdd = mediaItems.map((item, idx) => {
+              const isVid = item.mediaType === 'video' || Boolean(item.mediaUrl?.match(/\.(mp4|mov|webm)$/i));
+              return {
+                id: item.id || `${attachmentId || 'unlock'}_${idx}`,
+                batchId: attachmentId || null,
+                mediaUrl: item.mediaUrl,
+                thumbnailUrl: item.thumbnailUrl || (isVid ? null : item.mediaUrl),
+                mediaType: isVid ? 'video' : 'image',
+                title: item.title || (mediaItems.length > 1 ? `${displayTitle} (${idx + 1}/${mediaItems.length})` : displayTitle),
+                amountUsd: idx === 0 ? amountUsd : 0,
+                unlockedAt: new Date().toISOString(),
+                status: 'pending',
+              };
+            });
+          } else if (mediaUrls && mediaUrls.length > 0) {
+            entriesToAdd = mediaUrls.map((url, idx) => {
+              const isVid = Boolean(url.match(/\.(mp4|mov|webm)$/i));
+              return {
+                id: `${attachmentId || 'unlock'}_${idx}`,
+                batchId: attachmentId || null,
+                mediaUrl: url,
+                thumbnailUrl: isVid ? (idx === 0 ? thumbnailUrl : null) : url,
+                mediaType: isVid ? 'video' : 'image',
+                title: mediaUrls.length > 1 ? `${displayTitle} (${idx + 1}/${mediaUrls.length})` : displayTitle,
+                amountUsd: idx === 0 ? amountUsd : 0,
+                unlockedAt: new Date().toISOString(),
+                status: 'pending',
+              };
+            });
+          } else {
+            const isVid = Boolean(thumbnailUrl?.match(/\.(mp4|mov|webm)$/i));
+            entriesToAdd = [{
+              id: attachmentId || `unlock_${Date.now()}`,
+              batchId: attachmentId || null,
+              mediaUrl: thumbnailUrl || '',
+              thumbnailUrl: thumbnailUrl || '',
+              mediaType: isVid ? 'video' : 'image',
+              title: displayTitle,
+              amountUsd,
+              unlockedAt: new Date().toISOString(),
+              status: 'pending',
+            }];
+          }
+
+          const filteredExisting = existing.filter((e: any) =>
+            !entriesToAdd.some((newItem) => newItem.id === e.id || (newItem.mediaUrl && newItem.mediaUrl === e.mediaUrl))
+          );
+          localStorage.setItem(key, JSON.stringify([...entriesToAdd, ...filteredExisting]));
         } catch (storageErr) {
           console.warn('Could not store optimistic unlock:', storageErr);
         }

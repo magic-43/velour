@@ -162,16 +162,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 1. Initial ping on mount/auth
     updateLastSeen();
 
-    // 2. Active heartbeat while visible (every 45s)
+    // 2. Active heartbeat while visible (every 25s)
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         updateLastSeen();
       }
-    }, 45000);
+    }, 25000);
 
-    // 3. User activity ping (debounced 30s)
+    // 3. User activity ping (debounced 15s)
     const handleActivity = () => {
-      if (Date.now() - lastSeenPingRef.current > 30000 && document.visibilityState === 'visible') {
+      if (Date.now() - lastSeenPingRef.current > 15000 && document.visibilityState === 'visible') {
         updateLastSeen();
       }
     };

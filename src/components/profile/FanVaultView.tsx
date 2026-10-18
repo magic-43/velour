@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Key, Play, Video, Camera, Compass, X, Calendar, LockOpen } from 'lucide-react';
+import { ArrowLeft, Play, Video, Camera, Compass, LockOpen, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 import { parseVaultMediaMessage } from '../../lib/creatorVault';
 import { parseUnlockConfirmedMessage, parseUnlockRequestMessage } from '../../lib/unlockRequests';
+import MediaLightbox from '../chat/MediaLightbox';
 
 interface FanVaultViewProps {
   onBack: () => void;
@@ -31,13 +32,14 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
   const [items, setItems] = useState<UnlockedVaultItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'video' | 'image'>('all');
   const [loading, setLoading] = useState(true);
-  const [activePreview, setActivePreview] = useState<UnlockedVaultItem | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // Android hardware back button handlers
   useBackHandler(() => {
-    setActivePreview(null);
+    setLightboxOpen(false);
     return true;
-  }, activePreview !== null, 110);
+  }, lightboxOpen, 110);
 
   useBackHandler(() => {
     onBack();
@@ -49,8 +51,11 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
     try {
       setLoading(true);
 
+      let unlocks: any[] = [];
+      let verifiedTxs: any[] = [];
+
       // 1. Fetch from attachment_unlocks (strictly status = 'verified')
-      const { data: unlocks, error } = await supabase
+      const { data: rawUnlocks, error } = await supabase
         .from('attachment_unlocks')
         .select(`
           id,
@@ -71,37 +76,39 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
         .eq('status', 'verified')
         .order('unlocked_at', { ascending: false });
 
-      const parsedDbItems: UnlockedVaultItem[] = [];
-      if (!error && unlocks) {
-        for (const row of unlocks) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const att = row.attachment as any;
-          const directUrl = (row as any).media_url;
-          const finalUrl = att?.public_url || directUrl;
-          if (finalUrl) {
-            const isVideo =
-              att?.mime_type?.startsWith('video/') ||
-              att?.file_name?.match(/\.(mp4|mov|webm)$/i) ||
-              finalUrl.match(/\.(mp4|mov|webm)$/i);
+      if (!error && rawUnlocks) {
+        unlocks = rawUnlocks;
+      }
 
-            parsedDbItems.push({
-              id: row.id,
-              mediaUrl: finalUrl,
-              thumbnailUrl: att?.thumbnail_url || (isVideo ? null : finalUrl),
-              mediaType: isVideo ? 'video' : 'image',
-              title: att?.file_name || 'Exclusive Media',
-              creatorName: att?.sender?.display_name || att?.sender?.username || 'Creator',
-              creatorAvatar: att?.sender?.avatar_url || null,
-              unlockedAt: row.unlocked_at,
-              amountUsd: row.amount_usd,
-            });
-          }
+      const parsedDbItems: UnlockedVaultItem[] = [];
+      for (const row of unlocks) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const att = row.attachment as any;
+        const directUrl = (row as any).media_url;
+        const finalUrl = att?.public_url || directUrl;
+        if (finalUrl) {
+          const isVideo =
+            att?.mime_type?.startsWith('video/') ||
+            att?.file_name?.match(/\.(mp4|mov|webm|m4v)$/i) ||
+            finalUrl.match(/\.(mp4|mov|webm|m4v)$/i);
+
+          parsedDbItems.push({
+            id: row.id,
+            mediaUrl: finalUrl,
+            thumbnailUrl: att?.thumbnail_url || (isVideo ? null : finalUrl),
+            mediaType: isVideo ? 'video' : 'image',
+            title: att?.file_name || 'Exclusive Media',
+            creatorName: att?.sender?.display_name || att?.sender?.username || 'Creator',
+            creatorAvatar: att?.sender?.avatar_url || null,
+            unlockedAt: row.unlocked_at,
+            amountUsd: row.amount_usd,
+          });
         }
       }
 
       // 2. Fetch from verified transactions_ledger
       try {
-        const { data: verifiedTxs } = await supabase
+        const { data: rawTxs } = await supabase
           .from('transactions_ledger')
           .select(`
             id,
@@ -116,13 +123,14 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           .eq('type', 'attachment_unlock')
           .eq('status', 'verified');
 
-        if (verifiedTxs) {
+        if (rawTxs) {
+          verifiedTxs = rawTxs;
           for (const tx of verifiedTxs) {
             if (
               tx.media_url &&
               !parsedDbItems.some((p) => p.mediaUrl === tx.media_url || p.id === tx.id)
             ) {
-              const isVid = Boolean(tx.media_url.match(/\.(mp4|mov|webm)$/i));
+              const isVid = Boolean(tx.media_url.match(/\.(mp4|mov|webm|m4v)$/i));
               parsedDbItems.push({
                 id: tx.id,
                 mediaUrl: tx.media_url,
@@ -160,12 +168,16 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
 
         for (const loc of verifiedLocals) {
           const url = loc.mediaUrl || loc.thumbnailUrl;
-          if (!combined.some((c) => c.mediaUrl === url || c.id === loc.id)) {
+          if (url && !combined.some((c) => c.mediaUrl === url || c.id === loc.id)) {
+            const isVideo =
+              loc.mediaType === 'video' ||
+              Boolean(url.match(/\.(mp4|mov|webm|m4v)$/i));
+
             combined.push({
               id: loc.id,
               mediaUrl: url,
-              thumbnailUrl: loc.thumbnailUrl || url,
-              mediaType: loc.mediaType === 'video' ? 'video' : 'image',
+              thumbnailUrl: loc.thumbnailUrl || (isVideo ? null : url),
+              mediaType: isVideo ? 'video' : 'image',
               title: loc.title || 'Exclusive Media',
               creatorName: loc.creatorName || 'Creator',
               creatorAvatar: loc.creatorAvatar || null,
@@ -209,6 +221,34 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
             // Set of unlocked IDs / URLs per conversation
             const unlockedKeys = new Set<string>();
             const unlockDates = new Map<string, string>();
+
+            // Seed unlocked keys from database and local verified collections
+            if (unlocks && Array.isArray(unlocks)) {
+              for (const u of unlocks) {
+                if (u.id) unlockedKeys.add(u.id);
+                if ((u as any).attachment_id) unlockedKeys.add((u as any).attachment_id);
+                if (u.media_url) unlockedKeys.add(u.media_url);
+                if (u.attachment?.id) unlockedKeys.add(u.attachment.id);
+                if (u.attachment?.public_url) unlockedKeys.add(u.attachment.public_url);
+              }
+            }
+            if (verifiedTxs && Array.isArray(verifiedTxs)) {
+              for (const t of verifiedTxs) {
+                if (t.id) unlockedKeys.add(t.id);
+                if (t.attachment_id) unlockedKeys.add(t.attachment_id);
+                if (t.media_url) unlockedKeys.add(t.media_url);
+              }
+            }
+            if (Array.isArray(localItems)) {
+              for (const loc of localItems) {
+                if (loc && loc.status === 'verified') {
+                  if (loc.id) unlockedKeys.add(loc.id);
+                  if (loc.batchId) unlockedKeys.add(loc.batchId);
+                  if (loc.mediaUrl) unlockedKeys.add(loc.mediaUrl);
+                  if (loc.thumbnailUrl) unlockedKeys.add(loc.thumbnailUrl);
+                }
+              }
+            }
 
             for (const m of convMessages) {
               if (!m.content) continue;
@@ -300,6 +340,21 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
                     title: media.title,
                   }];
 
+              // If this is a bundle, clean up any previous single-thumbnail placeholder
+              if (media.items && media.items.length > 1) {
+                const thumb = media.thumbnailUrl;
+                const batch = media.batchId;
+                for (let i = combined.length - 1; i >= 0; i--) {
+                  const c = combined[i];
+                  if (
+                    (thumb && c.mediaUrl === thumb && c.mediaType === 'image') ||
+                    (batch && (c.id === batch || c.id?.startsWith(batch)))
+                  ) {
+                    combined.splice(i, 1);
+                  }
+                }
+              }
+
               itemsToExtract.forEach((it, idx) => {
                 const mediaUrl = it.mediaUrl;
                 if (!mediaUrl) return;
@@ -307,14 +362,14 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
                 if (!combined.some((c) => c.mediaUrl === mediaUrl)) {
                   const isVideo =
                     it.mediaType === 'video' ||
-                    Boolean(mediaUrl.match(/\.(mp4|mov|webm)$/i));
+                    Boolean(mediaUrl.match(/\.(mp4|mov|webm|m4v)$/i));
 
                   combined.push({
                     id: it.id || `${m.id}_${idx}`,
                     mediaUrl,
                     thumbnailUrl: it.thumbnailUrl || (isVideo ? null : mediaUrl),
                     mediaType: isVideo ? 'video' : 'image',
-                    title: it.title || media.title || 'Exclusive Media',
+                    title: it.title || (itemsToExtract.length > 1 ? `${media.title || 'Exclusive Media'} (${idx + 1}/${itemsToExtract.length})` : (media.title || 'Exclusive Media')),
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     creatorName: (creator as any)?.display_name || (creator as any)?.username || 'Creator',
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -449,10 +504,13 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
       ) : (
         /* Unlocked Media Grid */
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          {filteredItems.map((item) => (
+          {filteredItems.map((item, idx) => (
             <div
               key={item.id}
-              onClick={() => setActivePreview(item)}
+              onClick={() => {
+                setLightboxIndex(idx);
+                setLightboxOpen(true);
+              }}
               className="group relative aspect-square rounded-2xl overflow-hidden bg-ink-light border border-white/10 hover:border-gold/50 transition-all cursor-pointer shadow-sm select-none"
             >
               {/* Media Element */}
@@ -520,81 +578,24 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
       )}
       </div>
 
-      {/* Media Lightbox / Preview Modal */}
-      {activePreview && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-[160] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
-          onClick={() => setActivePreview(null)}
-        >
-          <div
-            className="w-full max-w-xl max-h-[90vh] bg-[#121214] border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-2xl relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Top Bar */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center text-gold shrink-0">
-                  <LockOpen size={13} />
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-semibold text-paper truncate">
-                    {activePreview.title || 'Unlocked Media'}
-                  </h4>
-                  <p className="text-[10px] text-muted truncate flex items-center gap-1">
-                    <span>{activePreview.creatorName}</span>
-                    <span>•</span>
-                    <Calendar size={10} className="text-gold/80" />
-                    <span>{new Date(activePreview.unlockedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setActivePreview(null)}
-                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                aria-label="Close preview"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            {/* Media Container */}
-            <div className="flex-1 overflow-hidden bg-black flex items-center justify-center max-h-[70vh]">
-              {activePreview.mediaType === 'video' ? (
-                <video
-                  src={activePreview.mediaUrl}
-                  controls
-                  autoPlay
-                  className="w-full h-full max-h-[70vh] object-contain"
-                />
-              ) : (
-                <img
-                  src={activePreview.mediaUrl}
-                  alt={activePreview.title || 'Unlocked Media'}
-                  className="w-full h-full max-h-[70vh] object-contain"
-                />
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="px-4 py-3 bg-black/40 border-t border-white/10 flex items-center justify-between text-xs text-muted">
-              <span>Verified Unlocked Collection</span>
-              <a
-                href={activePreview.mediaUrl}
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="text-gold hover:text-gold-light font-medium transition-colors cursor-pointer"
-              >
-                Open Original
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Media Lightbox */}
+      <MediaLightbox
+        isOpen={lightboxOpen && lightboxIndex !== null}
+        onClose={() => setLightboxOpen(false)}
+        items={filteredItems.map((it) => ({
+          mediaUrl: it.mediaUrl,
+          mediaType: it.mediaType,
+          thumbnailUrl: it.thumbnailUrl,
+          title: it.title || 'Exclusive Media',
+          senderName: it.creatorName || 'Creator',
+          senderAvatar: it.creatorAvatar,
+          timestamp: it.unlockedAt,
+        }))}
+        initialIndex={lightboxIndex ?? 0}
+        senderName={filteredItems[lightboxIndex ?? 0]?.creatorName || 'Creator'}
+        senderAvatar={filteredItems[lightboxIndex ?? 0]?.creatorAvatar}
+        timestamp={filteredItems[lightboxIndex ?? 0]?.unlockedAt}
+      />
     </div>
   );
 }

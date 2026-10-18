@@ -8,12 +8,16 @@ export function usePresence() {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(() =>
     globalPresenceManager.getOnlineUserIds()
   );
+  const [hiddenUsers, setHiddenUsers] = useState<Set<string>>(() =>
+    globalPresenceManager.getHiddenUserIds()
+  );
 
   useEffect(() => {
     if (!user?.id) return;
     globalPresenceManager.initialize(user.id);
-    const unsubscribe = globalPresenceManager.subscribe((set) => {
-      setOnlineUsers(new Set(set));
+    const unsubscribe = globalPresenceManager.subscribe((onlineSet, hiddenSet) => {
+      setOnlineUsers(new Set(onlineSet));
+      setHiddenUsers(new Set(hiddenSet));
     });
     return () => {
       unsubscribe();
@@ -22,17 +26,18 @@ export function usePresence() {
 
   const isUserOnline = useCallback(
     (targetUserId?: string | null, lastSeenAt?: string | null) => {
-      return checkIsUserOnline(targetUserId, lastSeenAt, onlineUsers, user?.id);
+      return checkIsUserOnline(targetUserId, lastSeenAt, onlineUsers, hiddenUsers, user?.id);
     },
-    [onlineUsers, user?.id]
+    [onlineUsers, hiddenUsers, user?.id]
   );
 
   const formatUserLastSeen = useCallback(
-    (lastSeenAt?: string | null, isOnline?: boolean) => {
-      return formatLastSeen(lastSeenAt, isOnline, user?.id);
+    (lastSeenAt?: string | null, isOnline?: boolean, targetUserId?: string | null) => {
+      return formatLastSeen(lastSeenAt, isOnline, user?.id, targetUserId, hiddenUsers);
     },
-    [user?.id]
+    [user?.id, hiddenUsers]
   );
 
-  return { onlineUsers, isUserOnline, formatUserLastSeen };
+  return { onlineUsers, hiddenUsers, isUserOnline, formatUserLastSeen };
 }
+

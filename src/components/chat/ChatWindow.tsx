@@ -19,6 +19,7 @@ import { useBackHandler } from '../../lib/backButtonRegistry';
 
 import { usePresence } from '../../lib/hooks/usePresence';
 import { formatLastSeen } from '../../lib/utils/presenceUtils';
+import { globalPresenceManager } from '../../lib/presenceManager';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
 
   const handleSend = useCallback(async (text: string) => {
     sendTyping(false); // clear "typing..." indicator on the other side immediately
+    globalPresenceManager.touch();
     const targetReply = replyTo;
     setReplyTo(null);
     await sendMessage(text, targetReply);
@@ -547,8 +549,8 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${targetUserId}` },
         (payload) => {
-          if (payload.new && (payload.new as any).last_seen_at) {
-            setLiveLastSeen((payload.new as any).last_seen_at);
+          if (payload.new) {
+            setLiveLastSeen((payload.new as any).last_seen_at ?? null);
           }
         }
       )
@@ -557,6 +559,20 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
       supabase.removeChannel(channel);
     };
   }, [targetUserId]);
+
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.sender_id === targetUserId) {
+      setLiveLastSeen(lastMsg.created_at || new Date().toISOString());
+    }
+  }, [messages, targetUserId]);
+
+  useEffect(() => {
+    if (otherIsTyping) {
+      setLiveLastSeen(new Date().toISOString());
+    }
+  }, [otherIsTyping]);
 
   const online = isUserOnline(targetUserId, liveLastSeen);
 
@@ -627,12 +643,11 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               {otherIsTyping ? (
                 <span className="text-gold font-medium animate-pulse">typing…</span>
               ) : online ? (
-                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                <span className="text-emerald-400 font-medium">
                   online
                 </span>
               ) : (
-                <span className="text-muted">{formatUserLastSeen(liveLastSeen, false)}</span>
+                <span className="text-muted">{formatUserLastSeen(liveLastSeen, false, targetUserId)}</span>
               )}
             </p>
           </div>

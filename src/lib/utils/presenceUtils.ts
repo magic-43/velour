@@ -1,3 +1,5 @@
+import { supabase } from '../supabase';
+
 /**
  * Utility functions for user online status and last-seen formatting
  */
@@ -18,6 +20,29 @@ export function setMyLastSeenPrivacy(userId: string, privacy: LastSeenPrivacy) {
   try {
     localStorage.setItem(`velour_privacy_last_seen_${userId}`, privacy);
     window.dispatchEvent(new CustomEvent('velour:privacy_changed', { detail: { privacy } }));
+
+    // Sync to Supabase auth metadata and profiles
+    if (privacy === 'nobody') {
+      Promise.resolve(
+        supabase
+          .from('profiles')
+          .update({ last_seen_at: null })
+          .eq('id', userId)
+      ).catch(() => {});
+      Promise.resolve(
+        supabase.auth.updateUser({ data: { last_seen_privacy: 'nobody' } })
+      ).catch(() => {});
+    } else {
+      Promise.resolve(
+        supabase
+          .from('profiles')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', userId)
+      ).catch(() => {});
+      Promise.resolve(
+        supabase.auth.updateUser({ data: { last_seen_privacy: 'everyone' } })
+      ).catch(() => {});
+    }
   } catch {}
 }
 
@@ -28,9 +53,15 @@ export function isUserOnline(
   userId?: string | null,
   lastSeenAt?: string | null,
   onlineUserIds?: Set<string>,
+  hiddenUserIds?: Set<string>,
   viewerUserId?: string
 ): boolean {
   if (!userId) return false;
+
+  // If target user is explicitly hidden in presence, they are NEVER online
+  if (hiddenUserIds && hiddenUserIds.has(userId)) {
+    return false;
+  }
 
   // If viewer has disabled their own last seen / online visibility, they cannot see others' (WhatsApp rule)
   if (viewerUserId && getMyLastSeenPrivacy(viewerUserId) === 'nobody') {
@@ -42,10 +73,10 @@ export function isUserOnline(
     return true;
   }
 
-  // 2. Fallback to last_seen_at within 2 minutes (120,000 ms)
+  // 2. Fallback to last_seen_at within 5 minutes (300,000 ms) to avoid abrupt chat disconnects
   if (!lastSeenAt) return false;
   const diff = Date.now() - new Date(lastSeenAt).getTime();
-  return diff >= 0 && diff < 2 * 60 * 1000;
+  return diff >= 0 && diff < 5 * 60 * 1000;
 }
 
 /**
@@ -62,8 +93,16 @@ export function isUserOnline(
 export function formatLastSeen(
   lastSeenAt?: string | null,
   isOnline = false,
-  viewerUserId?: string
+  viewerUserId?: string,
+  targetUserId?: string | null,
+  hiddenUserIds?: Set<string>
 ): string {
+  // If target user is explicitly hidden, never show timestamp or online
+  if (targetUserId && hiddenUserIds && hiddenUserIds.has(targetUserId)) {
+    return 'last seen recently';
+  }
+
+  // If viewer has disabled their own last seen / online visibility, they cannot see others'
   if (viewerUserId && getMyLastSeenPrivacy(viewerUserId) === 'nobody') {
     return 'last seen recently';
   }
@@ -132,3 +171,4 @@ export function formatLastSeen(
 
   return `last seen ${d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
+

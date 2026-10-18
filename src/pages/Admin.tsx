@@ -596,7 +596,13 @@ export default function Admin() {
         if (fanRaw) {
           const fanList = JSON.parse(fanRaw);
           const updated = fanList.map((item: any) => {
-            if (item.id === tx.attachment_id || item.mediaUrl === tx.media_url || item.id === tx.id) {
+            if (
+              item.id === tx.attachment_id ||
+              item.batchId === tx.attachment_id ||
+              item.mediaUrl === tx.media_url ||
+              item.id === tx.id ||
+              (tx.attachment_id && item.id?.startsWith(tx.attachment_id))
+            ) {
               return { ...item, status: 'verified' };
             }
             return item;

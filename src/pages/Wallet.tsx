@@ -448,8 +448,10 @@ export default function Wallet() {
           const updatedFanList = fanList.map((item: any) => {
             if (
               item.id === tx.attachment_id ||
+              item.batchId === tx.attachment_id ||
               item.mediaUrl === tx.media_url ||
-              item.id === tx.id
+              item.id === tx.id ||
+              (tx.attachment_id && item.id?.startsWith(tx.attachment_id))
             ) {
               return { ...item, status: 'verified' };
             }

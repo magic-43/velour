@@ -304,7 +304,12 @@ export function useMessages(conversationId: string | null) {
         if (raw) {
           const list = JSON.parse(raw);
           const updated = list.map((item: any) => {
-            if (item.id === id || item.mediaUrl === id) {
+            if (
+              item.id === id ||
+              item.batchId === id ||
+              item.mediaUrl === id ||
+              (id && item.id?.startsWith(id))
+            ) {
               return { ...item, status: 'verified' };
             }
             return item;

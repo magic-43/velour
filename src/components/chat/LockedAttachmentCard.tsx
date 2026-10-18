@@ -326,6 +326,14 @@ export default function LockedAttachmentCard({
         batchCount={items.length}
         thumbnailUrl={media.thumbnailUrl || media.mediaUrl}
         mediaUrls={items.map(i => i.mediaUrl).filter(Boolean) as string[]}
+        mediaItems={items.map((it, idx) => ({
+          id: it.id || (media.batchId ? `${media.batchId}_${idx}` : undefined),
+          mediaUrl: it.mediaUrl,
+          mediaType: it.mediaType || (it.mediaUrl?.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image'),
+          thumbnailUrl: it.thumbnailUrl,
+          title: it.title || media.title,
+          durationSecs: it.durationSecs,
+        }))}
         onSuccess={handlePaymentSuccess}
       />
     </div>
