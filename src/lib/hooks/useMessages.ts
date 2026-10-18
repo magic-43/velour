@@ -38,6 +38,10 @@ export function useMessages(conversationId: string | null) {
   const [loadingMore, setLoadingMore] = useState(false);
   const oldestCursorRef = useRef<string | null>(null);
   const hasLoadedRef = useRef(false);
+  // Ref to current messages — lets loadUnlocks read them without a circular dep
+  const messagesRef = useRef<MessageWithSender[]>([]);
+  // Ref to current loadUnlocks fn — lets fetchInitial trigger a re-scan after messages load
+  const loadUnlocksRef = useRef<(() => void) | null>(null);
 
   // Fast path: load cached messages from IndexedDB immediately for 0ms offline display
   useEffect(() => {
@@ -79,6 +83,11 @@ export function useMessages(conversationId: string | null) {
   useEffect(() => {
     hasLoadedRef.current = false;
   }, [conversationId]);
+
+  // Keep messagesRef in sync so loadUnlocks can read the latest messages without a circular dep
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Listen for outbox synchronizer confirmation events and background upload events
   useEffect(() => {
@@ -179,17 +188,18 @@ export function useMessages(conversationId: string | null) {
         console.warn('Error fetching db attachment_unlocks:', dbErr);
       }
 
-      // 3. Scan in-chat unlock receipts in current messages
-      if (messages && messages.length > 0) {
-        for (const m of messages) {
+      // 3. Scan in-chat unlock receipts using messagesRef (avoids circular dep on messages state)
+      const currentMessages = messagesRef.current;
+      if (currentMessages && currentMessages.length > 0) {
+        for (const m of currentMessages) {
           if (m.content && (m.content.includes('unlock_confirmed') || m.content.includes('unlock-confirmed'))) {
             const parsedConf = parseUnlockConfirmedMessage(m.content);
             if (parsedConf.isUnlockConfirmed && parsedConf.payload) {
               const p = parsedConf.payload;
-              if (p.batchId) unlocked.add(p.batchId);
-              if (p.attachmentId) unlocked.add(p.attachmentId);
-              for (const u of p.mediaUrls || []) unlocked.add(u);
-              if (p.thumbnailUrl) unlocked.add(p.thumbnailUrl);
+              if (p.batchId) { unlocked.add(p.batchId); pending.delete(p.batchId); }
+              if (p.attachmentId) { unlocked.add(p.attachmentId); pending.delete(p.attachmentId); }
+              for (const u of p.mediaUrls || []) { unlocked.add(u); pending.delete(u); }
+              if (p.thumbnailUrl) { unlocked.add(p.thumbnailUrl); pending.delete(p.thumbnailUrl); }
             }
           }
 
@@ -197,15 +207,17 @@ export function useMessages(conversationId: string | null) {
           if (parsed.isUnlockRequest && parsed.request) {
             const req = parsed.request;
             if (req.status === 'verified') {
-              if (req.attachmentId) unlocked.add(req.attachmentId);
-              if (req.batchId) unlocked.add(req.batchId);
-              if (req.thumbnailUrl) unlocked.add(req.thumbnailUrl);
-              for (const u of req.mediaUrls || []) unlocked.add(u);
+              // Verified in message content → always wins over pending
+              if (req.attachmentId) { unlocked.add(req.attachmentId); pending.delete(req.attachmentId); }
+              if (req.batchId) { unlocked.add(req.batchId); pending.delete(req.batchId); }
+              if (req.thumbnailUrl) { unlocked.add(req.thumbnailUrl); pending.delete(req.thumbnailUrl); }
+              for (const u of req.mediaUrls || []) { unlocked.add(u); pending.delete(u); }
             } else if (req.status === 'pending') {
-              if (req.attachmentId) pending.add(req.attachmentId);
-              if (req.batchId) pending.add(req.batchId);
-              if (req.thumbnailUrl) pending.add(req.thumbnailUrl);
-              for (const u of req.mediaUrls || []) pending.add(u);
+              // Only mark pending if NOT already verified by DB or a later message
+              if (req.attachmentId && !unlocked.has(req.attachmentId)) pending.add(req.attachmentId);
+              if (req.batchId && !unlocked.has(req.batchId)) pending.add(req.batchId);
+              if (req.thumbnailUrl && !unlocked.has(req.thumbnailUrl)) pending.add(req.thumbnailUrl);
+              for (const u of req.mediaUrls || []) if (!unlocked.has(u)) pending.add(u);
             }
           }
         }
@@ -215,9 +227,12 @@ export function useMessages(conversationId: string | null) {
       setPendingAttachmentIds(pending);
     };
 
+    // Store loadUnlocks in a ref so fetchInitial can trigger a re-scan after messages are ready
+    loadUnlocksRef.current = loadUnlocks;
+
     loadUnlocks();
 
-    // 4. Realtime listener on attachment_unlocks
+    // 4. Realtime listener on attachment_unlocks — fires when creator approves
     const channel = supabase
       .channel(`fan_unlocks_${user.id}`)
       .on(
@@ -232,6 +247,8 @@ export function useMessages(conversationId: string | null) {
           const newRow = payload.new;
           if (newRow?.status === 'verified' && newRow?.attachment_id) {
             markAttachmentUnlocked(newRow.attachment_id);
+            // Re-run full loadUnlocks to pick up any message-based unlocks too
+            setTimeout(() => loadUnlocksRef.current?.(), 300);
           }
         }
       )
@@ -264,7 +281,8 @@ export function useMessages(conversationId: string | null) {
       window.removeEventListener('velour:unlock_verified', handleLocalUnlockVerified);
       window.removeEventListener('velour:unlock_pending', handleLocalUnlockPending);
     };
-  }, [user?.id, messages]);
+  // Only re-run when user changes; messages are read via messagesRef to avoid circular reruns
+  }, [user?.id]);
 
   const markAttachmentPending = useCallback((id: string) => {
     setPendingAttachmentIds(prev => new Set([...prev, id]));
@@ -341,6 +359,8 @@ export function useMessages(conversationId: string | null) {
         setHasMore(data.length === PAGE_SIZE);
         oldestCursorRef.current = sorted[0]?.created_at ?? null;
         hasLoadedRef.current = true;
+        // Re-scan unlock states now that messages are loaded — catches verified statuses on refresh
+        setTimeout(() => loadUnlocksRef.current?.(), 100);
       } else if (error) {
         console.warn('Network error fetching messages (using offline cache):', error.message);
       }
@@ -732,8 +752,17 @@ export function useMessages(conversationId: string | null) {
             .eq('id', incoming.id)
             .single();
 
-          if (data) {
-            const confirmedMsg = data as MessageWithSender;
+          const confirmedMsg: MessageWithSender = (data as MessageWithSender) || {
+            ...(incoming as Message),
+            sender: {
+              id: incoming.sender_id,
+              username: '',
+              display_name: null,
+              avatar_url: null,
+            },
+          };
+
+          if (confirmedMsg) {
             if (confirmedMsg.content && (confirmedMsg.content.includes('unlock_confirmed') || confirmedMsg.content.includes('unlock-confirmed'))) {
               const parsedConf = parseUnlockConfirmedMessage(confirmedMsg.content);
               if (parsedConf.isUnlockConfirmed && parsedConf.payload) {

@@ -227,6 +227,18 @@ export default function UnlockPaymentModal({
           });
           if (insertErr) {
             console.error('Failed to post in-chat unlock receipt message:', insertErr);
+          } else {
+            // Keep conversation preview updated for creator inbox
+            try {
+              await supabase
+                .from('conversations')
+                .update({
+                  last_message_preview: `🎟️ Unlock Request ($${amountUsd})`,
+                  last_message_at: new Date().toISOString(),
+                  last_message_sender_id: user.id,
+                })
+                .eq('id', effectiveConversationId);
+            } catch {}
           }
         } catch (chatMsgErr) {
           console.error('Could not post in-chat unlock receipt message:', chatMsgErr);
@@ -258,10 +270,12 @@ export default function UnlockPaymentModal({
       }
 
       // 4. Resilient insert to attachment_unlocks
-      if (safeAttachmentId) {
+      // Use safeAttachmentId (UUID) if available, else fall back to raw attachmentId (batchId/URL)
+      const unlockKey = safeAttachmentId || attachmentId || null;
+      if (unlockKey) {
         try {
           await supabase.from('attachment_unlocks').insert({
-            attachment_id: safeAttachmentId,
+            attachment_id: unlockKey,
             fan_id: user.id,
             amount_usd: amountUsd,
             status: 'pending',

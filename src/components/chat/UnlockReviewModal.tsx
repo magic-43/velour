@@ -18,6 +18,8 @@ import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import {
   UnlockRequestPayload,
   updateUnlockRequestContentStatus,
+  encodeUnlockConfirmedMessage,
+  UnlockConfirmedPayload,
 } from '../../lib/unlockRequests';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
@@ -82,20 +84,49 @@ export default function UnlockReviewModal({
           ? request.mediaUrls
           : (request.thumbnailUrl ? [request.thumbnailUrl] : []);
 
-      // 1. Update the existing unlock request message in place (NO new message is inserted)
-      const updatedContent = updateUnlockRequestContentStatus(message.content || '', 'verified');
-      await supabase
-        .from('messages')
-        .update({ content: updatedContent })
-        .eq('id', message.id);
+      // 1. Send invisible real-time signal via Supabase Realtime (creator inserts it)
+      const confirmedPayload: UnlockConfirmedPayload = {
+        version: 1,
+        type: 'unlock_confirmed',
+        fanId: request.fanId || message.sender_id,
+        batchId: targetBatchId,
+        attachmentId: request.attachmentId,
+        mediaUrls: targetUrls,
+        thumbnailUrl: request.thumbnailUrl,
+        title: request.title,
+        amountUsd: request.amountUsd,
+        confirmedAt: new Date().toISOString(),
+      };
 
-      // Clean up any legacy ghost confirmation rows for this conversation
       try {
+        await supabase.from('messages').insert({
+          conversation_id: message.conversation_id,
+          sender_id: user.id,
+          sender_type: 'creator',
+          content: encodeUnlockConfirmedMessage(confirmedPayload),
+          message_type: 'text',
+        });
+      } catch (insertConfErr) {
+        console.error('Failed to insert unlock_confirmed message:', insertConfErr);
+      }
+
+      // Also attempt to update the existing unlock request message in place
+      try {
+        const updatedContent = updateUnlockRequestContentStatus(message.content || '', 'verified');
         await supabase
           .from('messages')
-          .delete()
-          .eq('conversation_id', message.conversation_id)
-          .or('content.like.%unlock_confirmed%,content.like.%unlock-confirmed%');
+          .update({ content: updatedContent })
+          .eq('id', message.id);
+      } catch {}
+
+      // Keep conversation preview clean
+      try {
+        await supabase
+          .from('conversations')
+          .update({
+            last_message_preview: `🔓 Unlocked exclusive content`,
+          })
+          .eq('id', message.conversation_id);
       } catch {}
 
       // 2. Update transactions_ledger to verified
@@ -109,18 +140,36 @@ export default function UnlockReviewModal({
         console.warn('transactions_ledger update error:', e);
       }
 
-      // 3. Update attachment_unlocks if UUID
-      if (request.attachmentId) {
-        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        if (UUID_REGEX.test(request.attachmentId)) {
-          try {
-            await supabase
-              .from('attachment_unlocks')
-              .update({ status: 'verified' })
-              .eq('attachment_id', request.attachmentId)
-              .eq('fan_id', message.sender_id);
-          } catch {}
-        }
+      // 3. Update/insert attachment_unlocks to verified so fan's Realtime listener fires
+      // Try with UUID attachment_id first, then fall back to batchId/URL key
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const unlockKeys = [
+        request.attachmentId && UUID_REGEX.test(request.attachmentId) ? request.attachmentId : null,
+        targetBatchId,
+        request.thumbnailUrl,
+      ].filter((k): k is string => Boolean(k));
+
+      for (const unlockKey of unlockKeys) {
+        try {
+          // Try UPDATE first (row may already exist from fan's submit)
+          const { data: updResult, error: updErr } = await supabase
+            .from('attachment_unlocks')
+            .update({ status: 'verified' })
+            .eq('attachment_id', unlockKey)
+            .eq('fan_id', message.sender_id)
+            .select('id')
+            .maybeSingle();
+
+          // If no row existed (updResult is null), upsert to create it
+          if (!updErr && !updResult?.id) {
+            await supabase.from('attachment_unlocks').upsert({
+              attachment_id: unlockKey,
+              fan_id: message.sender_id,
+              status: 'verified',
+              amount_usd: request.amountUsd,
+            }, { onConflict: 'attachment_id,fan_id' });
+          }
+        } catch {}
       }
 
       // 4. Update creator earnings balance

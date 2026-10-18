@@ -95,15 +95,7 @@ export function useConversations() {
                 c.last_message_preview.startsWith('{"version":1'));
 
             if (isCorrupted) {
-              // Delete any ghost confirmation rows from messages for this conversation
-              supabase
-                .from('messages')
-                .delete()
-                .eq('conversation_id', c.id)
-                .or('content.like.%unlock_confirmed%,content.like.%unlock-confirmed%')
-                .then(() => {});
-
-              // Find the latest genuine message in this conversation
+              // Find the latest genuine message in this conversation for display
               const { data: realMsg } = await supabase
                 .from('messages')
                 .select('content, created_at, sender_id, message_type')

@@ -115,7 +115,6 @@ export default function LockedAttachmentCard({
 
   const handlePaymentSuccess = () => {
     setLocalPending(true);
-    onUnlocked?.();
   };
 
   return (
