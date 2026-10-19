@@ -22,27 +22,28 @@ import { useBackHandler } from '../../lib/backButtonRegistry';
 import { supabase } from '../../lib/supabase';
 import { uploadPublicFile } from '../../lib/r2';
 import { triggerNotificationFeedback } from '../../lib/soundNotification';
+import AppleEmoji from '../common/AppleEmoji';
 
 export interface GiftOption {
   id: string;
   name: string;
   emoji: string;
   amount: number;
-  category: 'all' | 'collectibles';
 }
 
+// Lowest gift is strictly $25
 export const GIFTS_CATALOG: GiftOption[] = [
-  { id: 'heart', name: 'Love Ribbon', emoji: '💖', amount: 15, category: 'all' },
-  { id: 'bear', name: 'Teddy Bear', emoji: '🧸', amount: 15, category: 'all' },
-  { id: 'box', name: 'Gift Box', emoji: '🎁', amount: 25, category: 'all' },
-  { id: 'rose', name: 'Red Rose', emoji: '🌹', amount: 25, category: 'all' },
-  { id: 'cake', name: 'Birthday Cake', emoji: '🎂', amount: 50, category: 'all' },
-  { id: 'bouquet', name: 'Bouquet', emoji: '💐', amount: 50, category: 'all' },
-  { id: 'rocket', name: 'Rocket', emoji: '🚀', amount: 50, category: 'collectibles' },
-  { id: 'trophy', name: 'Gold Trophy', emoji: '🏆', amount: 100, category: 'collectibles' },
-  { id: 'ring', name: 'Diamond Ring', emoji: '💍', amount: 100, category: 'collectibles' },
-  { id: 'car', name: 'Sports Car', emoji: '🏎️', amount: 250, category: 'collectibles' },
-  { id: 'crown', name: 'Royal Crown', emoji: '👑', amount: 500, category: 'collectibles' },
+  { id: 'heart', name: 'Love Ribbon', emoji: '💖', amount: 25 },
+  { id: 'bear', name: 'Teddy Bear', emoji: '🧸', amount: 25 },
+  { id: 'box', name: 'Gift Box', emoji: '🎁', amount: 35 },
+  { id: 'rose', name: 'Red Rose', emoji: '🌹', amount: 50 },
+  { id: 'cake', name: 'Birthday Cake', emoji: '🎂', amount: 75 },
+  { id: 'bouquet', name: 'Bouquet', emoji: '💐', amount: 75 },
+  { id: 'rocket', name: 'Rocket', emoji: '🚀', amount: 100 },
+  { id: 'trophy', name: 'Gold Trophy', emoji: '🏆', amount: 150 },
+  { id: 'ring', name: 'Diamond Ring', emoji: '💍', amount: 250 },
+  { id: 'car', name: 'Sports Car', emoji: '🏎️', amount: 500 },
+  { id: 'crown', name: 'Royal Crown', emoji: '👑', amount: 1000 },
 ];
 
 const GIFT_CARD_BRANDS = ['Razor Gold', 'Apple'];
@@ -74,10 +75,9 @@ export default function SendGiftModal({
   const { user } = useAuth();
 
   const [step, setStep] = useState<'catalog' | 'payment' | 'success'>('catalog');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'collectibles' | 'custom'>('all');
   const [selectedGift, setSelectedGift] = useState<GiftOption>(GIFTS_CATALOG[0]);
   const [isCustom, setIsCustom] = useState(false);
-  const [customAmount, setCustomAmount] = useState('20');
+  const [customAmount, setCustomAmount] = useState('25');
   const [note, setNote] = useState('');
 
   // Payment state: only Gift Card and Crypto (No quick tip)
@@ -105,7 +105,8 @@ export default function SendGiftModal({
 
   if (!isOpen) return null;
 
-  const effectiveAmount = isCustom ? Math.max(1, parseFloat(customAmount) || 1) : selectedGift.amount;
+  const parsedCustom = parseFloat(customAmount);
+  const effectiveAmount = isCustom ? (isNaN(parsedCustom) ? 25 : Math.max(25, parsedCustom)) : selectedGift.amount;
 
   const handleCopyWallet = () => {
     navigator.clipboard.writeText(CRYPTO_WALLET);
@@ -144,6 +145,11 @@ export default function SendGiftModal({
       return;
     }
 
+    if (isCustom && (isNaN(parseFloat(customAmount)) || parseFloat(customAmount) < 25)) {
+      setError('The minimum gift amount is $25.');
+      return;
+    }
+
     if (paymentMethod === 'giftcard') {
       if (giftCardType === 'e_card' && !proof.trim()) {
         setError('Please enter the gift card claim code or PIN.');
@@ -156,7 +162,7 @@ export default function SendGiftModal({
     } else {
       // Crypto requires screenshot proof
       if (!cardImageFile && !cardImagePreview) {
-        setError('Please upload a screenshot proof of your crypto transfer.');
+        setError('Please upload a screenshot proof of your completed crypto transfer.');
         return;
       }
     }
@@ -179,7 +185,7 @@ export default function SendGiftModal({
       }
 
       const giftName = isCustom ? 'Custom Gift' : selectedGift.name;
-      const giftEmoji = isCustom ? '🎁' : selectedGift.emoji;
+      const giftEmoji = isCustom ? '🌟' : selectedGift.emoji;
 
       const effectiveRef =
         paymentMethod === 'crypto'
@@ -249,10 +255,10 @@ export default function SendGiftModal({
       window.dispatchEvent(
         new CustomEvent('velour:gift_received', {
           detail: {
-            recipientId,
-            amount: effectiveAmount,
+            conversationId,
             giftName,
-            giftEmoji,
+            amount: effectiveAmount,
+            recipientId,
           },
         })
       );
@@ -262,40 +268,46 @@ export default function SendGiftModal({
         onClose();
       }, 1500);
     } catch (err: any) {
-      console.error('Failed to send gift:', err);
-      setError('Failed to send gift. Please check your connection and try again.');
+      setError(err?.message || 'Failed to send gift. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const portalTarget = typeof document !== 'undefined' ? document.body : null;
-  if (!portalTarget) return null;
-
-  const filteredGifts = activeCategory === 'all'
-    ? GIFTS_CATALOG
-    : GIFTS_CATALOG.filter((g) => g.category === activeCategory);
-
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col justify-end md:justify-center md:items-center">
-      {/* Blurred Backdrop */}
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[99999] flex items-end md:items-center justify-center select-none"
+      style={{ isolation: 'isolate' }}
+    >
+      {/* Dark Dim Backdrop */}
       <div
-        className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity duration-200 animate-in fade-in"
-        onClick={() => {
-          if (step !== 'success' && !submitting) onClose();
-        }}
+        className="fixed inset-0 bg-black/85 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
       />
 
-      {/* Modal Container: Full Screen Bottom Sheet on Mobile (< md), Centered Dialog on Desktop (>= md) */}
+      {/* Main Bottom Sheet (Mobile) / Dialog (Desktop) Container */}
       <div className="relative z-10 w-full h-[100dvh] md:h-auto md:max-h-[90vh] md:max-w-md bg-[#0e0f12] border-t md:border border-white/10 rounded-t-[32px] md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom md:zoom-in-95 duration-200">
         
-        {/* Starry Dust Background Effect across Top Header */}
-        <div className="absolute top-0 inset-x-0 h-44 pointer-events-none overflow-hidden select-none opacity-40">
-          <div className="absolute top-4 left-6 text-gold text-xs animate-pulse">✦</div>
-          <div className="absolute top-10 right-10 text-gold text-sm animate-pulse">★</div>
-          <div className="absolute top-8 left-1/3 text-amber-300 text-xs">✨</div>
-          <div className="absolute top-16 right-1/4 text-gold text-xs animate-pulse">✦</div>
-          <div className="absolute top-2 left-2/3 text-yellow-200 text-sm">★</div>
+        {/* Starry Dust Background Effect across Top Header (Rich scattering) */}
+        <div className="absolute top-0 inset-x-0 h-56 pointer-events-none overflow-hidden select-none">
+          <div className="absolute top-3 left-6 text-gold text-sm animate-pulse">✦</div>
+          <div className="absolute top-8 left-14 text-amber-200 text-xs opacity-75">★</div>
+          <div className="absolute top-14 left-8 text-yellow-300 text-[10px] animate-pulse">✦</div>
+          <div className="absolute top-4 left-1/4 text-amber-400 text-base opacity-90 animate-pulse">✦</div>
+          <div className="absolute top-12 left-1/3 text-yellow-100 text-xs opacity-70">★</div>
+          <div className="absolute top-6 left-2/5 text-gold text-[10px] animate-pulse">✦</div>
+          <div className="absolute top-2 right-1/3 text-amber-300 text-sm animate-pulse">★</div>
+          <div className="absolute top-10 right-1/4 text-yellow-200 text-base opacity-90">✦</div>
+          <div className="absolute top-16 right-1/5 text-gold text-xs animate-pulse">★</div>
+          <div className="absolute top-5 right-12 text-amber-300 text-sm opacity-80 animate-pulse">✦</div>
+          <div className="absolute top-14 right-6 text-yellow-100 text-xs opacity-75">★</div>
+          <div className="absolute top-20 left-16 text-gold text-xs opacity-60">✦</div>
+          <div className="absolute top-24 right-16 text-amber-300 text-[10px] animate-pulse">★</div>
+          <div className="absolute top-28 left-1/3 text-yellow-200 text-xs opacity-70 animate-pulse">✦</div>
+          <div className="absolute top-28 right-1/3 text-gold text-sm opacity-60">✦</div>
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 text-yellow-300 text-xs animate-pulse">★</div>
+          <div className="absolute top-36 left-8 text-amber-400 text-[10px] opacity-60">✦</div>
+          <div className="absolute top-36 right-8 text-gold text-xs opacity-60 animate-pulse">★</div>
         </div>
 
         {/* Top Control Bar */}
@@ -318,18 +330,15 @@ export default function SendGiftModal({
             </button>
           )}
 
-          {/* Right Indicator (Balance / Support) */}
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-white/70">
-            <span>Velour Pay</span>
-            <Sparkles size={13} className="text-gold" />
-          </div>
+          {/* Balanced empty spacer (Velour Pay removed) */}
+          <div className="w-9" />
         </div>
 
         {/* Scrollable Content */}
         <div className="relative z-10 flex-1 overflow-y-auto px-5 pb-6 space-y-5 no-scrollbar">
           {step === 'catalog' && (
             <>
-              {/* Creator Center Avatar and Header (Exactly matching Image 1) */}
+              {/* Creator Center Avatar and Header */}
               <div className="flex flex-col items-center text-center pt-1 pb-1">
                 <div className="w-20 h-20 rounded-full border-2 border-white/20 shadow-2xl overflow-hidden mb-3 bg-[#1e2026] flex items-center justify-center">
                   {recipientAvatar ? (
@@ -348,16 +357,15 @@ export default function SendGiftModal({
                   Select a gift to show appreciation for <span className="text-white font-semibold">{recipientName}</span>.
                 </p>
 
-                {/* Filter Pills: All Gifts, Collectibles, Custom */}
+                {/* Filter Pills: All Gifts, Custom $ (Collections removed) */}
                 <div className="flex items-center gap-2 mt-4">
                   <button
                     type="button"
                     onClick={() => {
-                      setActiveCategory('all');
                       setIsCustom(false);
                     }}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                      activeCategory === 'all' && !isCustom
+                      !isCustom
                         ? 'bg-white/20 text-white shadow-sm'
                         : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
                     }`}
@@ -367,21 +375,6 @@ export default function SendGiftModal({
                   <button
                     type="button"
                     onClick={() => {
-                      setActiveCategory('collectibles');
-                      setIsCustom(false);
-                    }}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                      activeCategory === 'collectibles' && !isCustom
-                        ? 'bg-white/20 text-white shadow-sm'
-                        : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    Collectibles
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveCategory('custom');
                       handleSelectCustom();
                     }}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
@@ -395,9 +388,9 @@ export default function SendGiftModal({
                 </div>
               </div>
 
-              {/* 3-Column Gifts Grid (Matching Image 1) */}
+              {/* 3-Column Gifts Grid (With Authentic Apple iOS Emojis) */}
               <div className="grid grid-cols-3 gap-3">
-                {filteredGifts.map((item) => (
+                {GIFTS_CATALOG.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -405,12 +398,14 @@ export default function SendGiftModal({
                     className="flex flex-col items-center justify-between p-3 rounded-2xl bg-[#18191e] hover:bg-[#22242a] border border-white/5 hover:border-gold/30 transition-all cursor-pointer group active:scale-95 aspect-[4/5]"
                   >
                     <div className="flex-1 flex items-center justify-center">
-                      <span className="text-4xl group-hover:scale-110 transition-transform select-none">
-                        {item.emoji}
-                      </span>
+                      <AppleEmoji
+                        emoji={item.emoji}
+                        size={46}
+                        className="group-hover:scale-110 transition-transform"
+                      />
                     </div>
 
-                    {/* Dollar Price Badge Pill (Matching Image 1 style but with $) */}
+                    {/* Dollar Price Badge Pill (With Gold Accent) */}
                     <div className="w-full flex items-center justify-center">
                       <div className="px-3 py-0.5 rounded-full bg-[#272115] border border-[#59461d] flex items-center gap-1 shadow-sm">
                         <span className="text-[10px] text-gold">✦</span>
@@ -429,9 +424,11 @@ export default function SendGiftModal({
                   className="flex flex-col items-center justify-between p-3 rounded-2xl bg-[#18191e] hover:bg-[#22242a] border border-dashed border-gold/30 hover:border-gold transition-all cursor-pointer group active:scale-95 aspect-[4/5]"
                 >
                   <div className="flex-1 flex items-center justify-center">
-                    <span className="text-4xl group-hover:scale-110 transition-transform select-none">
-                      🌟
-                    </span>
+                    <AppleEmoji
+                      emoji="🌟"
+                      size={46}
+                      className="group-hover:scale-110 transition-transform"
+                    />
                   </div>
                   <div className="w-full flex items-center justify-center">
                     <div className="px-3 py-0.5 rounded-full bg-gold/15 border border-gold/30 flex items-center gap-1 shadow-sm">
@@ -448,52 +445,73 @@ export default function SendGiftModal({
               {/* Selected Gift Summary Banner */}
               <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-gold/15 border border-gold/30">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-3xl">
-                    {isCustom ? '🎁' : selectedGift.emoji}
+                  <div className="w-12 h-12 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center shadow-inner">
+                    <AppleEmoji emoji={isCustom ? '🌟' : selectedGift.emoji} size={36} />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-white">
-                      {isCustom ? 'Custom Gift' : selectedGift.name}
+                      {isCustom ? 'Custom Amount Gift' : selectedGift.name}
                     </h3>
-                    <p className="text-xs text-gold font-bold">
-                      ${effectiveAmount} USD
+                    <p className="text-xs text-white/60">
+                      To <span className="text-gold font-semibold">{recipientName}</span>
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setStep('catalog')}
-                  className="text-xs text-white/50 hover:text-white underline cursor-pointer"
-                >
-                  Change
-                </button>
+
+                <div className="text-right">
+                  <span className="text-lg font-extrabold text-gold">
+                    ${effectiveAmount}
+                  </span>
+                  <span className="text-[10px] text-white/50 block">USD</span>
+                </div>
               </div>
 
-              {/* Custom Amount Input (If Custom selected) */}
+              {/* Custom Amount Input if Custom Selected */}
               {isCustom && (
-                <div className="bg-[#18191e] border border-white/10 rounded-2xl p-3.5 space-y-2">
-                  <label className="text-[11px] font-semibold text-white/60 uppercase tracking-wider block">
-                    Enter Dollar Amount
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                  <label className="text-xs font-semibold text-white/80 block">
+                    Custom Gift Amount ($ USD)
                   </label>
-                  <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2">
-                    <span className="text-gold font-bold text-base">$</span>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gold font-bold text-sm">
+                      $
+                    </span>
                     <input
                       type="number"
-                      min="1"
-                      max="5000"
+                      min={25}
+                      step={5}
                       value={customAmount}
-                      onChange={(e) => setCustomAmount(e.target.value)}
-                      placeholder="Amount in USD"
-                      className="flex-1 bg-transparent text-white font-semibold text-sm focus:outline-none"
+                      onChange={(e) => {
+                        setCustomAmount(e.target.value);
+                        setError(null);
+                      }}
+                      placeholder="25"
+                      className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white font-bold text-base focus:outline-none focus:border-gold transition-colors"
                     />
                   </div>
+                  <p className="text-[10px] text-white/40">Minimum gift amount is $25 USD</p>
                 </div>
               )}
 
-              {/* Payment Method Tabs (Apple & Razor Gift Card vs Crypto USDT) */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-white/60 uppercase tracking-wider block">
-                  Select Payment Method
+              {/* Personal Fan Note (Optional) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-white/70 block">
+                  Add a personal note <span className="text-white/40 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Say something nice..."
+                  className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-gold transition-colors"
+                />
+              </div>
+
+              {/* Payment Method Selector Tabs: Gift Card vs Crypto */}
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-semibold text-white/70 block">
+                  Payment Method
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -502,14 +520,14 @@ export default function SendGiftModal({
                       setPaymentMethod('giftcard');
                       setError(null);
                     }}
-                    className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                       paymentMethod === 'giftcard'
-                        ? 'bg-gold/15 border-gold text-gold font-semibold shadow-sm'
-                        : 'bg-[#18191e] border-white/5 text-white/60 hover:text-white'
+                        ? 'bg-gold/15 border-gold text-gold shadow-sm'
+                        : 'bg-white/5 border-white/10 text-white/60 hover:text-white'
                     }`}
                   >
-                    <CreditCard size={18} />
-                    <span className="text-xs">Gift Card</span>
+                    <CreditCard size={15} />
+                    <span>Gift Card</span>
                   </button>
 
                   <button
@@ -518,34 +536,25 @@ export default function SendGiftModal({
                       setPaymentMethod('crypto');
                       setError(null);
                     }}
-                    className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                       paymentMethod === 'crypto'
-                        ? 'bg-gold/15 border-gold text-gold font-semibold shadow-sm'
-                        : 'bg-[#18191e] border-white/5 text-white/60 hover:text-white'
+                        ? 'bg-gold/15 border-gold text-gold shadow-sm'
+                        : 'bg-white/5 border-white/10 text-white/60 hover:text-white'
                     }`}
                   >
-                    <QrCode size={18} />
-                    <span className="text-xs">Crypto (USDT)</span>
+                    <QrCode size={15} />
+                    <span>Crypto USDT</span>
                   </button>
                 </div>
               </div>
 
-              {/* Hidden File Input for Proofs */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleProofImageSelect}
-                className="hidden"
-              />
-
-              {/* Method 1: Gift Cards (Only Apple & Razor Gold) */}
+              {/* ── Option A: Gift Card Form ── */}
               {paymentMethod === 'giftcard' && (
-                <div className="space-y-3.5 bg-[#18191e] border border-white/5 rounded-2xl p-4">
-                  {/* Brand select */}
-                  <div>
-                    <label className="block text-[10px] font-semibold text-white/50 mb-1.5 uppercase tracking-wider">
-                      Card Brand
+                <div className="space-y-3 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 animate-in fade-in duration-100">
+                  {/* Brand Selector: Apple or Razor Gold only */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-white/60 block">
+                      Select Card Brand
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {GIFT_CARD_BRANDS.map((brand) => (
@@ -553,67 +562,99 @@ export default function SendGiftModal({
                           key={brand}
                           type="button"
                           onClick={() => setGiftBrand(brand)}
-                          className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center justify-between ${
+                          className={`py-2 px-3 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
                             giftBrand === brand
-                              ? 'bg-gold/20 text-gold border-gold'
-                              : 'bg-white/5 text-white/70 border-white/5 hover:bg-white/10'
+                              ? 'bg-white/20 border-white/40 text-white font-bold'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:text-white'
                           }`}
                         >
-                          <span>{brand}</span>
-                          {giftBrand === brand && <Check size={14} strokeWidth={2.5} />}
+                          {brand}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Mode select: E-Code vs Physical Card */}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGiftCardType('e_card')}
-                      className={`flex-1 py-1.5 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
-                        giftCardType === 'e_card'
-                          ? 'bg-white/15 text-white border-white/20 font-semibold'
-                          : 'bg-transparent text-white/50 border-white/5'
-                      }`}
-                    >
-                      E-Gift Code / PIN
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGiftCardType('physical_card')}
-                      className={`flex-1 py-1.5 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
-                        giftCardType === 'physical_card'
-                          ? 'bg-white/15 text-white border-white/20 font-semibold'
-                          : 'bg-transparent text-white/50 border-white/5'
-                      }`}
-                    >
-                      Physical Card Photo
-                    </button>
+                  {/* Format Toggle: E-Gift code vs Physical Card photo */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-white/60 block">
+                      Card Format
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGiftCardType('e_card');
+                          setError(null);
+                        }}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                          giftCardType === 'e_card'
+                            ? 'bg-gold/15 border-gold/50 text-gold'
+                            : 'bg-white/5 border-white/10 text-white/60'
+                        }`}
+                      >
+                        E-Gift PIN
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGiftCardType('physical_card');
+                          setError(null);
+                        }}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                          giftCardType === 'physical_card'
+                            ? 'bg-gold/15 border-gold/50 text-gold'
+                            : 'bg-white/5 border-white/10 text-white/60'
+                        }`}
+                      >
+                        Physical Photo
+                      </button>
+                    </div>
                   </div>
 
                   {giftCardType === 'e_card' ? (
-                    <div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-semibold text-white/70 block">
+                        Enter {giftBrand} Claim Code / PIN
+                      </label>
                       <input
                         type="text"
                         value={proof}
-                        onChange={(e) => setProof(e.target.value)}
-                        placeholder={`Enter ${giftBrand} claim code or PIN`}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-gold"
+                        onChange={(e) => {
+                          setProof(e.target.value);
+                          setError(null);
+                        }}
+                        placeholder="e.g. X123-4567-8901"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white font-mono text-xs placeholder:text-white/30 focus:outline-none focus:border-gold"
                       />
                     </div>
                   ) : (
-                    <div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-semibold text-white/70 block">
+                        Upload Clear Photo of {giftBrand} Card
+                      </label>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleProofImageSelect}
+                      />
+
                       {cardImagePreview ? (
-                        <div className="relative rounded-xl overflow-hidden border border-gold/40 h-36 bg-black/40 flex items-center justify-center">
-                          <img src={cardImagePreview} alt="" className="h-full w-full object-contain" />
+                        <div className="relative rounded-xl overflow-hidden border border-gold/40 aspect-video bg-black flex items-center justify-center">
+                          <img
+                            src={cardImagePreview}
+                            alt="Card"
+                            className="w-full h-full object-cover"
+                          />
                           <button
                             type="button"
                             onClick={() => {
                               setCardImageFile(null);
                               setCardImagePreview(null);
                             }}
-                            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white"
+                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center transition-colors"
                           >
                             <X size={14} />
                           </button>
@@ -622,11 +663,10 @@ export default function SendGiftModal({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="w-full border-2 border-dashed border-white/15 hover:border-gold/40 rounded-xl p-4 text-center transition-colors cursor-pointer flex flex-col items-center gap-1.5"
+                          className="w-full py-6 rounded-xl border border-dashed border-white/20 hover:border-gold/50 bg-black/30 flex flex-col items-center justify-center gap-2 text-white/60 hover:text-white transition-all cursor-pointer group"
                         >
-                          <Camera size={22} className="text-gold" />
-                          <span className="text-xs text-white font-medium">Upload photo of physical card</span>
-                          <span className="text-[10px] text-white/40">Ensure code & PIN are visible</span>
+                          <Camera size={22} className="text-gold group-hover:scale-110 transition-transform" />
+                          <span className="text-xs font-medium">Tap to take photo or choose from gallery</span>
                         </button>
                       )}
                     </div>
@@ -634,43 +674,63 @@ export default function SendGiftModal({
                 </div>
               )}
 
-              {/* Method 2: Crypto USDT (Requires Screenshot Proof) */}
+              {/* ── Option B: Crypto USDT (Requires Screenshot Proof) ── */}
               {paymentMethod === 'crypto' && (
-                <div className="space-y-3.5 bg-[#18191e] border border-white/5 rounded-2xl p-4">
-                  <div className="text-center">
-                    <p className="text-[11px] text-gold font-bold uppercase tracking-wider">
-                      {CRYPTO_NETWORK}
-                    </p>
-                    <p className="text-[10px] text-white/50 mt-0.5">Send ${effectiveAmount} USDT</p>
+                <div className="space-y-3 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 animate-in fade-in duration-100">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/60">Network</span>
+                    <span className="text-gold font-semibold">{CRYPTO_NETWORK}</span>
                   </div>
 
-                  <div className="bg-black/40 border border-white/10 rounded-xl p-2.5 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-mono text-white truncate">{CRYPTO_WALLET}</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyWallet}
-                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-gold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
-                    >
-                      {copied ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
-                    </button>
+                  {/* Wallet Box with Copy */}
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-1.5">
+                    <span className="text-[10px] text-white/40 block">Deposit Address</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs text-white/90 break-all select-all">
+                        {CRYPTO_WALLET}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyWallet}
+                        className="px-2.5 py-1.5 rounded-lg bg-gold/15 hover:bg-gold/25 border border-gold/30 text-gold text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                      >
+                        {copied ? <Check size={12} /> : <Copy size={12} />}
+                        <span>{copied ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Screenshot Proof Upload (Required) */}
-                  <div>
-                    <label className="block text-[10px] font-semibold text-white/50 mb-1.5 uppercase tracking-wider">
-                      Upload Screenshot Proof (Required)
-                    </label>
+                  {/* Required Screenshot Proof Upload */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-white/90 block">
+                        Payment Screenshot Proof <span className="text-rose-400 font-bold">*</span>
+                      </label>
+                      <span className="text-[10px] text-amber-300">Required</span>
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleProofImageSelect}
+                    />
+
                     {cardImagePreview ? (
-                      <div className="relative rounded-xl overflow-hidden border border-gold/40 h-36 bg-black/40 flex items-center justify-center">
-                        <img src={cardImagePreview} alt="" className="h-full w-full object-contain" />
+                      <div className="relative rounded-xl overflow-hidden border border-gold/40 aspect-video bg-black flex items-center justify-center">
+                        <img
+                          src={cardImagePreview}
+                          alt="Crypto Proof"
+                          className="w-full h-full object-cover"
+                        />
                         <button
                           type="button"
                           onClick={() => {
                             setCardImageFile(null);
                             setCardImagePreview(null);
                           }}
-                          className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white"
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center transition-colors"
                         >
                           <X size={14} />
                         </button>
@@ -679,95 +739,77 @@ export default function SendGiftModal({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full border-2 border-dashed border-white/15 hover:border-gold/40 rounded-xl p-4 text-center transition-colors cursor-pointer flex flex-col items-center gap-1.5"
+                        className="w-full py-5 rounded-xl border border-dashed border-gold/40 hover:border-gold bg-black/40 flex flex-col items-center justify-center gap-1.5 text-white/70 hover:text-white transition-all cursor-pointer group"
                       >
-                        <Upload size={22} className="text-gold" />
-                        <span className="text-xs text-white font-medium">Upload wallet transfer screenshot</span>
-                        <span className="text-[10px] text-white/40">Proof of completed USDT transaction</span>
+                        <Upload size={22} className="text-gold group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-medium text-white/90">Upload completed transfer screenshot</span>
+                        <span className="text-[10px] text-white/40">From your wallet (Binance, Trust, MetaMask)</span>
                       </button>
                     )}
                   </div>
 
-                  {/* Optional TxID input */}
-                  <div>
+                  {/* Optional TxID */}
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[11px] font-medium text-white/50 block">
+                      Transaction Hash / TxID <span className="text-white/30">(optional)</span>
+                    </label>
                     <input
                       type="text"
                       value={proof}
                       onChange={(e) => setProof(e.target.value)}
-                      placeholder="Transaction hash / TxID (optional)"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder:text-white/30 focus:outline-none focus:border-gold"
+                      placeholder="0x..."
+                      className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white font-mono text-xs placeholder:text-white/30 focus:outline-none focus:border-gold"
                     />
                   </div>
                 </div>
               )}
 
-              {/* Optional Personal Note */}
-              <div>
-                <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
-                  Personal Note (Optional)
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Add a sweet message with your gift..."
-                  rows={2}
-                  maxLength={200}
-                  className="w-full bg-[#18191e] border border-white/10 rounded-2xl p-3 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-gold/50 resize-none leading-relaxed"
-                />
-              </div>
-
+              {/* Error Banner */}
               {error && (
-                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs">
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-center font-medium animate-in fade-in">
                   {error}
                 </div>
               )}
+
+              {/* Submit Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleSubmitGift}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-gold via-amber-400 to-yellow-500 text-ink font-extrabold text-sm shadow-lg hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin text-ink" />
+                      <span>Sending Gift…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} className="text-ink" />
+                      <span>Send ${effectiveAmount} Gift</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
           {step === 'success' && (
-            <div className="py-16 flex flex-col items-center text-center space-y-4 animate-in zoom-in-95 duration-200">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-pink-500/20 via-gold/20 to-purple-500/20 border border-gold/40 flex items-center justify-center text-4xl shadow-[0_0_24px_rgba(212,175,55,0.3)]">
-                {isCustom ? '🎁' : selectedGift.emoji}
+            <div className="py-12 flex flex-col items-center text-center space-y-3 animate-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-3xl shadow-lg">
+                <CheckCircle2 size={36} />
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Gift Sent Successfully!</h3>
-                <p className="text-xs text-white/60 mt-1">
-                  You sent a <span className="text-gold font-bold">${effectiveAmount}</span> gift to {recipientName}.
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 text-gold text-xs font-semibold pt-2">
-                <CheckCircle2 size={16} />
-                <span>Delivered to chat</span>
-              </div>
+              <h2 className="text-xl font-extrabold text-white">Gift Sent!</h2>
+              <p className="text-xs text-white/60 max-w-[260px]">
+                Your gift of <span className="text-gold font-semibold">${effectiveAmount} USD</span> has been delivered to {recipientName}.
+              </p>
             </div>
           )}
         </div>
-
-        {/* Pinned Bottom Action Button */}
-        {step === 'payment' && (
-          <div className="p-4 border-t border-white/10 bg-[#0e0f12] shrink-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-            <button
-              type="button"
-              onClick={handleSubmitGift}
-              disabled={submitting}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-gold via-gold-light to-gold text-ink font-extrabold text-sm shadow-xl hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>Processing Gift…</span>
-                </>
-              ) : (
-                <>
-                  <Gift size={18} />
-                  <span>Send {isCustom ? 'Gift' : selectedGift.name} (${effectiveAmount})</span>
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
-    </div>,
-    portalTarget
+    </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

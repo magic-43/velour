@@ -377,7 +377,9 @@ export default function MessageBubble({
 
           <div
             className={`rounded-2xl break-words transition-all relative
-              ${(vaultMedia.isVaultMedia && vaultMedia.media) || unlockReq.isUnlockRequest
+              ${giftData.isGift
+                ? 'p-0 overflow-hidden bg-transparent border-0 shadow-none'
+                : (vaultMedia.isVaultMedia && vaultMedia.media) || unlockReq.isUnlockRequest
                 ? `p-1 overflow-hidden max-w-[320px] sm:max-w-[340px] ${
                     isMine
                       ? 'bg-[#18181b] border border-white/10 text-paper rounded-br-sm'
@@ -732,6 +734,7 @@ export default function MessageBubble({
                     isCreator={isCreator}
                     senderName={senderDisplayName}
                     timestamp={bubbleTimestamp}
+                    status={message.status}
                   />
                 ) : isVoiceNote ? (
                   <div className="flex items-center gap-2 text-muted text-xs pr-14">
@@ -751,12 +754,14 @@ export default function MessageBubble({
           )}
 
             {/* WhatsApp-style In-Bubble Timestamp & Read Receipt */}
-            <BubbleTimestamp
-              createdAt={message.created_at}
-              isMine={isMine}
-              status={message.status}
-              isMediaOverlay={Boolean(vaultMedia.isVaultMedia && vaultMedia.media && !vaultMedia.text && !vaultMedia.media.isLocked)}
-            />
+            {!giftData.isGift && (
+              <BubbleTimestamp
+                createdAt={message.created_at}
+                isMine={isMine}
+                status={message.status}
+                isMediaOverlay={Boolean(vaultMedia.isVaultMedia && vaultMedia.media && !vaultMedia.text && !vaultMedia.media.isLocked)}
+              />
+            )}
           </div>
 
           {/* Reaction badges on bubble */}
