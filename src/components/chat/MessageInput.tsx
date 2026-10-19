@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, X, Loader2 } from 'lucide-react';
+import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, X, Loader2, ChevronLeft } from 'lucide-react';
 import type { EmojiClickData } from 'emoji-picker-react';
 import EmojiKeyboardDrawer from './EmojiKeyboardDrawer';
 import VaultMediaPickerModal from './VaultMediaPickerModal';
@@ -37,9 +37,28 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const [selectedEditorVaultItems, setSelectedEditorVaultItems] = useState<VaultItem[]>([]);
   const [showEditorModal, setShowEditorModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-dismiss attachment drawer or emoji picker when user taps anywhere outside the chat input container
+  useEffect(() => {
+    if (!showAttachmentMenu && !showEmojiPicker) return;
+    const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowAttachmentMenu(false);
+        setMediaSourcePrompt(null);
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('touchstart', handleDocumentClick, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+      document.removeEventListener('touchstart', handleDocumentClick);
+    };
+  }, [showAttachmentMenu, showEmojiPicker]);
 
   // Android hardware back button handlers for chat input sheets and modals
   useBackHandler(() => {
@@ -276,8 +295,14 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
 
   const handlePlusClick = () => {
     setShowEmojiPicker(false);
-    setMediaSourcePrompt(null);
-    setShowAttachmentMenu((prev) => !prev);
+    if (showAttachmentMenu) {
+      setShowAttachmentMenu(false);
+      setMediaSourcePrompt(null);
+    } else {
+      textareaRef.current?.blur();
+      setMediaSourcePrompt(null);
+      setShowAttachmentMenu(true);
+    }
   };
 
   // Auto-resize textarea
@@ -323,7 +348,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
   const replyThumbnail = replyTo?.thumbnailUrl || cleanReply?.thumbnailUrl;
 
   return (
-    <div className="relative border-t border-border-subtle/50 bg-[#141416] select-none pb-[env(safe-area-inset-bottom,0px)] shrink-0">
+    <div ref={containerRef} className="relative border-t border-border-subtle/50 bg-[#141416] select-none pb-[env(safe-area-inset-bottom,0px)] shrink-0">
       {/* Reply preview */}
       {replyTo && cleanReply && (
         <div className="flex items-center gap-3 px-3 py-2 border-l-2 border-gold mx-3 mt-2 bg-white/5 rounded-r-xl">
@@ -350,11 +375,31 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
 
       {/* Input Row matching WhatsApp multiline layout */}
       <div className="px-3 py-2 sm:py-2.5">
-        <div className="w-full min-h-[48px] rounded-[24px] bg-[#242426] border border-white/5 focus-within:border-gold/40 px-3.5 sm:px-4 py-1.5 flex items-end gap-2.5 transition-all shadow-lg">
+        <div
+          onClick={() => {
+            if (showAttachmentMenu) {
+              setShowAttachmentMenu(false);
+              setMediaSourcePrompt(null);
+            }
+          }}
+          className="w-full min-h-[48px] rounded-[24px] bg-[#242426] border border-white/5 focus-within:border-gold/40 px-3.5 sm:px-4 py-1.5 flex items-end gap-2.5 transition-all shadow-lg"
+        >
           {/* Text input */}
           <textarea
             ref={textareaRef}
             value={value}
+            onFocus={() => {
+              setShowAttachmentMenu(false);
+              setMediaSourcePrompt(null);
+              setShowEmojiPicker(false);
+            }}
+            onClick={() => {
+              if (showAttachmentMenu || showEmojiPicker) {
+                setShowAttachmentMenu(false);
+                setMediaSourcePrompt(null);
+                setShowEmojiPicker(false);
+              }
+            }}
             onChange={(e) => {
               setValue(e.target.value);
               onTyping?.(e.target.value.length > 0);
@@ -433,93 +478,146 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         className="hidden"
       />
 
-      {/* ── Attachment Menus: Mobile Bottom Sheet & Desktop Popover ── */}
+      {/* ── Mobile Sub-Input Attachment Drawer (Rendered directly BELOW input area, matching media reference) ── */}
       {showAttachmentMenu && (
-        <>
-          {/* Mobile Bottom Sheet (matches media_1792404487451_4ff7a24a.png) */}
-          <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden">
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-              onClick={() => setShowAttachmentMenu(false)}
-            />
-            <div className="relative z-10 w-full bg-[#1b1c21]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-[28px] p-5 pb-[max(1.75rem,calc(env(safe-area-inset-bottom,0px)+1rem))] shadow-2xl animate-in slide-in-from-bottom duration-200 select-none">
-              {/* Drag handle */}
-              <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-6" />
+        <div className="md:hidden border-t border-white/10 bg-[#18191e] rounded-t-[28px] px-4 pt-5 pb-6 animate-in slide-in-from-bottom duration-200 select-none shadow-2xl">
+          {mediaSourcePrompt ? (
+            /* Sub-view when Photos or Locked is selected */
+            <div className="space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between px-1 pb-2 border-b border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setMediaSourcePrompt(null)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-gold hover:text-gold-light transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={16} />
+                  <span>Back</span>
+                </button>
+                <span className="text-xs font-semibold text-paper">
+                  {mediaSourcePrompt === 'locked' ? 'Locked Attachment' : 'Photos & Videos'}
+                </span>
+                <div className="w-10" />
+              </div>
 
-              {/* 4 Attachment options grid */}
-              <div className="grid grid-cols-4 gap-2 text-center">
-                {/* 1. Photos */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
                 <button
                   type="button"
                   onClick={() => {
+                    const isLock = mediaSourcePrompt === 'locked';
+                    setTargetIsLocked(isLock);
                     setShowAttachmentMenu(false);
-                    setMediaSourcePrompt('photos');
+                    setMediaSourcePrompt(null);
+                    fileInputRef.current?.click();
                   }}
-                  className="flex flex-col items-center group cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#24262f] hover:bg-[#2c2f3a] border border-white/5 transition-all text-center group cursor-pointer active:scale-95"
                 >
-                  <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-[#3b82f6] shadow-md group-active:scale-95 transition-all">
-                    <ImageIcon size={26} strokeWidth={2.2} />
+                  <div className="w-12 h-12 rounded-full bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/25 group-hover:scale-105 transition-transform">
+                    <Upload size={22} />
                   </div>
-                  <span className="text-xs text-paper/90 font-medium mt-2">Photos</span>
+                  <div>
+                    <p className="font-semibold text-paper text-xs">Device</p>
+                    <p className="text-[0.65rem] text-muted mt-0.5">Camera Roll</p>
+                  </div>
                 </button>
 
-                {/* 2. Camera */}
                 <button
                   type="button"
                   onClick={() => {
+                    const isLock = mediaSourcePrompt === 'locked';
+                    setTargetIsLocked(isLock);
                     setShowAttachmentMenu(false);
-                    setTargetIsLocked(false);
-                    cameraInputRef.current?.click();
+                    setMediaSourcePrompt(null);
+                    setShowVaultPicker(true);
                   }}
-                  className="flex flex-col items-center group cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#24262f] hover:bg-[#2c2f3a] border border-white/5 transition-all text-center group cursor-pointer active:scale-95"
                 >
-                  <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-[#ec4899] shadow-md group-active:scale-95 transition-all">
-                    <Camera size={26} strokeWidth={2.2} />
+                  <div className="w-12 h-12 rounded-full bg-gold/15 text-gold flex items-center justify-center border border-gold/25 group-hover:scale-105 transition-transform">
+                    <Film size={22} />
                   </div>
-                  <span className="text-xs text-paper/90 font-medium mt-2">Camera</span>
-                </button>
-
-                {/* 3. Documents */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAttachmentMenu(false);
-                    docInputRef.current?.click();
-                  }}
-                  className="flex flex-col items-center group cursor-pointer"
-                >
-                  <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-[#06b6d4] shadow-md group-active:scale-95 transition-all">
-                    <FileText size={26} strokeWidth={2.2} />
+                  <div>
+                    <p className="font-semibold text-gold text-xs">Velour Gallery</p>
+                    <p className="text-[0.65rem] text-muted mt-0.5">Vault Items</p>
                   </div>
-                  <span className="text-xs text-paper/90 font-medium mt-2">Document</span>
-                </button>
-
-                {/* 4. Locked Attachment */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isCreator) {
-                      alert('Locked attachments are an exclusive Creator feature to monetize content.');
-                      return;
-                    }
-                    setShowAttachmentMenu(false);
-                    setMediaSourcePrompt('locked');
-                  }}
-                  className="flex flex-col items-center group cursor-pointer"
-                >
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gold/30 to-gold/10 border border-gold/40 group-hover:border-gold/70 flex items-center justify-center text-gold shadow-[0_0_16px_rgba(212,175,55,0.25)] group-active:scale-95 transition-all">
-                    <Lock size={24} strokeWidth={2.2} />
-                  </div>
-                  <span className="text-xs text-paper/90 font-medium mt-2">Locked</span>
                 </button>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Main 4 options grid matching screenshot */
+            <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+              {/* 1. Photos */}
+              <button
+                type="button"
+                onClick={() => setMediaSourcePrompt('photos')}
+                className="flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-[#3b82f6] shadow-md group-active:scale-95 transition-all">
+                  <ImageIcon size={26} strokeWidth={2.2} />
+                </div>
+                <span className="text-xs text-paper/90 font-medium mt-2">Photos</span>
+              </button>
 
-          {/* Desktop Floating Menu (matches media_1792403665042_d4f188d5.png) */}
+              {/* 2. Camera */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachmentMenu(false);
+                  setTargetIsLocked(false);
+                  cameraInputRef.current?.click();
+                }}
+                className="flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-white shadow-md group-active:scale-95 transition-all">
+                  <Camera size={26} strokeWidth={2.2} />
+                </div>
+                <span className="text-xs text-paper/90 font-medium mt-2">Camera</span>
+              </button>
+
+              {/* 3. Documents */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachmentMenu(false);
+                  docInputRef.current?.click();
+                }}
+                className="flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] flex items-center justify-center text-[#06b6d4] shadow-md group-active:scale-95 transition-all">
+                  <FileText size={26} strokeWidth={2.2} />
+                </div>
+                <span className="text-xs text-paper/90 font-medium mt-2">Document</span>
+              </button>
+
+              {/* 4. Locked Attachment */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isCreator) {
+                    alert('Locked attachments are an exclusive Creator feature to monetize content.');
+                    return;
+                  }
+                  setMediaSourcePrompt('locked');
+                }}
+                className="flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] border border-gold/40 flex items-center justify-center text-gold shadow-md group-active:scale-95 transition-all">
+                  <Lock size={24} strokeWidth={2.2} />
+                </div>
+                <span className="text-xs text-paper/90 font-medium mt-2">Locked</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Desktop Floating Menu (matches media_1792403665042_d4f188d5.png) */}
+      {showAttachmentMenu && (
+        <>
           <div
             className="hidden md:block fixed inset-0 z-20"
-            onClick={() => setShowAttachmentMenu(false)}
+            onClick={() => {
+              setShowAttachmentMenu(false);
+              setMediaSourcePrompt(null);
+            }}
           />
           <div className="hidden md:flex absolute right-4 bottom-14 z-30 bg-[#18191d] border border-white/10 rounded-2xl p-1.5 shadow-2xl flex-col gap-1 min-w-[210px] animate-in slide-in-from-bottom-2 duration-150">
             {/* 1. Photos */}
@@ -582,14 +680,14 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
         </>
       )}
 
-      {/* ── Media Source Picker Dialog (Upload vs Velour Gallery) ── */}
+      {/* Desktop Media Source Picker Dialog (Upload vs Velour Gallery) */}
       {mediaSourcePrompt && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+        <div className="hidden md:flex fixed inset-0 z-50 items-center justify-center p-4 animate-in fade-in duration-150">
           <div
             className="absolute inset-0 bg-black/65 backdrop-blur-sm"
             onClick={() => setMediaSourcePrompt(null)}
           />
-          <div className="relative z-10 w-full sm:max-w-sm bg-[#1c1d22] border border-white/10 rounded-t-[28px] sm:rounded-2xl p-5 shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-200 pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] sm:pb-5">
+          <div className="relative z-10 w-full max-w-sm bg-[#1c1d22] border border-white/10 rounded-2xl p-5 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
               <div>
                 <h3 className="font-semibold text-paper text-base">
@@ -626,7 +724,7 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-paper text-sm">Upload from Device</p>
-                  <p className="text-xs text-muted truncate">Choose photos or videos from your phone</p>
+                  <p className="text-xs text-muted truncate">Choose photos or videos from your computer</p>
                 </div>
               </button>
 
