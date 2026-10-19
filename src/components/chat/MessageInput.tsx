@@ -25,6 +25,7 @@ interface Props {
   onCancelReply?: () => void;
   recipientName?: string;
   recipientId?: string;
+  recipientAvatar?: string | null;
   conversationId?: string;
 }
 
@@ -37,6 +38,7 @@ export default function MessageInput({
   onCancelReply,
   recipientName,
   recipientId,
+  recipientAvatar,
   conversationId,
 }: Props) {
   const { isCreator, profile } = useAuth();
@@ -842,6 +844,7 @@ export default function MessageInput({
           onClose={() => setShowGiftModal(false)}
           recipientName={recipientName}
           recipientId={recipientId}
+          recipientAvatar={recipientAvatar}
           conversationId={conversationId}
           onSendGift={(msg) => onSend(msg)}
         />

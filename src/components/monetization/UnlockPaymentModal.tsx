@@ -133,8 +133,8 @@ export default function UnlockPaymentModal({
         return;
       }
     } else {
-      if (!proof.trim()) {
-        setError('Please enter the transaction hash (TxID).');
+      if (!cardImageFile && !cardImagePreview) {
+        setError('Please upload a screenshot proof of your completed crypto payment.');
         return;
       }
     }
@@ -149,10 +149,11 @@ export default function UnlockPaymentModal({
 
     try {
       let uploadedCardImageUrl: string | null = null;
-      if (method === 'giftcard' && giftCardType === 'physical_card' && cardImageFile) {
+      if (cardImageFile) {
         setUploadingImage(true);
         try {
-          const key = `giftcards/${user.id}/${Date.now()}_${cardImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+          const folder = method === 'crypto' ? 'crypto_proofs' : 'giftcards';
+          const key = `${folder}/${user.id}/${Date.now()}_${cardImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
           uploadedCardImageUrl = await uploadPublicFile(cardImageFile, key, { maxWidth: 1920, quality: 0.85 });
         } catch (upErr) {
           console.warn('R2 upload failed, fallback to preview image:', upErr);
@@ -165,13 +166,15 @@ export default function UnlockPaymentModal({
       }
 
       const cardType = method === 'crypto' ? 'crypto' : giftCardType;
-      const effectiveRef = method === 'giftcard' && giftCardType === 'physical_card'
+      const effectiveRef = method === 'crypto'
+        ? (proof.trim() ? `Crypto Screenshot + TxID: ${proof.trim()}` : 'Crypto payment screenshot uploaded')
+        : method === 'giftcard' && giftCardType === 'physical_card'
         ? (proof.trim() ? `Photo + Code: ${proof.trim()}` : 'Physical card photo uploaded')
         : proof.trim();
 
       const description =
         method === 'crypto'
-          ? `Crypto USDT | $${amountUsd} | Tx: ${proof.trim()}`
+          ? `Crypto USDT | $${amountUsd} | Screenshot attached${proof.trim() ? ` | Tx: ${proof.trim()}` : ''}`
           : `${giftCardType === 'physical_card' ? 'Physical Card' : 'E-Gift Card'} | $${amountUsd} | ${giftBrand}: ${effectiveRef}`;
 
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -419,7 +422,7 @@ export default function UnlockPaymentModal({
 
   const isFormValid =
     method === 'crypto'
-      ? Boolean(proof.trim())
+      ? Boolean(cardImagePreview || cardImageFile)
       : giftCardType === 'e_card'
       ? Boolean(proof.trim())
       : Boolean(cardImagePreview || cardImageFile);
@@ -742,17 +745,91 @@ export default function UnlockPaymentModal({
                     </div>
                   </div>
 
-                  {/* TxID Input */}
+                  {/* Screenshot Proof Upload */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-white/50 font-medium uppercase tracking-wider block">
+                      Upload Screenshot Proof (Required)
+                    </label>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCardImageSelect}
+                      className="hidden"
+                    />
+
+                    {cardImagePreview ? (
+                      <div className="relative rounded-2xl overflow-hidden border border-gold/40 bg-black/40 group">
+                        <img
+                          src={cardImagePreview}
+                          alt="Crypto transfer screenshot"
+                          className="w-full h-44 object-contain bg-black/60"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-md cursor-pointer transition-colors"
+                          >
+                            Change
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCardImageFile(null);
+                              setCardImagePreview(null);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold backdrop-blur-md cursor-pointer transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="p-2.5 bg-black/70 flex items-center justify-between text-xs text-white/80 border-t border-white/10">
+                          <span className="flex items-center gap-1.5 text-emerald-400 font-medium truncate">
+                            <Check size={13} strokeWidth={2.5} /> Screenshot ready
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-gold hover:underline text-[11px] cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-white/20 hover:border-gold/60 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-2.5 bg-white/[0.02] hover:bg-white/[0.05] transition-all cursor-pointer group"
+                      >
+                        <div className="w-12 h-12 rounded-full bg-gold/15 text-gold flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Upload size={22} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Upload payment screenshot</p>
+                          <p className="text-xs text-white/40 mt-0.5">
+                            Screenshot of completed transaction from your crypto wallet
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-gold/90 font-medium px-3 py-1 rounded-full bg-gold/10">
+                          Select Image
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Optional TxID Input */}
                   <div className="space-y-1.5">
                     <label className="text-xs text-white/50 font-medium uppercase tracking-wider block">
-                      Transaction Hash (TxID)
+                      Transaction Hash / TxID (Optional)
                     </label>
                     <input
                       type="text"
                       value={proof}
                       onChange={(e) => setProof(e.target.value)}
-                      placeholder="Paste USDT transaction hash"
-                      className="w-full px-4 py-3.5 bg-white/5 border border-white/15 rounded-xl text-sm font-mono text-white placeholder:text-white/30 focus:outline-none focus:border-gold transition-colors"
+                      placeholder="Paste USDT transaction hash if available"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/15 rounded-xl text-sm font-mono text-white placeholder:text-white/30 focus:outline-none focus:border-gold transition-colors"
                     />
                   </div>
                 </div>

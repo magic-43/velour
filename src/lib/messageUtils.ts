@@ -30,8 +30,35 @@ export function parseGiftMessage(content: string | null | undefined): {
   if (!content) return { isGift: false, gift: null, text: null };
   const match = content.match(/<!--gift:([\s\S]*?)-->/);
   if (!match) {
+    if (content.includes('<!--gift:')) {
+      const nameMatch = content.match(/"name"\s*:\s*"([^"]+)"/);
+      const amountMatch = content.match(/"amount"\s*:\s*([\d.]+)/);
+      const emojiMatch = content.match(/"emoji"\s*:\s*"([^"]+)"/);
+      const noteMatch = content.match(/"note"\s*:\s*"([^"]*)"/);
+      const methodMatch = content.match(/"method"\s*:\s*"([^"]+)"/);
+      const imageMatch = content.match(/"imageUrl"\s*:\s*"([^"]+)"/);
+
+      const gift: GiftAttachment = {
+        type: 'gift',
+        name: nameMatch ? nameMatch[1] : 'Gift',
+        amount: amountMatch ? parseFloat(amountMatch[1]) : 15,
+        emoji: emojiMatch ? emojiMatch[1] : '🎁',
+        note: noteMatch ? noteMatch[1] : null,
+        method: methodMatch ? methodMatch[1] : undefined,
+        imageUrl: imageMatch ? imageMatch[1] : null,
+      };
+      const text = content.replace(/<!--gift:[\s\S]*$/, '').trim();
+      return { isGift: true, gift, text: text || null };
+    }
     if (content.startsWith('🎁 Sent')) {
-      return { isGift: true, gift: null, text: content };
+      const amountMatch = content.match(/\$(\d+(\.\d+)?)/);
+      const gift: GiftAttachment = {
+        type: 'gift',
+        name: 'Gift',
+        amount: amountMatch ? parseFloat(amountMatch[1]) : 15,
+        emoji: '🎁',
+      };
+      return { isGift: true, gift, text: content };
     }
     return { isGift: false, gift: null, text: content };
   }
@@ -41,7 +68,24 @@ export function parseGiftMessage(content: string | null | undefined): {
     const text = content.replace(/<!--gift:[\s\S]*?-->/, '').trim();
     return { isGift: true, gift, text: text || null };
   } catch {
-    return { isGift: false, gift: null, text: content };
+    const nameMatch = match[1].match(/"name"\s*:\s*"([^"]+)"/);
+    const amountMatch = match[1].match(/"amount"\s*:\s*([\d.]+)/);
+    const emojiMatch = match[1].match(/"emoji"\s*:\s*"([^"]+)"/);
+    const noteMatch = match[1].match(/"note"\s*:\s*"([^"]*)"/);
+    const methodMatch = match[1].match(/"method"\s*:\s*"([^"]+)"/);
+    const imageMatch = match[1].match(/"imageUrl"\s*:\s*"([^"]+)"/);
+
+    const gift: GiftAttachment = {
+      type: 'gift',
+      name: nameMatch ? nameMatch[1] : 'Gift',
+      amount: amountMatch ? parseFloat(amountMatch[1]) : 15,
+      emoji: emojiMatch ? emojiMatch[1] : '🎁',
+      note: noteMatch ? noteMatch[1] : null,
+      method: methodMatch ? methodMatch[1] : undefined,
+      imageUrl: imageMatch ? imageMatch[1] : null,
+    };
+    const text = content.replace(/<!--gift:[\s\S]*?-->/, '').trim();
+    return { isGift: true, gift, text: text || null };
   }
 }
 
@@ -327,6 +371,18 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     };
   }
 
+  // 4c. Gift receipts
+  if (preview.includes('<!--gift:') || preview.startsWith('🎁')) {
+    const giftData = parseGiftMessage(preview);
+    const g = giftData.gift;
+    return {
+      type: 'text',
+      badge: g?.emoji || '🎁',
+      text: g ? `Sent ${g.emoji || '🎁'} ${g.name} ($${g.amount})` : 'Sent a gift',
+      price: g?.amount,
+    };
+  }
+
   // 5. Story replies
   const isStory =
     preview.startsWith('🔘 ') ||
@@ -366,7 +422,7 @@ export function parseConversationPreview(preview: string | null | undefined): Co
 /**
  * Strips all HTML/JSON comment blocks (<!--...-->) and leading status icons.
  */
-export function stripHiddenComments(text: string): string {
+export function stripHiddenComments(text: string | null | undefined): string {
   if (!text) return '';
   const trimmed = text.trim();
   if (
