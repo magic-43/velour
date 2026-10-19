@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2, AlertCircle, FileText, ArrowDownToLine } from 'lucide-react';
+import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2, AlertCircle, FileText, ArrowDownToLine, Gift, Sparkles } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import type { MessageStatus } from '../../types';
 import { parseStoryReply, type StoryReplyMetadata } from '../../lib/storyReplies';
 import { parseVaultMediaMessage } from '../../lib/creatorVault';
-import { getCleanMessagePreview, parseDocumentMessage } from '../../lib/messageUtils';
+import { getCleanMessagePreview, parseDocumentMessage, parseGiftMessage } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
 import LockedAttachmentCard from './LockedAttachmentCard';
 import UnlockReceiptCard from './UnlockReceiptCard';
@@ -80,6 +80,7 @@ export default function MessageBubble({
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
   const docData = parseDocumentMessage(message.content);
+  const giftData = parseGiftMessage(message.content);
   const unlockReq = parseUnlockRequestMessage(message.content);
   const isUnlockReq = unlockReq.isUnlockRequest || Boolean(message.content && (message.content.includes('<!--unlock-request:') || message.content.includes('"type":"unlock_request"')));
 
@@ -720,6 +721,36 @@ export default function MessageBubble({
                         {docData.text}
                         <TimestampSpacer isMine={isMine} />
                       </p>
+                    )}
+                  </div>
+                ) : giftData.isGift ? (
+                  <div className="space-y-1.5 select-none min-w-[210px] max-w-[280px] sm:max-w-[320px]">
+                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-pink-500/20 via-purple-500/15 to-gold/15 border border-gold/40 shadow-lg">
+                      <div className="w-12 h-12 rounded-2xl bg-black/40 border border-gold/30 flex items-center justify-center text-3xl shadow-inner shrink-0">
+                        {giftData.gift?.emoji || '🎁'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 text-gold text-[0.68rem] font-bold uppercase tracking-wider">
+                          <Sparkles size={12} />
+                          <span>Gift {isMine ? 'Sent' : 'Received'}</span>
+                        </div>
+                        <p className="text-sm font-bold text-paper truncate">
+                          {giftData.gift?.name || 'Exclusive Gift'}
+                        </p>
+                        <span className="inline-block mt-0.5 text-xs font-extrabold text-gold px-2 py-0.5 rounded-full bg-gold/15 border border-gold/30">
+                          ${giftData.gift?.amount ?? 10} USD
+                        </span>
+                      </div>
+                    </div>
+                    {giftData.gift?.note ? (
+                      <p className="whitespace-pre-wrap text-paper text-[14px] leading-relaxed px-1 pt-0.5 break-words italic">
+                        "{giftData.gift.note}"
+                        <TimestampSpacer isMine={isMine} />
+                      </p>
+                    ) : (
+                      <div className="h-0">
+                        <TimestampSpacer isMine={isMine} />
+                      </div>
                     )}
                   </div>
                 ) : isVoiceNote ? (

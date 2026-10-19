@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, X, Loader2, ChevronLeft } from 'lucide-react';
+import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, Gift, X, Loader2, ChevronLeft } from 'lucide-react';
 import type { EmojiClickData } from 'emoji-picker-react';
 import EmojiKeyboardDrawer from './EmojiKeyboardDrawer';
 import VaultMediaPickerModal from './VaultMediaPickerModal';
 import ChatMediaEditorModal, { type ChatMediaSendData } from './ChatMediaEditorModal';
+import SendGiftModal from './SendGiftModal';
 import { useAuth } from '../../lib/AuthContext';
 import { encodeVaultMediaMessage, uploadVaultMedia, generateBlurredThumbnail, type VaultItem } from '../../lib/creatorVault';
 import { uploadPublicFile } from '../../lib/r2';
@@ -22,14 +23,28 @@ interface Props {
     thumbnailUrl?: string | null;
   } | null;
   onCancelReply?: () => void;
+  recipientName?: string;
+  recipientId?: string;
+  conversationId?: string;
 }
 
-export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, replyTo, onCancelReply }: Props) {
+export default function MessageInput({
+  onSend,
+  onSendMedia,
+  onTyping,
+  disabled,
+  replyTo,
+  onCancelReply,
+  recipientName,
+  recipientId,
+  conversationId,
+}: Props) {
   const { isCreator, profile } = useAuth();
   const [value, setValue] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showVaultPicker, setShowVaultPicker] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
   const [mediaSourcePrompt, setMediaSourcePrompt] = useState<'photos' | 'locked' | null>(null);
   const [targetIsLocked, setTargetIsLocked] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -78,6 +93,11 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
     setShowVaultPicker(false);
     return true;
   }, showVaultPicker, 115);
+
+  useBackHandler(() => {
+    setShowGiftModal(false);
+    return true;
+  }, showGiftModal, 114);
 
   useBackHandler(() => {
     setShowEmojiPicker(false);
@@ -587,23 +607,35 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
                 <span className="text-xs text-paper/90 font-medium mt-2">Document</span>
               </button>
 
-              {/* 4. Locked Attachment */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isCreator) {
-                    alert('Locked attachments are an exclusive Creator feature to monetize content.');
-                    return;
-                  }
-                  setMediaSourcePrompt('locked');
-                }}
-                className="flex flex-col items-center group cursor-pointer"
-              >
-                <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] border border-gold/40 flex items-center justify-center text-gold shadow-md group-active:scale-95 transition-all">
-                  <Lock size={24} strokeWidth={2.2} />
-                </div>
-                <span className="text-xs text-paper/90 font-medium mt-2">Locked</span>
-              </button>
+              {/* 4. Creator: Locked Attachment | Fan: Gifts */}
+              {isCreator ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMediaSourcePrompt('locked');
+                  }}
+                  className="flex flex-col items-center group cursor-pointer"
+                >
+                  <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] border border-gold/40 flex items-center justify-center text-gold shadow-md group-active:scale-95 transition-all">
+                    <Lock size={24} strokeWidth={2.2} />
+                  </div>
+                  <span className="text-xs text-paper/90 font-medium mt-2">Locked</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAttachmentMenu(false);
+                    setShowGiftModal(true);
+                  }}
+                  className="flex flex-col items-center group cursor-pointer"
+                >
+                  <div className="w-14 h-14 rounded-full bg-[#2a2d36] group-hover:bg-[#353945] border border-pink-500/40 flex items-center justify-center text-pink-400 shadow-md group-active:scale-95 transition-all">
+                    <Gift size={24} strokeWidth={2.2} />
+                  </div>
+                  <span className="text-xs text-paper/90 font-medium mt-2">Gifts</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -660,22 +692,32 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
               <span>Document</span>
             </button>
 
-            {/* 4. Locked Attachment */}
-            <button
-              type="button"
-              onClick={() => {
-                if (!isCreator) {
-                  alert('Locked attachments are an exclusive Creator feature to monetize content.');
-                  return;
-                }
-                setShowAttachmentMenu(false);
-                setMediaSourcePrompt('locked');
-              }}
-              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-gold/10 text-gold text-sm font-medium transition-colors text-left w-full cursor-pointer"
-            >
-              <Lock size={18} className="text-gold" />
-              <span>Locked Attachment</span>
-            </button>
+            {/* 4. Creator: Locked Attachment | Fan: Gifts */}
+            {isCreator ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachmentMenu(false);
+                  setMediaSourcePrompt('locked');
+                }}
+                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-gold/10 text-gold text-sm font-medium transition-colors text-left w-full cursor-pointer"
+              >
+                <Lock size={18} className="text-gold" />
+                <span>Locked Attachment</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachmentMenu(false);
+                  setShowGiftModal(true);
+                }}
+                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-pink-500/10 text-pink-400 text-sm font-medium transition-colors text-left w-full cursor-pointer"
+              >
+                <Gift size={18} className="text-pink-400" />
+                <span>Gifts</span>
+              </button>
+            )}
           </div>
         </>
       )}
@@ -790,6 +832,18 @@ export default function MessageInput({ onSend, onSendMedia, onTyping, disabled, 
           onEmojiSelect={handleEmojiSelect}
           onBackspace={handleBackspace}
           height={320}
+        />
+      )}
+
+      {/* Gift Modal for Fans (Mobile Full-Screen Bottom Sheet & Desktop Pop-up) */}
+      {showGiftModal && (
+        <SendGiftModal
+          isOpen={showGiftModal}
+          onClose={() => setShowGiftModal(false)}
+          recipientName={recipientName}
+          recipientId={recipientId}
+          conversationId={conversationId}
+          onSendGift={(msg) => onSend(msg)}
         />
       )}
     </div>

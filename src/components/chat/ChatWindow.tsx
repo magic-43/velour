@@ -907,6 +907,9 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
             messageType: replyTo.message_type,
           } : null}
           onCancelReply={() => setReplyTo(null)}
+          recipientName={other.name || other.username}
+          recipientId={other.userId || other.id}
+          conversationId={conversationId}
         />
       )}
 

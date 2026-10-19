@@ -9,6 +9,42 @@ export interface DocumentAttachment {
   mimeType?: string;
 }
 
+export interface GiftAttachment {
+  type: string;
+  giftId?: string;
+  name: string;
+  emoji: string;
+  amount: number;
+  note?: string | null;
+  method?: string;
+  ref?: string;
+  imageUrl?: string | null;
+  sentAt?: string;
+}
+
+export function parseGiftMessage(content: string | null | undefined): {
+  isGift: boolean;
+  gift: GiftAttachment | null;
+  text: string | null;
+} {
+  if (!content) return { isGift: false, gift: null, text: null };
+  const match = content.match(/<!--gift:([\s\S]*?)-->/);
+  if (!match) {
+    if (content.startsWith('🎁 Sent')) {
+      return { isGift: true, gift: null, text: content };
+    }
+    return { isGift: false, gift: null, text: content };
+  }
+
+  try {
+    const gift = JSON.parse(match[1]) as GiftAttachment;
+    const text = content.replace(/<!--gift:[\s\S]*?-->/, '').trim();
+    return { isGift: true, gift, text: text || null };
+  } catch {
+    return { isGift: false, gift: null, text: content };
+  }
+}
+
 export function parseDocumentMessage(content: string | null | undefined): {
   isDocument: boolean;
   document: DocumentAttachment | null;
@@ -128,6 +164,18 @@ export function getCleanMessagePreview(
       isAttachment: true,
       isDocument: true,
       document: doc.document,
+    };
+  }
+
+  // 3d. Check if it's a gift
+  const giftData = parseGiftMessage(content);
+  if (giftData.isGift) {
+    const g = giftData.gift;
+    const gText = g
+      ? `🎁 Sent ${g.emoji || '🎁'} ${g.name} ($${g.amount})`
+      : (giftData.text || '🎁 Sent a gift');
+    return {
+      text: gText,
     };
   }
 
