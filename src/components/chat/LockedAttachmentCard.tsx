@@ -19,6 +19,7 @@ interface LockedAttachmentCardProps {
   creatorId?: string;
   conversationId?: string;
   onUnlocked?: () => void;
+  onOpenMedia?: (url: string) => void;
 }
 
 export default function LockedAttachmentCard({
@@ -35,6 +36,7 @@ export default function LockedAttachmentCard({
   creatorId,
   conversationId,
   onUnlocked,
+  onOpenMedia,
 }: LockedAttachmentCardProps) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -106,8 +108,13 @@ export default function LockedAttachmentCard({
   const handleMediaClick = (idx: number) => {
     if (isSending) return;
     if (canViewFull) {
-      setLightboxIndex(idx);
-      setLightboxOpen(true);
+      const targetUrl = items[idx]?.mediaUrl || media.mediaUrl;
+      if (onOpenMedia && targetUrl) {
+        onOpenMedia(targetUrl);
+      } else {
+        setLightboxIndex(idx);
+        setLightboxOpen(true);
+      }
     } else if (!isPending) {
       setShowPaymentModal(true);
     }

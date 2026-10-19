@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2, AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Video, Camera, Lock, Clock, CornerUpLeft, MoreHorizontal, Play, Eye, Loader2, AlertCircle, FileText, ArrowDownToLine } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import type { MessageStatus } from '../../types';
 import { parseStoryReply, type StoryReplyMetadata } from '../../lib/storyReplies';
 import { parseVaultMediaMessage } from '../../lib/creatorVault';
-import { getCleanMessagePreview } from '../../lib/messageUtils';
+import { getCleanMessagePreview, parseDocumentMessage } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
 import LockedAttachmentCard from './LockedAttachmentCard';
 import UnlockReceiptCard from './UnlockReceiptCard';
@@ -55,6 +55,14 @@ interface Props {
   isUnlocked?: boolean;
   isPendingVerification?: boolean;
   onUnlocked?: () => void;
+  onOpenMedia?: (url: string) => void;
+}
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes || isNaN(bytes)) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function MessageBubble({
@@ -63,6 +71,7 @@ export default function MessageBubble({
   onDelete, onReveal, onReply, onOpenStory, onScrollToMessage,
   onOpenContextMenu, onReact, otherName, otherAvatar,
   isUnlocked = false, isPendingVerification = false, onUnlocked,
+  onOpenMedia,
 }: Props) {
   const { user } = useAuth();
   const isDeleted = message.is_deleted;
@@ -70,6 +79,7 @@ export default function MessageBubble({
   const isAttachment = message.message_type === 'attachment';
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
+  const docData = parseDocumentMessage(message.content);
   const unlockReq = parseUnlockRequestMessage(message.content);
   const isUnlockReq = unlockReq.isUnlockRequest || Boolean(message.content && (message.content.includes('<!--unlock-request:') || message.content.includes('"type":"unlock_request"')));
 
@@ -527,6 +537,7 @@ export default function MessageBubble({
                         isUnlocked={isUnlocked}
                         isPendingVerification={isPendingVerification}
                         onUnlocked={onUnlocked}
+                        onOpenMedia={onOpenMedia}
                         isSending={message.status === 'sending'}
                         senderName={senderDisplayName}
                         senderAvatar={senderAvatarUrl}
@@ -550,8 +561,13 @@ export default function MessageBubble({
                           isSending={message.status === 'sending'}
                           onItemClick={(idx) => {
                             if (message.status === 'sending') return;
-                            setFreeLightboxIndex(idx);
-                            setFreeLightboxOpen(true);
+                            const targetUrl = vaultMedia.media?.items?.[idx]?.mediaUrl;
+                            if (onOpenMedia && targetUrl) {
+                              onOpenMedia(targetUrl);
+                            } else {
+                              setFreeLightboxIndex(idx);
+                              setFreeLightboxOpen(true);
+                            }
                           }}
                         />
                       ) : (
@@ -560,8 +576,12 @@ export default function MessageBubble({
                           onClick={(e) => {
                             if (message.status === 'sending') return;
                             e.stopPropagation();
-                            setFreeLightboxIndex(0);
-                            setFreeLightboxOpen(true);
+                            if (onOpenMedia && vaultMedia.media?.mediaUrl) {
+                              onOpenMedia(vaultMedia.media.mediaUrl);
+                            } else {
+                              setFreeLightboxIndex(0);
+                              setFreeLightboxOpen(true);
+                            }
                           }}
                           data-no-swipe="true"
                           className="rounded-xl overflow-hidden w-full cursor-pointer group relative"
@@ -665,11 +685,48 @@ export default function MessageBubble({
                       />
                     </div>
                   )
+                ) : docData.isDocument && docData.document ? (
+                  <div className="space-y-1.5 select-none min-w-[220px] max-w-[280px] sm:max-w-[320px]">
+                    <a
+                      href={docData.document.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={docData.document.name}
+                      data-no-swipe="true"
+                      className="flex items-center gap-3 p-2.5 rounded-xl bg-black/25 hover:bg-black/40 border border-white/10 transition-all group active:scale-98 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/25">
+                        <FileText size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-paper truncate group-hover:underline">
+                          {docData.document.name}
+                        </p>
+                        <p className="text-[0.68rem] text-muted flex items-center gap-1.5 mt-0.5">
+                          <span>{docData.document.size ? formatFileSize(docData.document.size) : 'Document'}</span>
+                          <span>•</span>
+                          <span className="uppercase text-paper/60 font-semibold">
+                            {docData.document.name.split('.').pop() || 'FILE'}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="w-7 h-7 rounded-full bg-white/5 group-hover:bg-white/15 flex items-center justify-center text-muted group-hover:text-paper transition-colors shrink-0">
+                        <ArrowDownToLine size={14} />
+                      </div>
+                    </a>
+                    {docData.text && (
+                      <p className="whitespace-pre-wrap text-paper text-[15px] sm:text-base leading-relaxed px-1 break-words">
+                        {docData.text}
+                        <TimestampSpacer isMine={isMine} />
+                      </p>
+                    )}
+                  </div>
                 ) : isVoiceNote ? (
                   <div className="flex items-center gap-2 text-muted text-xs pr-14">
                     🎤 <span>Voice note</span>
                   </div>
-                ) : isAttachment ? (
+                  ) : isAttachment ? (
                   <div className="flex items-center gap-2 text-muted text-xs pr-14">
                     📎 <span>Attachment</span>
                   </div>

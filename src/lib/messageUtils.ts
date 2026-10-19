@@ -2,12 +2,39 @@ import { parseStoryReply } from './storyReplies';
 import { parseVaultMediaMessage } from './creatorVault';
 import { parseUnlockRequestMessage, parseUnlockConfirmedMessage } from './unlockRequests';
 
+export interface DocumentAttachment {
+  name: string;
+  url: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export function parseDocumentMessage(content: string | null | undefined): {
+  isDocument: boolean;
+  document: DocumentAttachment | null;
+  text: string | null;
+} {
+  if (!content) return { isDocument: false, document: null, text: null };
+  const match = content.match(/<!--document-attachment:([\s\S]*?)-->/);
+  if (!match) return { isDocument: false, document: null, text: content };
+
+  try {
+    const document = JSON.parse(match[1]) as DocumentAttachment;
+    const text = content.replace(/<!--document-attachment:[\s\S]*?-->/, '').trim();
+    return { isDocument: true, document, text: text || null };
+  } catch (err) {
+    return { isDocument: false, document: null, text: content };
+  }
+}
+
 export interface CleanMessagePreview {
   text: string;
   isStoryReply?: boolean;
   isVaultMedia?: boolean;
   isVoiceNote?: boolean;
   isAttachment?: boolean;
+  isDocument?: boolean;
+  document?: DocumentAttachment | null;
   thumbnailUrl?: string | null;
   mediaType?: 'image' | 'video';
 }
@@ -89,6 +116,18 @@ export function getCleanMessagePreview(
       text: conf.payload?.title ? `🔓 Unlocked ${conf.payload.title}${amountStr}` : `🔓 Content unlocked${amountStr}`,
       thumbnailUrl: conf.payload?.thumbnailUrl || null,
       mediaType: 'image',
+    };
+  }
+
+  // 3c. Check if it's a document attachment
+  const doc = parseDocumentMessage(content);
+  if (doc.isDocument && doc.document) {
+    const text = doc.text ? `${doc.text} (📄 ${doc.document.name})` : `📄 ${doc.document.name}`;
+    return {
+      text,
+      isAttachment: true,
+      isDocument: true,
+      document: doc.document,
     };
   }
 
@@ -252,6 +291,15 @@ export function parseConversationPreview(preview: string | null | undefined): Co
     return {
       type: 'story',
       text: clean || 'Story reply',
+    };
+  }
+
+  // 5b. Document attachments
+  if (preview.includes('<!--document-attachment:')) {
+    const doc = parseDocumentMessage(preview);
+    return {
+      type: 'attachment',
+      text: doc.document?.name ? `📄 ${doc.document.name}` : 'Document',
     };
   }
 

@@ -23,6 +23,7 @@ export interface LightboxMediaItem {
   senderName?: string;
   senderAvatar?: string | null;
   timestamp?: string;
+  messageId?: string;
 }
 
 interface MediaLightboxProps {
@@ -78,6 +79,7 @@ export default function MediaLightbox({
 
   // Custom Video Player State — Top One-Line Bar
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoElementsRef = useRef<Map<number, HTMLVideoElement>>(new Map());
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -126,7 +128,17 @@ export default function MediaLightbox({
 
   // Reset video & controls when index changes
   useEffect(() => {
-    // Pause any playing video when index changes
+    // Stop and pause ALL non-current videos in the carousel immediately
+    videoElementsRef.current.forEach((el, idx) => {
+      if (idx !== currentIndex) {
+        try {
+          el.pause();
+          el.currentTime = 0;
+        } catch (_) {}
+      }
+    });
+
+    // Also pause active video on transition so it does not auto-play uncommanded
     if (videoRef.current) {
       try {
         videoRef.current.pause();
@@ -167,6 +179,9 @@ export default function MediaLightbox({
   const handleNext = useCallback(() => {
     if (items.length <= 1) return;
     if (currentIndex < items.length - 1) {
+      if (videoRef.current) {
+        try { videoRef.current.pause(); } catch (_) {}
+      }
       setCurrentIndex((prev) => prev + 1);
     }
   }, [items.length, currentIndex]);
@@ -174,6 +189,9 @@ export default function MediaLightbox({
   const handlePrev = useCallback(() => {
     if (items.length <= 1) return;
     if (currentIndex > 0) {
+      if (videoRef.current) {
+        try { videoRef.current.pause(); } catch (_) {}
+      }
       setCurrentIndex((prev) => prev - 1);
     }
   }, [items.length, currentIndex]);
@@ -337,8 +355,14 @@ export default function MediaLightbox({
     // Check horizontal swipe transition
     if (gestureDirection.current === 'horizontal' && isDraggingSwipe.current) {
       if (deltaX < -45 && currentIndex < items.length - 1) {
+        if (videoRef.current) {
+          try { videoRef.current.pause(); } catch (_) {}
+        }
         setCurrentIndex((prev) => prev + 1);
       } else if (deltaX > 45 && currentIndex > 0) {
+        if (videoRef.current) {
+          try { videoRef.current.pause(); } catch (_) {}
+        }
         setCurrentIndex((prev) => prev - 1);
       }
     }
@@ -655,6 +679,11 @@ export default function MediaLightbox({
                       <video
                         key={item.mediaUrl || idx}
                         ref={(el) => {
+                          if (el) {
+                            videoElementsRef.current.set(idx, el);
+                          } else {
+                            videoElementsRef.current.delete(idx);
+                          }
                           if (isCurrent) {
                             videoRef.current = el;
                           }
@@ -668,17 +697,27 @@ export default function MediaLightbox({
                         onLoadedMetadata={isCurrent ? handleLoadedMetadata : undefined}
                         onWaiting={() => isCurrent && setIsBuffering(true)}
                         onStalled={() => isCurrent && setIsBuffering(true)}
+                        onPlay={(e) => {
+                          if (!isCurrent) {
+                            (e.target as HTMLVideoElement).pause();
+                          }
+                        }}
                         onPlaying={() => {
                           if (isCurrent) {
                             setIsBuffering(false);
                             setIsPlaying(true);
+                          } else {
+                            const el = videoElementsRef.current.get(idx);
+                            if (el) {
+                              try { el.pause(); } catch (_) {}
+                            }
                           }
                         }}
                         onPause={() => {
                           if (isCurrent) setIsPlaying(false);
                         }}
                         onEnded={() => isCurrent && setIsPlaying(false)}
-                        className="w-full h-full max-h-full max-w-full object-contain select-none"
+                        className="w-full h-full max-h-full max-w-full object-contain select-none pointer-events-none"
                       />
 
                       {/* Glowing Gold Buffering Indicator (current video only) */}
@@ -969,7 +1008,12 @@ export default function MediaLightbox({
                         thumbnailRefs.current[idx] = el;
                       }}
                       type="button"
-                      onClick={() => setCurrentIndex(idx)}
+                      onClick={() => {
+                        if (videoRef.current) {
+                          try { videoRef.current.pause(); } catch (_) {}
+                        }
+                        setCurrentIndex(idx);
+                      }}
                       className={`relative shrink-0 rounded-lg overflow-hidden transition-all cursor-pointer ${
                         isSelected
                           ? 'border-2 border-gold scale-105 z-10 shadow-[0_0_12px_rgba(212,175,55,0.5)]'

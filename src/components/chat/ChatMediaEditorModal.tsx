@@ -44,6 +44,7 @@ interface ChatMediaEditorModalProps {
   onClose: () => void;
   initialFiles?: File[];
   initialVaultItems?: VaultItem[];
+  initialIsLocked?: boolean;
   isCreator: boolean;
   // Receives raw file data — editor closes immediately, upload runs in parent
   onSend: (data: ChatMediaSendData) => void;
@@ -65,13 +66,14 @@ export default function ChatMediaEditorModal({
   onClose,
   initialFiles,
   initialVaultItems,
+  initialIsLocked = false,
   isCreator,
   onSend,
 }: ChatMediaEditorModalProps) {
   const { profile } = useAuth();
   const [mediaQueue, setMediaQueue] = useState<StoryMediaItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
+  const [isLocked, setIsLocked] = useState(initialIsLocked);
   const [lockPrice, setLockPrice] = useState<number>(25);
   const [customPriceInput, setCustomPriceInput] = useState<string>('25');
   const [showLockPopover, setShowLockPopover] = useState(false);
@@ -81,6 +83,12 @@ export default function ChatMediaEditorModal({
   const [isOverlayEditing, setIsOverlayEditing] = useState(false);
   const [baking, setBaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsLocked(initialIsLocked);
+    }
+  }, [isOpen, initialIsLocked]);
 
   // Android hardware back button handlers
   useBackHandler(() => {

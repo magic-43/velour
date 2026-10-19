@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ArrowLeft, Pin, X, Check, Copy, CornerUpRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
@@ -9,6 +9,7 @@ import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
 import MessageContextMenu from './MessageContextMenu';
 import ForwardMessageModal from './ForwardMessageModal';
+import MediaLightbox, { type LightboxMediaItem } from './MediaLightbox';
 import HomeStoryFeed from '../stories/HomeStoryFeed';
 import { supabase } from '../../lib/supabase';
 import type { Story, CreatorProfile, HomeStorySession } from '../../types';
@@ -467,6 +468,86 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     return true;
   };
 
+  // Collect all viewable media from all messages in the conversation for the unified lightbox
+  const allChatMediaItems = useMemo<LightboxMediaItem[]>(() => {
+    const list: LightboxMediaItem[] = [];
+
+    for (const msg of messages) {
+      if (msg.is_deleted) continue;
+      const vaultData = parseVaultMediaMessage(msg.content);
+      if (vaultData.isVaultMedia && vaultData.media) {
+        const m = vaultData.media;
+        if (m.isLocked) {
+          const k1 = m.batchId;
+          const k2 = m.mediaUrl;
+          const k3 = m.thumbnailUrl;
+          const itemUrls = (m.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl, it.id]);
+          const allKeys = [k1, k2, k3, ...itemUrls, msg.id].filter(Boolean);
+          const isUnlocked = isCreator || msg.sender_id === user?.id || allKeys.some((k) => unlockedAttachmentIds.has(k));
+          if (!isUnlocked) continue;
+        }
+
+        const senderDisplayName =
+          msg.sender_id === user?.id
+            ? 'You'
+            : (msg.sender?.display_name || msg.sender?.username || other.name || 'User');
+        const senderAvatarUrl =
+          msg.sender_id === user?.id
+            ? (user?.user_metadata?.avatar_url || null)
+            : (msg.sender?.avatar_url || other.avatar_url || null);
+        const bubbleTimestamp = msg.created_at
+          ? new Date(msg.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+          : undefined;
+
+        if (m.items && m.items.length > 0) {
+          for (const it of m.items) {
+            if (!it.mediaUrl) continue;
+            list.push({
+              mediaUrl: it.mediaUrl,
+              mediaType: it.mediaType || 'image',
+              thumbnailUrl: it.thumbnailUrl || m.thumbnailUrl || it.mediaUrl,
+              title: it.title,
+              caption: vaultData.text || it.title || null,
+              senderName: senderDisplayName,
+              senderAvatar: senderAvatarUrl,
+              timestamp: bubbleTimestamp,
+              messageId: msg.id,
+            });
+          }
+        } else if (m.mediaUrl) {
+          list.push({
+            mediaUrl: m.mediaUrl,
+            mediaType: m.mediaType || 'image',
+            thumbnailUrl: m.thumbnailUrl || m.mediaUrl,
+            title: m.title,
+            caption: vaultData.text || m.title || null,
+            senderName: senderDisplayName,
+            senderAvatar: senderAvatarUrl,
+            timestamp: bubbleTimestamp,
+            messageId: msg.id,
+          });
+        }
+      }
+    }
+
+    return list;
+  }, [messages, isCreator, user?.id, unlockedAttachmentIds, other.name, other.avatar_url]);
+
+  const [activeLightboxMediaUrl, setActiveLightboxMediaUrl] = useState<string | null>(null);
+
+  const lightboxInitialIndex = useMemo(() => {
+    if (!activeLightboxMediaUrl || allChatMediaItems.length === 0) return 0;
+    const idx = allChatMediaItems.findIndex(
+      (it) => it.mediaUrl === activeLightboxMediaUrl || it.thumbnailUrl === activeLightboxMediaUrl
+    );
+    return idx >= 0 ? idx : 0;
+  }, [activeLightboxMediaUrl, allChatMediaItems]);
+
+  useBackHandler(() => {
+    setActiveLightboxMediaUrl(null);
+    return true;
+  }, Boolean(activeLightboxMediaUrl), 150);
+
   // Group messages: determine if we show a date separator or avatar
   const renderMessages = () => {
     const visibleMessages = messages.filter(isMessageVisible);
@@ -525,6 +606,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
               onScrollToMessage={handleScrollToMessage}
               onOpenContextMenu={(targetMsg, rect) => setContextMenuData({ message: targetMsg, rect })}
               onReact={toggleReaction}
+              onOpenMedia={setActiveLightboxMediaUrl}
               otherName={other.name || other.username}
               otherAvatar={other.avatar_url}
             />
@@ -895,6 +977,31 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[140] px-4 py-2 rounded-full bg-zinc-800/90 text-white text-xs shadow-xl backdrop-blur-md border border-white/10 animate-in fade-in zoom-in-95 duration-150">
           {toastMessage}
         </div>
+      )}
+
+      {/* ── Full Chat Media Lightbox (shows all images & videos in chat filmstrip) ── */}
+      {activeLightboxMediaUrl && allChatMediaItems.length > 0 && (
+        <MediaLightbox
+          isOpen={Boolean(activeLightboxMediaUrl)}
+          onClose={() => setActiveLightboxMediaUrl(null)}
+          items={allChatMediaItems}
+          initialIndex={lightboxInitialIndex}
+          onReply={(item) => {
+            setActiveLightboxMediaUrl(null);
+            if (item.messageId) {
+              const targetMsg = messages.find((m) => m.id === item.messageId);
+              if (targetMsg) setReplyTo(targetMsg);
+            }
+          }}
+          onDelete={(item) => {
+            setActiveLightboxMediaUrl(null);
+            if (item.messageId) handleDelete(item.messageId);
+          }}
+          onReact={(emoji) => {
+            const currentItem = allChatMediaItems[lightboxInitialIndex];
+            if (currentItem?.messageId) toggleReaction(currentItem.messageId, emoji);
+          }}
+        />
       )}
     </div>
   );
