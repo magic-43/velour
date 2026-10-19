@@ -18,7 +18,7 @@ import { getCleanMessagePreview } from '../../lib/messageUtils';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 
 import { usePresence } from '../../lib/hooks/usePresence';
-import { formatLastSeen } from '../../lib/utils/presenceUtils';
+import { formatLastSeen, getMyLastSeenPrivacy } from '../../lib/utils/presenceUtils';
 import { globalPresenceManager } from '../../lib/presenceManager';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ interface OtherParticipant {
   username: string;
   avatar_url: string | null;
   last_seen_at: string | null;
+  hide_presence?: boolean;
 }
 
 interface Props {
@@ -533,16 +534,26 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     });
   };
 
-  const { isUserOnline, formatUserLastSeen } = usePresence();
+  const { isUserOnline, formatUserLastSeen, hiddenUsers } = usePresence();
   const targetUserId = other.userId || other.id;
 
-  const [liveLastSeen, setLiveLastSeen] = useState<string | null>(other.last_seen_at);
+  const isOtherHidden = Boolean(
+    other.hide_presence ||
+    (targetUserId && hiddenUsers?.has(targetUserId)) ||
+    (targetUserId && getMyLastSeenPrivacy(targetUserId) === 'nobody')
+  );
+
+  const [liveLastSeen, setLiveLastSeen] = useState<string | null>(isOtherHidden ? null : other.last_seen_at);
   useEffect(() => {
-    setLiveLastSeen(other.last_seen_at);
-  }, [other.last_seen_at]);
+    if (isOtherHidden) {
+      setLiveLastSeen(null);
+    } else {
+      setLiveLastSeen(other.last_seen_at);
+    }
+  }, [other.last_seen_at, isOtherHidden]);
 
   useEffect(() => {
-    if (!targetUserId) return;
+    if (!targetUserId || isOtherHidden) return;
     const channel = supabase
       .channel(`profile_presence_${targetUserId}`)
       .on(
@@ -558,23 +569,25 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [targetUserId]);
+  }, [targetUserId, isOtherHidden]);
 
   useEffect(() => {
+    if (isOtherHidden) return;
     if (!messages || messages.length === 0) return;
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.sender_id === targetUserId) {
       setLiveLastSeen(lastMsg.created_at || new Date().toISOString());
     }
-  }, [messages, targetUserId]);
+  }, [messages, targetUserId, isOtherHidden]);
 
   useEffect(() => {
+    if (isOtherHidden) return;
     if (otherIsTyping) {
       setLiveLastSeen(new Date().toISOString());
     }
-  }, [otherIsTyping]);
+  }, [otherIsTyping, isOtherHidden]);
 
-  const online = isUserOnline(targetUserId, liveLastSeen);
+  const online = isOtherHidden ? false : isUserOnline(targetUserId, liveLastSeen);
 
   return (
     <div id="chat-window-root" className="flex flex-col h-full max-h-[100dvh] bg-ink relative overflow-hidden md:border-r border-border-subtle">
@@ -631,7 +644,7 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
                 </span>
               )}
             </div>
-            {online && (
+            {online && !isOtherHidden && (
               <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-ink shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
             )}
           </div>
@@ -639,17 +652,19 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
           {/* Name + status */}
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-paper text-base truncate leading-tight">{other.name}</p>
-            <p className="text-xs truncate mt-0.5">
-              {otherIsTyping ? (
+            {otherIsTyping ? (
+              <p className="text-xs truncate mt-0.5">
                 <span className="text-gold font-medium animate-pulse">typing…</span>
-              ) : online ? (
-                <span className="text-emerald-400 font-medium">
-                  online
-                </span>
-              ) : (
+              </p>
+            ) : online && !isOtherHidden ? (
+              <p className="text-xs truncate mt-0.5">
+                <span className="text-emerald-400 font-medium">online</span>
+              </p>
+            ) : !isOtherHidden && formatUserLastSeen(liveLastSeen, false, targetUserId) ? (
+              <p className="text-xs truncate mt-0.5">
                 <span className="text-muted">{formatUserLastSeen(liveLastSeen, false, targetUserId)}</span>
-              )}
-            </p>
+              </p>
+            ) : null}
           </div>
 
 

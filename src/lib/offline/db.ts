@@ -389,6 +389,30 @@ export async function getOutboxMessages(): Promise<OutboxMessage[]> {
   }
 }
 
+export async function getAllCachedConversations(): Promise<ConversationWithParticipants[]> {
+  try {
+    const list = await performTransaction<ConversationWithParticipants[]>('conversations', 'readonly', (store) => {
+      return store.getAll();
+    });
+    return list || [];
+  } catch (err) {
+    console.warn('Failed reading all cached conversations:', err);
+    return [];
+  }
+}
+
+export async function getAllCachedMessages(): Promise<MessageWithSender[]> {
+  try {
+    const list = await performTransaction<MessageWithSender[]>('messages', 'readonly', (store) => {
+      return store.getAll();
+    });
+    return list || [];
+  } catch (err) {
+    console.warn('Failed reading all cached messages:', err);
+    return [];
+  }
+}
+
 export async function removeOutboxMessage(tempId: string): Promise<void> {
   try {
     await performTransaction('outbox', 'readwrite', (store) => {

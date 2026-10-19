@@ -81,7 +81,7 @@ export default function Conversation() {
             *,
             fan:profiles!fan_id(id, username, display_name, avatar_url, last_seen_at),
             creator_profile:creator_profiles!creator_profile_id(
-              id, owner_id, display_name, avatar_url,
+              id, owner_id, display_name, avatar_url, tags,
               owner:profiles!owner_id(id, avatar_url, username, display_name, last_seen_at)
             )
           `)

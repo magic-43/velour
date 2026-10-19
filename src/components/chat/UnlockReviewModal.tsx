@@ -147,6 +147,7 @@ export default function UnlockReviewModal({
         request.attachmentId && UUID_REGEX.test(request.attachmentId) ? request.attachmentId : null,
         targetBatchId,
         request.thumbnailUrl,
+        ...(targetUrls || []),
       ].filter((k): k is string => Boolean(k));
 
       for (const unlockKey of unlockKeys) {
@@ -203,6 +204,32 @@ export default function UnlockReviewModal({
           },
         })
       );
+
+      // 6. Mark items verified in local fan storage
+      const fanId = request.fanId || message.sender_id;
+      const fanKeys = [fanId, user.id].filter(Boolean);
+      fanKeys.forEach((fId) => {
+        try {
+          const key = `velour_unlocked_media_${fId}`;
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const list = JSON.parse(raw);
+            const updated = list.map((item: any) => {
+              const match =
+                item.id === targetBatchId ||
+                item.batchId === targetBatchId ||
+                item.id === request.attachmentId ||
+                targetUrls.includes(item.mediaUrl) ||
+                (targetBatchId && item.id?.startsWith(targetBatchId));
+              if (match) {
+                return { ...item, status: 'verified' };
+              }
+              return item;
+            });
+            localStorage.setItem(key, JSON.stringify(updated));
+          }
+        } catch {}
+      });
 
       try {
         localStorage.setItem(`velour_receipt_${message.id}`, 'verified');

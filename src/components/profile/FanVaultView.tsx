@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Play, Video, Camera, Compass, LockOpen, Key } from 'lucide-react';
+import { ArrowLeft, Play, Video, Camera, Compass, LockOpen, Key, RotateCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 import { parseVaultMediaMessage } from '../../lib/creatorVault';
 import { parseUnlockConfirmedMessage, parseUnlockRequestMessage } from '../../lib/unlockRequests';
+import { getAllCachedConversations, getAllCachedMessages } from '../../lib/offline/db';
 import MediaLightbox from '../chat/MediaLightbox';
 
 interface FanVaultViewProps {
@@ -161,12 +162,63 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
 
       const combined = [...parsedDbItems];
       if (Array.isArray(localItems)) {
-        // Enforce STRICT filter: item MUST have status === 'verified' and a valid mediaUrl
+        // Enforce STRICT filter: item MUST have status === 'verified' and a valid mediaUrl/sub-items
         const verifiedLocals = localItems.filter(
-          (loc) => loc && loc.status === 'verified' && (loc.mediaUrl || loc.thumbnailUrl)
+          (loc) => loc && loc.status === 'verified' && (loc.mediaUrl || loc.thumbnailUrl || (loc.items && loc.items.length > 0) || (loc.mediaItems && loc.mediaItems.length > 0) || (loc.mediaUrls && loc.mediaUrls.length > 0))
         );
 
         for (const loc of verifiedLocals) {
+          // If loc contains unpacked sub-items (bundle):
+          const subItems = (loc.items || loc.mediaItems) as any[];
+          if (Array.isArray(subItems) && subItems.length > 0) {
+            subItems.forEach((it: any, idx: number) => {
+              const url = it.mediaUrl || it.thumbnailUrl;
+              if (url && !combined.some((c) => c.mediaUrl === url)) {
+                const isVideo =
+                  it.mediaType === 'video' ||
+                  loc.mediaType === 'video' ||
+                  Boolean(url.match(/\.(mp4|mov|webm|m4v)$/i));
+
+                combined.push({
+                  id: it.id || `${loc.id}_${idx}`,
+                  mediaUrl: url,
+                  thumbnailUrl: it.thumbnailUrl || (isVideo ? null : url),
+                  mediaType: isVideo ? 'video' : 'image',
+                  title: it.title || (subItems.length > 1 ? `${loc.title || 'Exclusive Media'} (${idx + 1}/${subItems.length})` : (loc.title || 'Exclusive Media')),
+                  creatorName: loc.creatorName || 'Creator',
+                  creatorAvatar: loc.creatorAvatar || null,
+                  unlockedAt: loc.unlockedAt || new Date().toISOString(),
+                  amountUsd: idx === 0 ? loc.amountUsd : null,
+                });
+              }
+            });
+            continue;
+          }
+
+          // If loc contains mediaUrls array:
+          if (Array.isArray(loc.mediaUrls) && loc.mediaUrls.length > 0) {
+            loc.mediaUrls.forEach((url: string, idx: number) => {
+              if (url && !combined.some((c) => c.mediaUrl === url)) {
+                const isVideo =
+                  loc.mediaType === 'video' ||
+                  Boolean(url.match(/\.(mp4|mov|webm|m4v)$/i));
+
+                combined.push({
+                  id: `${loc.id}_${idx}`,
+                  mediaUrl: url,
+                  thumbnailUrl: isVideo ? (idx === 0 ? loc.thumbnailUrl : null) : url,
+                  mediaType: isVideo ? 'video' : 'image',
+                  title: loc.mediaUrls.length > 1 ? `${loc.title || 'Exclusive Media'} (${idx + 1}/${loc.mediaUrls.length})` : (loc.title || 'Exclusive Media'),
+                  creatorName: loc.creatorName || 'Creator',
+                  creatorAvatar: loc.creatorAvatar || null,
+                  unlockedAt: loc.unlockedAt || new Date().toISOString(),
+                  amountUsd: idx === 0 ? loc.amountUsd : null,
+                });
+              }
+            });
+            continue;
+          }
+
           const url = loc.mediaUrl || loc.thumbnailUrl;
           if (url && !combined.some((c) => c.mediaUrl === url || c.id === loc.id)) {
             const isVideo =
@@ -188,9 +240,9 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
         }
       }
 
-      // 4. Fetch unlocked media from the fan's conversations & messages
+      // 4. Fetch unlocked media from conversations & messages (from Supabase + IndexedDB)
       try {
-        const { data: convos } = await supabase
+        const { data: remoteConvos } = await supabase
           .from('conversations')
           .select(`
             id,
@@ -204,182 +256,230 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           `)
           .eq('fan_id', profile.id);
 
-        if (convos && convos.length > 0) {
-          const convoIds = convos.map((c) => c.id);
-          const { data: convMessages } = await supabase
+        let cachedConvos: any[] = [];
+        try {
+          cachedConvos = await getAllCachedConversations();
+        } catch {}
+
+        const allConvosMap = new Map<string, any>();
+        (remoteConvos || []).forEach((c) => allConvosMap.set(c.id, c));
+        (cachedConvos || []).forEach((c) => {
+          if (c && (c.fan_id === profile.id || !allConvosMap.has(c.id))) {
+            allConvosMap.set(c.id, c);
+          }
+        });
+
+        const convoList = Array.from(allConvosMap.values());
+        const convoIds = Array.from(allConvosMap.keys());
+
+        let allMessages: any[] = [];
+        if (convoIds.length > 0) {
+          const { data: remoteMessages } = await supabase
             .from('messages')
             .select('id, conversation_id, content, created_at, sender_id, sender_type')
             .in('conversation_id', convoIds)
             .order('created_at', { ascending: false });
 
-          if (convMessages && convMessages.length > 0) {
-            // Map conversations by id for creator details lookup
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const convoMap = new Map<string, any>();
-            convos.forEach((c) => convoMap.set(c.id, c.creator));
+          let cachedMessages: any[] = [];
+          try {
+            cachedMessages = await getAllCachedMessages();
+          } catch {}
 
-            // Set of unlocked IDs / URLs per conversation
-            const unlockedKeys = new Set<string>();
-            const unlockDates = new Map<string, string>();
+          const msgMap = new Map<string, any>();
+          (remoteMessages || []).forEach((m) => msgMap.set(m.id, m));
+          (cachedMessages || []).forEach((m) => {
+            if (m && m.id && !msgMap.has(m.id)) {
+              msgMap.set(m.id, m);
+            }
+          });
+          allMessages = Array.from(msgMap.values());
+        } else {
+          try {
+            allMessages = await getAllCachedMessages();
+          } catch {}
+        }
 
-            // Seed unlocked keys from database and local verified collections
-            if (unlocks && Array.isArray(unlocks)) {
-              for (const u of unlocks) {
-                if (u.id) unlockedKeys.add(u.id);
-                if ((u as any).attachment_id) unlockedKeys.add((u as any).attachment_id);
-                if (u.media_url) unlockedKeys.add(u.media_url);
-                if (u.attachment?.id) unlockedKeys.add(u.attachment.id);
-                if (u.attachment?.public_url) unlockedKeys.add(u.attachment.public_url);
+        if (allMessages.length > 0) {
+          // Map conversations by id for creator details lookup
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const convoMap = new Map<string, any>();
+          convoList.forEach((c) => convoMap.set(c.id, c.creator || c.creator_profile));
+
+          // Set of unlocked IDs / URLs per conversation
+          const unlockedKeys = new Set<string>();
+          const unlockDates = new Map<string, string>();
+
+          // Seed unlocked keys from database and local verified collections
+          if (unlocks && Array.isArray(unlocks)) {
+            for (const u of unlocks) {
+              if (u.id) unlockedKeys.add(u.id);
+              if ((u as any).attachment_id) unlockedKeys.add((u as any).attachment_id);
+              if (u.media_url) unlockedKeys.add(u.media_url);
+              if (u.attachment?.id) unlockedKeys.add(u.attachment.id);
+              if (u.attachment?.public_url) unlockedKeys.add(u.attachment.public_url);
+            }
+          }
+          if (verifiedTxs && Array.isArray(verifiedTxs)) {
+            for (const t of verifiedTxs) {
+              if (t.id) unlockedKeys.add(t.id);
+              if (t.attachment_id) unlockedKeys.add(t.attachment_id);
+              if (t.media_url) unlockedKeys.add(t.media_url);
+            }
+          }
+          if (Array.isArray(localItems)) {
+            for (const loc of localItems) {
+              if (loc && loc.status === 'verified') {
+                if (loc.id) unlockedKeys.add(loc.id);
+                if (loc.batchId) unlockedKeys.add(loc.batchId);
+                if (loc.mediaUrl) unlockedKeys.add(loc.mediaUrl);
+                if (loc.thumbnailUrl) unlockedKeys.add(loc.thumbnailUrl);
               }
             }
-            if (verifiedTxs && Array.isArray(verifiedTxs)) {
-              for (const t of verifiedTxs) {
-                if (t.id) unlockedKeys.add(t.id);
-                if (t.attachment_id) unlockedKeys.add(t.attachment_id);
-                if (t.media_url) unlockedKeys.add(t.media_url);
-              }
-            }
-            if (Array.isArray(localItems)) {
-              for (const loc of localItems) {
-                if (loc && loc.status === 'verified') {
-                  if (loc.id) unlockedKeys.add(loc.id);
-                  if (loc.batchId) unlockedKeys.add(loc.batchId);
-                  if (loc.mediaUrl) unlockedKeys.add(loc.mediaUrl);
-                  if (loc.thumbnailUrl) unlockedKeys.add(loc.thumbnailUrl);
+          }
+
+          // Also check localStorage receipts: velour_receipt_*
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('velour_receipt_')) {
+                const val = localStorage.getItem(k);
+                if (val === 'verified') {
+                  unlockedKeys.add(k.replace('velour_receipt_', ''));
                 }
               }
             }
+          } catch {}
 
-            for (const m of convMessages) {
-              if (!m.content) continue;
+          for (const m of allMessages) {
+            if (!m.content) continue;
 
-              // Check for unlock_confirmed
-              if (m.content.includes('unlock_confirmed') || m.content.includes('unlock-confirmed')) {
-                const conf = parseUnlockConfirmedMessage(m.content);
-                if (conf.isUnlockConfirmed && conf.payload) {
-                  const p = conf.payload;
-                  const date = p.confirmedAt || m.created_at;
-                  if (p.batchId) {
-                    unlockedKeys.add(p.batchId);
-                    unlockDates.set(p.batchId, date);
-                  }
-                  if (p.attachmentId) {
-                    unlockedKeys.add(p.attachmentId);
-                    unlockDates.set(p.attachmentId, date);
-                  }
-                  for (const u of p.mediaUrls || []) {
-                    unlockedKeys.add(u);
-                    unlockDates.set(u, date);
-                  }
-                  if (p.thumbnailUrl) {
-                    unlockedKeys.add(p.thumbnailUrl);
-                    unlockDates.set(p.thumbnailUrl, date);
-                  }
+            // Check for unlock_confirmed
+            if (m.content.includes('unlock_confirmed') || m.content.includes('unlock-confirmed')) {
+              const conf = parseUnlockConfirmedMessage(m.content);
+              if (conf.isUnlockConfirmed && conf.payload) {
+                const p = conf.payload;
+                const date = p.confirmedAt || m.created_at;
+                if (p.batchId) {
+                  unlockedKeys.add(p.batchId);
+                  unlockDates.set(p.batchId, date);
                 }
-              }
-
-              // Check for verified unlock_request
-              const req = parseUnlockRequestMessage(m.content);
-              if (req.isUnlockRequest && req.request?.status === 'verified') {
-                const r = req.request;
-                const date = r.approvedAt || r.submittedAt || m.created_at;
-                if (r.batchId) {
-                  unlockedKeys.add(r.batchId);
-                  unlockDates.set(r.batchId, date);
+                if (p.attachmentId) {
+                  unlockedKeys.add(p.attachmentId);
+                  unlockDates.set(p.attachmentId, date);
                 }
-                if (r.attachmentId) {
-                  unlockedKeys.add(r.attachmentId);
-                  unlockDates.set(r.attachmentId, date);
-                }
-                for (const u of r.mediaUrls || []) {
+                for (const u of p.mediaUrls || []) {
                   unlockedKeys.add(u);
                   unlockDates.set(u, date);
                 }
-                if (r.thumbnailUrl) {
-                  unlockedKeys.add(r.thumbnailUrl);
-                  unlockDates.set(r.thumbnailUrl, date);
+                if (p.thumbnailUrl) {
+                  unlockedKeys.add(p.thumbnailUrl);
+                  unlockDates.set(p.thumbnailUrl, date);
                 }
               }
             }
 
-            // Scan all vault_media messages
-            for (const m of convMessages) {
-              if (!m.content) continue;
-              const v = parseVaultMediaMessage(m.content);
-              if (!v.isVaultMedia || !v.media) continue;
-
-              const media = v.media;
-              const creator = convoMap.get(m.conversation_id);
-
-              const k1 = media.batchId;
-              const k2 = media.mediaUrl;
-              const k3 = media.thumbnailUrl;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const itemKeys = (media.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl, it.id]).filter(Boolean);
-              const allKeys = [k1, k2, k3, ...itemKeys, m.id].filter(Boolean) as string[];
-
-              const isUnlocked = allKeys.some((k) => unlockedKeys.has(k));
-              if (!isUnlocked && media.isLocked) continue;
-
-              // Find unlock date
-              let unlockedAt = m.created_at;
-              for (const k of allKeys) {
-                if (unlockDates.has(k)) {
-                  unlockedAt = unlockDates.get(k)!;
-                  break;
-                }
+            // Check for verified unlock_request
+            const req = parseUnlockRequestMessage(m.content);
+            if (req.isUnlockRequest && (req.request?.status === 'verified' || unlockedKeys.has(m.id))) {
+              const r = req.request;
+              const date = r?.approvedAt || r?.submittedAt || m.created_at;
+              if (r?.batchId) {
+                unlockedKeys.add(r.batchId);
+                unlockDates.set(r.batchId, date);
               }
-
-              // Extract all items (single or bundle)
-              const itemsToExtract = media.items && media.items.length > 0
-                ? media.items
-                : [{
-                    mediaUrl: media.mediaUrl,
-                    mediaType: media.mediaType,
-                    thumbnailUrl: media.thumbnailUrl,
-                    title: media.title,
-                  }];
-
-              // If this is a bundle, clean up any previous single-thumbnail placeholder
-              if (media.items && media.items.length > 1) {
-                const thumb = media.thumbnailUrl;
-                const batch = media.batchId;
-                for (let i = combined.length - 1; i >= 0; i--) {
-                  const c = combined[i];
-                  if (
-                    (thumb && c.mediaUrl === thumb && c.mediaType === 'image') ||
-                    (batch && (c.id === batch || c.id?.startsWith(batch)))
-                  ) {
-                    combined.splice(i, 1);
-                  }
-                }
+              if (r?.attachmentId) {
+                unlockedKeys.add(r.attachmentId);
+                unlockDates.set(r.attachmentId, date);
               }
-
-              itemsToExtract.forEach((it, idx) => {
-                const mediaUrl = it.mediaUrl;
-                if (!mediaUrl) return;
-
-                if (!combined.some((c) => c.mediaUrl === mediaUrl)) {
-                  const isVideo =
-                    it.mediaType === 'video' ||
-                    Boolean(mediaUrl.match(/\.(mp4|mov|webm|m4v)$/i));
-
-                  combined.push({
-                    id: it.id || `${m.id}_${idx}`,
-                    mediaUrl,
-                    thumbnailUrl: it.thumbnailUrl || (isVideo ? null : mediaUrl),
-                    mediaType: isVideo ? 'video' : 'image',
-                    title: it.title || (itemsToExtract.length > 1 ? `${media.title || 'Exclusive Media'} (${idx + 1}/${itemsToExtract.length})` : (media.title || 'Exclusive Media')),
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    creatorName: (creator as any)?.display_name || (creator as any)?.username || 'Creator',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    creatorAvatar: (creator as any)?.avatar_url || null,
-                    unlockedAt,
-                    amountUsd: media.price || null,
-                  });
-                }
-              });
+              for (const u of r?.mediaUrls || []) {
+                unlockedKeys.add(u);
+                unlockDates.set(u, date);
+              }
+              if (r?.thumbnailUrl) {
+                unlockedKeys.add(r.thumbnailUrl);
+                unlockDates.set(r.thumbnailUrl, date);
+              }
             }
+          }
+
+          // Scan all vault_media messages
+          for (const m of allMessages) {
+            if (!m.content) continue;
+            const v = parseVaultMediaMessage(m.content);
+            if (!v.isVaultMedia || !v.media) continue;
+
+            const media = v.media;
+            const creator = convoMap.get(m.conversation_id);
+
+            const k1 = media.batchId;
+            const k2 = media.mediaUrl;
+            const k3 = media.thumbnailUrl;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const itemKeys = (media.items || []).flatMap((it: any) => [it.mediaUrl, it.thumbnailUrl, it.id]).filter(Boolean);
+            const allKeys = [k1, k2, k3, ...itemKeys, m.id].filter(Boolean) as string[];
+
+            const isUnlocked = allKeys.some((k) => unlockedKeys.has(k));
+            if (!isUnlocked && media.isLocked) continue;
+
+            // Find unlock date
+            let unlockedAt = m.created_at;
+            for (const k of allKeys) {
+              if (unlockDates.has(k)) {
+                unlockedAt = unlockDates.get(k)!;
+                break;
+              }
+            }
+
+            // Extract all items (single or bundle)
+            const itemsToExtract = media.items && media.items.length > 0
+              ? media.items
+              : [{
+                  mediaUrl: media.mediaUrl,
+                  mediaType: media.mediaType,
+                  thumbnailUrl: media.thumbnailUrl,
+                  title: media.title,
+                }];
+
+            // If this is a bundle, clean up any previous single-thumbnail placeholder
+            if (itemsToExtract.length > 1) {
+              const thumb = media.thumbnailUrl;
+              const batch = media.batchId;
+              for (let i = combined.length - 1; i >= 0; i--) {
+                const c = combined[i];
+                if (
+                  (thumb && c.mediaUrl === thumb && c.mediaType === 'image') ||
+                  (batch && (c.id === batch || c.id?.startsWith(batch)))
+                ) {
+                  combined.splice(i, 1);
+                }
+              }
+            }
+
+            itemsToExtract.forEach((it, idx) => {
+              const mediaUrl = it.mediaUrl;
+              if (!mediaUrl) return;
+
+              if (!combined.some((c) => c.mediaUrl === mediaUrl)) {
+                const isVideo =
+                  it.mediaType === 'video' ||
+                  media.mediaType === 'video' ||
+                  Boolean(mediaUrl.match(/\.(mp4|mov|webm|m4v)$/i));
+
+                combined.push({
+                  id: it.id || `${m.id}_${idx}`,
+                  mediaUrl,
+                  thumbnailUrl: it.thumbnailUrl || (isVideo ? null : mediaUrl),
+                  mediaType: isVideo ? 'video' : 'image',
+                  title: it.title || (itemsToExtract.length > 1 ? `${media.title || 'Exclusive Media'} (${idx + 1}/${itemsToExtract.length})` : (media.title || 'Exclusive Media')),
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  creatorName: (creator as any)?.display_name || (creator as any)?.username || 'Creator',
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  creatorAvatar: (creator as any)?.avatar_url || null,
+                  unlockedAt,
+                  amountUsd: media.price || null,
+                });
+              }
+            });
           }
         }
       } catch (convoErr) {
@@ -424,11 +524,21 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
           </h3>
         </div>
 
-        {items.length > 0 && (
-          <span className="text-xs text-muted font-medium tracking-tight">
-            {items.length} {items.length === 1 ? 'item' : 'items'}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {items.length > 0 && (
+            <span className="text-xs text-muted font-medium tracking-tight">
+              {items.length} {items.length === 1 ? 'item' : 'items'}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={fetchVault}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-paper hover:bg-white/10 transition-colors cursor-pointer"
+            title="Refresh Vault"
+          >
+            <RotateCw size={14} className={loading ? 'animate-spin text-gold' : ''} />
+          </button>
+        </div>
       </div>
 
       {/* Scrollable Content Body */}

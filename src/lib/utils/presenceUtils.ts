@@ -21,7 +21,7 @@ export function setMyLastSeenPrivacy(userId: string, privacy: LastSeenPrivacy) {
     localStorage.setItem(`velour_privacy_last_seen_${userId}`, privacy);
     window.dispatchEvent(new CustomEvent('velour:privacy_changed', { detail: { privacy } }));
 
-    // Sync to Supabase auth metadata and profiles
+    // Sync to Supabase auth metadata, profiles, and creator_profiles
     if (privacy === 'nobody') {
       Promise.resolve(
         supabase
@@ -32,6 +32,25 @@ export function setMyLastSeenPrivacy(userId: string, privacy: LastSeenPrivacy) {
       Promise.resolve(
         supabase.auth.updateUser({ data: { last_seen_privacy: 'nobody' } })
       ).catch(() => {});
+      // Sync tag on creator profile
+      Promise.resolve(
+        supabase
+          .from('creator_profiles')
+          .select('id, tags')
+          .eq('owner_id', userId)
+          .maybeSingle()
+      )
+        .then(({ data: cp }: any) => {
+          if (cp) {
+            const currentTags = (cp.tags || []) as string[];
+            const updatedTags = Array.from(new Set([...currentTags, 'hide_presence']));
+            return supabase
+              .from('creator_profiles')
+              .update({ tags: updatedTags })
+              .eq('id', cp.id);
+          }
+        })
+        .catch(() => {});
     } else {
       Promise.resolve(
         supabase
@@ -42,6 +61,25 @@ export function setMyLastSeenPrivacy(userId: string, privacy: LastSeenPrivacy) {
       Promise.resolve(
         supabase.auth.updateUser({ data: { last_seen_privacy: 'everyone' } })
       ).catch(() => {});
+      // Remove tag on creator profile
+      Promise.resolve(
+        supabase
+          .from('creator_profiles')
+          .select('id, tags')
+          .eq('owner_id', userId)
+          .maybeSingle()
+      )
+        .then(({ data: cp }: any) => {
+          if (cp) {
+            const currentTags = (cp.tags || []) as string[];
+            const updatedTags = currentTags.filter((t) => t !== 'hide_presence');
+            return supabase
+              .from('creator_profiles')
+              .update({ tags: updatedTags })
+              .eq('id', cp.id);
+          }
+        })
+        .catch(() => {});
     }
   } catch {}
 }
@@ -54,7 +92,7 @@ export function isUserOnline(
   lastSeenAt?: string | null,
   onlineUserIds?: Set<string>,
   hiddenUserIds?: Set<string>,
-  viewerUserId?: string
+  _viewerUserId?: string
 ): boolean {
   if (!userId) return false;
 
@@ -63,8 +101,8 @@ export function isUserOnline(
     return false;
   }
 
-  // If viewer has disabled their own last seen / online visibility, they cannot see others' (WhatsApp rule)
-  if (viewerUserId && getMyLastSeenPrivacy(viewerUserId) === 'nobody') {
+  // If target user's local privacy setting is nobody (e.g. current creator or same device test)
+  if (getMyLastSeenPrivacy(userId) === 'nobody') {
     return false;
   }
 
@@ -88,23 +126,21 @@ export function isUserOnline(
  * - "last seen yesterday at 11:30 AM"
  * - "last seen Oct 14 at 4:10 PM" (this year)
  * - "last seen Oct 14, 2024" (older years)
- * - "last seen recently" (if null, private, or unknown)
+ * - "" (empty string if hidden, null, or private)
  */
 export function formatLastSeen(
   lastSeenAt?: string | null,
   isOnline = false,
-  viewerUserId?: string,
+  _viewerUserId?: string,
   targetUserId?: string | null,
   hiddenUserIds?: Set<string>
 ): string {
-  // If target user is explicitly hidden, never show timestamp or online
+  // If target user is explicitly hidden in presence or settings, NEVER show any timestamp
   if (targetUserId && hiddenUserIds && hiddenUserIds.has(targetUserId)) {
-    return 'last seen recently';
+    return '';
   }
-
-  // If viewer has disabled their own last seen / online visibility, they cannot see others'
-  if (viewerUserId && getMyLastSeenPrivacy(viewerUserId) === 'nobody') {
-    return 'last seen recently';
+  if (targetUserId && getMyLastSeenPrivacy(targetUserId) === 'nobody') {
+    return '';
   }
 
   if (isOnline) {
@@ -112,7 +148,7 @@ export function formatLastSeen(
   }
 
   if (!lastSeenAt) {
-    return 'last seen recently';
+    return '';
   }
 
   const d = new Date(lastSeenAt);

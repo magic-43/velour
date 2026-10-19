@@ -71,7 +71,7 @@ export function useConversations() {
           *,
           fan:profiles!fan_id(id, username, display_name, avatar_url, last_seen_at),
           creator_profile:creator_profiles!creator_profile_id(
-            id, owner_id, display_name, avatar_url,
+            id, owner_id, display_name, avatar_url, tags,
             owner:profiles!owner_id(id, avatar_url, username, display_name, last_seen_at)
           )
         `)
@@ -182,13 +182,16 @@ export function useConversations() {
       const cp = conv.creator_profile;
       const owner = (cp as any)?.owner;
       const avatar = cp?.avatar_url || owner?.avatar_url || null;
+      const tags = ((cp as any)?.tags || []) as string[];
+      const isHidden = tags.includes('hide_presence');
       return {
         id: cp?.id ?? conv.creator_profile_id ?? '',
         userId: cp?.owner_id || owner?.id || '',
         name: cp?.display_name || owner?.display_name || 'Creator',
         username: cp?.display_name || owner?.username || 'creator',
         avatar_url: avatar,
-        last_seen_at: owner?.last_seen_at || null,
+        last_seen_at: isHidden ? null : (owner?.last_seen_at || null),
+        hide_presence: isHidden,
       };
     }
 

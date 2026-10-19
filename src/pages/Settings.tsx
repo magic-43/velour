@@ -105,12 +105,39 @@ export default function Settings() {
   );
   const [privacySavedToast, setPrivacySavedToast] = useState(false);
 
-  const handlePrivacyChange = (newPrivacy: LastSeenPrivacy) => {
+  const handlePrivacyChange = async (newPrivacy: LastSeenPrivacy) => {
     if (!user) return;
     setLastSeenPrivacy(newPrivacy);
     setMyLastSeenPrivacy(user.id, newPrivacy);
     setPrivacySavedToast(true);
     setTimeout(() => setPrivacySavedToast(false), 3000);
+
+    // If user is creator, sync 'hide_presence' tag to creator_profiles
+    if (profile?.role === 'creator') {
+      try {
+        const { data: cp } = await supabase
+          .from('creator_profiles')
+          .select('id, tags')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+
+        if (cp) {
+          const currentTags = (cp.tags || []) as string[];
+          let updatedTags: string[];
+          if (newPrivacy === 'nobody') {
+            updatedTags = Array.from(new Set([...currentTags, 'hide_presence']));
+          } else {
+            updatedTags = currentTags.filter((t) => t !== 'hide_presence');
+          }
+          await supabase
+            .from('creator_profiles')
+            .update({ tags: updatedTags })
+            .eq('id', cp.id);
+        }
+      } catch (e) {
+        console.warn('Could not sync hide_presence tag to creator_profiles:', e);
+      }
+    }
   };
 
   useEffect(() => {
@@ -733,68 +760,70 @@ export default function Settings() {
         {/* ── SECTION: PRIVACY & SECURITY ───────────────────────────────────── */}
         {section === 'security' && (
           <div className="space-y-4">
-            {/* Last Seen & Online Privacy */}
-            <div className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04] space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Eye size={15} className="text-gold" />
-                <h4 className="text-xs font-semibold text-paper uppercase tracking-wider">Last Seen & Online Status</h4>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">
-                Choose who can see when you are currently online and your last active timestamp.
-              </p>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handlePrivacyChange('everyone')}
-                  className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left cursor-pointer ${
-                    lastSeenPrivacy === 'everyone'
-                      ? 'bg-gold/10 border-gold/40 text-paper'
-                      : 'bg-black/30 border-white/5 text-muted hover:border-white/10 hover:text-paper'
-                  }`}
-                >
-                  <div className="min-w-0 pr-3">
-                    <p className="text-xs font-semibold text-paper">Everyone</p>
-                    <p className="text-[11px] text-muted mt-0.5">
-                      Your contacts and fans see your online indicator and last seen time.
-                    </p>
-                  </div>
-                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                    lastSeenPrivacy === 'everyone' ? 'border-gold bg-gold text-ink' : 'border-white/20'
-                  }`}>
-                    {lastSeenPrivacy === 'everyone' && <div className="w-1.5 h-1.5 rounded-full bg-ink" />}
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePrivacyChange('nobody')}
-                  className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left cursor-pointer ${
-                    lastSeenPrivacy === 'nobody'
-                      ? 'bg-gold/10 border-gold/40 text-paper'
-                      : 'bg-black/30 border-white/5 text-muted hover:border-white/10 hover:text-paper'
-                  }`}
-                >
-                  <div className="min-w-0 pr-3">
-                    <p className="text-xs font-semibold text-paper">Nobody</p>
-                    <p className="text-[11px] text-muted mt-0.5">
-                      Hide your online presence and last seen. You will not see other users&apos; online presence.
-                    </p>
-                  </div>
-                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                    lastSeenPrivacy === 'nobody' ? 'border-gold bg-gold text-ink' : 'border-white/20'
-                  }`}>
-                    {lastSeenPrivacy === 'nobody' && <div className="w-1.5 h-1.5 rounded-full bg-ink" />}
-                  </div>
-                </button>
-              </div>
-
-              {privacySavedToast && (
-                <p className="text-center text-xs text-emerald-400 animate-in fade-in flex items-center justify-center gap-1 pt-1">
-                  <Check size={13} /> Privacy preference saved
+            {/* Last Seen & Online Privacy (Creators Only) */}
+            {profile?.role === 'creator' && (
+              <div className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04] space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Eye size={15} className="text-gold" />
+                  <h4 className="text-xs font-semibold text-paper uppercase tracking-wider">Last Seen & Online Status</h4>
+                </div>
+                <p className="text-xs text-muted leading-relaxed">
+                  Choose who can see when you are currently online and your last active timestamp.
                 </p>
-              )}
-            </div>
+
+                <div className="space-y-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handlePrivacyChange('everyone')}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left cursor-pointer ${
+                      lastSeenPrivacy === 'everyone'
+                        ? 'bg-gold/10 border-gold/40 text-paper'
+                        : 'bg-black/30 border-white/5 text-muted hover:border-white/10 hover:text-paper'
+                    }`}
+                  >
+                    <div className="min-w-0 pr-3">
+                      <p className="text-xs font-semibold text-paper">Everyone</p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        Your contacts and fans see your online indicator and last seen time.
+                      </p>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                      lastSeenPrivacy === 'everyone' ? 'border-gold bg-gold text-ink' : 'border-white/20'
+                    }`}>
+                      {lastSeenPrivacy === 'everyone' && <div className="w-1.5 h-1.5 rounded-full bg-ink" />}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePrivacyChange('nobody')}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left cursor-pointer ${
+                      lastSeenPrivacy === 'nobody'
+                        ? 'bg-gold/10 border-gold/40 text-paper'
+                        : 'bg-black/30 border-white/5 text-muted hover:border-white/10 hover:text-paper'
+                    }`}
+                  >
+                    <div className="min-w-0 pr-3">
+                      <p className="text-xs font-semibold text-paper">Nobody</p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        Hide your online presence and last seen from all fans and users.
+                      </p>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                      lastSeenPrivacy === 'nobody' ? 'border-gold bg-gold text-ink' : 'border-white/20'
+                    }`}>
+                      {lastSeenPrivacy === 'nobody' && <div className="w-1.5 h-1.5 rounded-full bg-ink" />}
+                    </div>
+                  </button>
+                </div>
+
+                {privacySavedToast && (
+                  <p className="text-center text-xs text-emerald-400 animate-in fade-in flex items-center justify-center gap-1 pt-1">
+                    <Check size={13} /> Privacy preference saved
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Change Password */}
             <form onSubmit={handleUpdatePassword} className="bg-[#101010] rounded-2xl p-5 border border-white/[0.04] space-y-4">
