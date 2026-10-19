@@ -115,10 +115,20 @@ async function performTransaction<T>(
 
 // ── Conversations Cache ──────────────────────────────────────────────────────
 
-export async function getCachedConversations(): Promise<ConversationWithParticipants[]> {
+export async function getCachedConversations(userId?: string): Promise<ConversationWithParticipants[]> {
   try {
-    return await performTransaction<ConversationWithParticipants[]>('conversations', 'readonly', (store) => {
+    const all = await performTransaction<ConversationWithParticipants[]>('conversations', 'readonly', (store) => {
       return store.getAll();
+    });
+    if (!userId) return all;
+    return all.filter((c) => {
+      if (!c) return false;
+      const isFan = c.fan_id === userId;
+      const isCreator =
+        c.creator_profile?.owner_id === userId ||
+        (c as any).creator_id === userId ||
+        (c as any).creator_profile_id === userId;
+      return isFan || isCreator;
     });
   } catch (err) {
     console.warn('Failed reading conversations from cache:', err);
@@ -126,12 +136,35 @@ export async function getCachedConversations(): Promise<ConversationWithParticip
   }
 }
 
-export async function saveCachedConversations(conversations: ConversationWithParticipants[]): Promise<void> {
-  if (!conversations || conversations.length === 0) return;
+export async function saveCachedConversations(
+  conversations: ConversationWithParticipants[],
+  userId?: string
+): Promise<void> {
+  if (!conversations) return;
   try {
     const db = await openDB();
     const tx = db.transaction('conversations', 'readwrite');
     const store = tx.objectStore('conversations');
+
+    // If userId is provided, prune stale records that are no longer present for this user
+    if (userId) {
+      const getReq = store.getAll();
+      getReq.onsuccess = () => {
+        const existing = (getReq.result as ConversationWithParticipants[]) || [];
+        const incomingIds = new Set(conversations.map((c) => c.id));
+        for (const item of existing) {
+          if (!item) continue;
+          const belongsToUser =
+            item.fan_id === userId ||
+            item.creator_profile?.owner_id === userId ||
+            (item as any).creator_id === userId ||
+            (item as any).creator_profile_id === userId;
+          if (belongsToUser && !incomingIds.has(item.id)) {
+            store.delete(item.id);
+          }
+        }
+      };
+    }
 
     for (const conv of conversations) {
       store.put(conv);
@@ -143,6 +176,35 @@ export async function saveCachedConversations(conversations: ConversationWithPar
     });
   } catch (err) {
     console.warn('Failed saving conversations to cache:', err);
+  }
+}
+
+export async function clearCachedConversations(userId?: string): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('conversations', 'readwrite');
+    const store = tx.objectStore('conversations');
+    if (!userId) {
+      store.clear();
+    } else {
+      const getReq = store.getAll();
+      getReq.onsuccess = () => {
+        const existing = (getReq.result as ConversationWithParticipants[]) || [];
+        for (const item of existing) {
+          if (!item) continue;
+          const belongs =
+            item.fan_id === userId ||
+            item.creator_profile?.owner_id === userId ||
+            (item as any).creator_id === userId ||
+            (item as any).creator_profile_id === userId;
+          if (belongs) {
+            store.delete(item.id);
+          }
+        }
+      };
+    }
+  } catch (err) {
+    console.warn('Failed clearing cached conversations:', err);
   }
 }
 

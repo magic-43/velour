@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WifiOff, Check } from 'lucide-react';
 
 export default function NetworkStatusBar() {
@@ -8,21 +8,32 @@ export default function NetworkStatusBar() {
   });
 
   const [showReconnected, setShowReconnected] = useState(false);
+  const offlineTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleOffline = () => {
-      setIsOnline(false);
-      setShowReconnected(false);
+      // Debounce offline notification to avoid false positives on mobile WebView wake/switch
+      if (offlineTimerRef.current) clearTimeout(offlineTimerRef.current);
+      offlineTimerRef.current = setTimeout(() => {
+        if (!navigator.onLine) {
+          setIsOnline(false);
+          setShowReconnected(false);
+        }
+      }, 2500);
     };
 
     const handleOnline = () => {
+      if (offlineTimerRef.current) {
+        clearTimeout(offlineTimerRef.current);
+        offlineTimerRef.current = null;
+      }
       setIsOnline(true);
       setShowReconnected(true);
       const timer = setTimeout(() => {
         setShowReconnected(false);
-      }, 3000);
+      }, 1500);
       return () => clearTimeout(timer);
     };
 
@@ -30,6 +41,7 @@ export default function NetworkStatusBar() {
     window.addEventListener('online', handleOnline);
 
     return () => {
+      if (offlineTimerRef.current) clearTimeout(offlineTimerRef.current);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };

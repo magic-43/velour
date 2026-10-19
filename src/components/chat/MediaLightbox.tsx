@@ -126,6 +126,12 @@ export default function MediaLightbox({
 
   // Reset video & controls when index changes
   useEffect(() => {
+    // Pause any playing video when index changes
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+      } catch (_) {}
+    }
     setZoomScale(1);
     setRotation(0);
     setCurrentTime(0);
@@ -176,19 +182,34 @@ export default function MediaLightbox({
   const handlePlayVideo = (e?: React.MouseEvent | React.TouchEvent) => {
     if (e) e.stopPropagation();
     if (videoRef.current) {
-      videoRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch(() => {
-          if (videoRef.current) {
-            videoRef.current.muted = true;
-            setIsMuted(true);
-            videoRef.current.play().catch(() => {});
+      const v = videoRef.current;
+      if (v.readyState === 0) {
+        v.load();
+      }
+      const playPromise = v.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
             setIsPlaying(true);
-          }
-        });
+            setIsBuffering(false);
+          })
+          .catch((err) => {
+            console.warn('Autoplay failed, retrying with muted audio:', err);
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              setIsMuted(true);
+              videoRef.current
+                .play()
+                .then(() => {
+                  setIsPlaying(true);
+                  setIsBuffering(false);
+                })
+                .catch((err2) => {
+                  console.error('Video play retry failed:', err2);
+                });
+            }
+          });
+      }
     }
   };
 
@@ -402,10 +423,12 @@ export default function MediaLightbox({
   };
 
   const handleSeek = (clientX: number) => {
-    if (!progressBarRef.current || !videoRef.current || !duration) return;
+    if (!progressBarRef.current || !videoRef.current) return;
+    const currentDur = videoRef.current.duration || duration;
+    if (!currentDur || isNaN(currentDur)) return;
     const rect = progressBarRef.current.getBoundingClientRect();
     const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const newTime = pos * duration;
+    const newTime = pos * currentDur;
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
   };
@@ -431,10 +454,29 @@ export default function MediaLightbox({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  const handleProgressBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleProgressBarTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (e.touches.length > 0) {
+      isDraggingProgress.current = true;
       handleSeek(e.touches[0].clientX);
+
+      const onTouchMove = (moveEvent: TouchEvent) => {
+        if (isDraggingProgress.current && moveEvent.touches.length > 0) {
+          moveEvent.preventDefault();
+          handleSeek(moveEvent.touches[0].clientX);
+        }
+      };
+
+      const onTouchEnd = () => {
+        isDraggingProgress.current = false;
+        window.removeEventListener('touchmove', onTouchMove);
+        window.removeEventListener('touchend', onTouchEnd);
+        window.removeEventListener('touchcancel', onTouchEnd);
+      };
+
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', onTouchEnd);
+      window.addEventListener('touchcancel', onTouchEnd);
     }
   };
 
@@ -611,6 +653,7 @@ export default function MediaLightbox({
                       }}
                     >
                       <video
+                        key={item.mediaUrl || idx}
                         ref={(el) => {
                           if (isCurrent) {
                             videoRef.current = el;
@@ -619,12 +662,21 @@ export default function MediaLightbox({
                         src={item.mediaUrl}
                         poster={item.thumbnailUrl || undefined}
                         playsInline
+                        preload="auto"
                         muted={isMuted}
                         onTimeUpdate={isCurrent ? handleTimeUpdate : undefined}
                         onLoadedMetadata={isCurrent ? handleLoadedMetadata : undefined}
                         onWaiting={() => isCurrent && setIsBuffering(true)}
                         onStalled={() => isCurrent && setIsBuffering(true)}
-                        onPlaying={() => isCurrent && setIsBuffering(false)}
+                        onPlaying={() => {
+                          if (isCurrent) {
+                            setIsBuffering(false);
+                            setIsPlaying(true);
+                          }
+                        }}
+                        onPause={() => {
+                          if (isCurrent) setIsPlaying(false);
+                        }}
                         onEnded={() => isCurrent && setIsPlaying(false)}
                         className="w-full h-full max-h-full max-w-full object-contain select-none"
                       />
@@ -636,11 +688,11 @@ export default function MediaLightbox({
                         </div>
                       )}
 
-                      {/* Center Big Play / Pause Button for current video */}
-                      {isCurrent && !isBuffering && (
+                      {/* Center Big Play / Pause Button for current video — ONLY visible when controlsVisible is true */}
+                      {isCurrent && !isBuffering && controlsVisible && (
                         <>
                           {!isPlaying && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-150">
                               <button
                                 type="button"
                                 onClick={handlePlayVideo}
@@ -652,7 +704,7 @@ export default function MediaLightbox({
                             </div>
                           )}
 
-                          {isPlaying && controlsVisible && (
+                          {isPlaying && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-200">
                               <button
                                 type="button"
@@ -780,9 +832,8 @@ export default function MediaLightbox({
               {/* Slider Track with White Knob */}
               <div
                 ref={progressBarRef}
-                onClick={handleProgressBarMouseDown}
-                onTouchStart={handleProgressBarTouch}
-                onTouchMove={handleProgressBarTouch}
+                onMouseDown={handleProgressBarMouseDown}
+                onTouchStart={handleProgressBarTouchStart}
                 className="flex-1 relative flex items-center h-6 cursor-pointer group py-2"
               >
                 {/* Black Track Line */}

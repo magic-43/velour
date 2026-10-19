@@ -14,9 +14,15 @@ export function useConversations() {
   // Fast path: load cached conversations from IndexedDB immediately for 0ms offline display
   useEffect(() => {
     if (!user?.id) return;
-    getCachedConversations().then((cached) => {
+    getCachedConversations(user.id).then((cached) => {
       if (cached && cached.length > 0) {
-        setConversations(cached);
+        // Deduplicate cached records by id
+        const unique = Array.from(new Map(cached.map((c) => [c.id, c])).values());
+        setConversations((prev) => {
+          // If fresh conversations already arrived from network, do not overwrite with stale cache
+          if (prev.length > 0) return prev;
+          return unique;
+        });
         setLoading(false);
       } else if (!isOnline()) {
         setLoading(false);
@@ -138,8 +144,9 @@ export function useConversations() {
             return c;
           })
         );
-        setConversations(convs);
-        saveCachedConversations(convs).catch(() => {});
+        const uniqueConvs = Array.from(new Map(convs.map((c) => [c.id, c])).values());
+        setConversations(uniqueConvs);
+        saveCachedConversations(uniqueConvs, user.id).catch(() => {});
       } else if (error) {
         console.warn('Network error fetching conversations (using cached if available):', error.message);
       }
