@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Lock,
@@ -80,6 +80,285 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP-LEVEL COMPONENT: Seductive Editorial Vignette Composition
+// Defined outside Login so React never unmounts or recreates DOM nodes
+// ─────────────────────────────────────────────────────────────────────────────
+function EditorialShowcase() {
+  return (
+    <div className="relative w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[460px] mx-auto flex items-center justify-center py-4 select-none">
+      {/* Intimate Backlight Ambiance (Candlelight Amber & Velvet Wine) */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(201,169,110,0.16)_0%,rgba(136,19,55,0.12)_45%,transparent_75%)] blur-3xl pointer-events-none" />
+
+      {/* Layered Seductive Cards Fan */}
+      <div className="relative flex items-center justify-center w-full h-[280px] sm:h-[340px] lg:h-[390px]">
+        {EDITORIAL_VIGNETTES.map((vignette) => (
+          <div
+            key={vignette.id}
+            className={`absolute transition-all duration-700 ease-out ${vignette.rotation} ${vignette.translate} ${vignette.scale}`}
+            style={{ zIndex: vignette.zIndex }}
+          >
+            <div
+              className={`${vignette.floatClass} relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient}`}
+              style={{ animationDelay: vignette.delay }}
+            >
+              {/* Texture Image (Silk, liquid gold, candlelit shadows) */}
+              <img
+                src={vignette.img}
+                alt={vignette.title}
+                className="w-full h-full object-cover brightness-[0.78] contrast-[1.12] saturate-[1.05] group-hover:scale-105 transition-transform duration-700"
+              />
+
+              {/* Seductive Velvet Shadow & Candlelight Vignette */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-amber-950/20 via-transparent to-rose-950/20 mix-blend-color pointer-events-none" />
+
+              {/* Delicate Gold Rim Highlight */}
+              <div className="absolute inset-0 rounded-2xl border border-gold/20 pointer-events-none" />
+            </div>
+          </div>
+        ))}
+
+        {/* Floating VELOUR Serif Monogram Overlay */}
+        <div className="absolute -bottom-2 sm:-bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center whitespace-nowrap">
+          <div className="relative">
+            <div className="absolute -inset-4 bg-black/60 rounded-full blur-xl pointer-events-none" />
+            <h1 className="relative font-serif text-3xl sm:text-4xl lg:text-5xl font-light tracking-[0.28em] text-paper drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] uppercase">
+              VELOUR
+            </h1>
+            <p className="font-serif italic text-gold/85 text-xs sm:text-sm tracking-widest mt-0.5 font-light">
+              Where desire meets discretion
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOP-LEVEL COMPONENT: Authentication Form UI
+// Defined outside Login so inputs retain focus and NEVER unmount on keystroke!
+// ─────────────────────────────────────────────────────────────────────────────
+interface AuthFormProps {
+  mode: 'signin' | 'signup';
+  setMode: (mode: 'signin' | 'signup') => void;
+  username: string;
+  setUsername: (val: string) => void;
+  password: string;
+  setPassword: (val: string) => void;
+  showPassword: boolean;
+  setShowPassword: React.Dispatch<React.SetStateAction<boolean>>;
+  submitting: boolean;
+  error: string | null;
+  setError: (err: string | null) => void;
+  onForgotPassword: () => void;
+  onSignIn: (e: React.FormEvent) => void;
+  onSignUp: (e: React.FormEvent) => void;
+}
+
+function AuthForm({
+  mode,
+  setMode,
+  username,
+  setUsername,
+  password,
+  setPassword,
+  showPassword,
+  setShowPassword,
+  submitting,
+  error,
+  setError,
+  onForgotPassword,
+  onSignIn,
+  onSignUp,
+}: AuthFormProps) {
+  return (
+    <div className="w-full max-w-sm mx-auto space-y-6">
+      {/* Segmented Mode Selector (Velvet & Gold) */}
+      <div className="bg-[#121211] p-1 rounded-full border border-white/[0.08] flex items-center">
+        <button
+          type="button"
+          onClick={() => {
+            setMode('signin');
+            setError(null);
+          }}
+          className={`flex-1 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all cursor-pointer ${
+            mode === 'signin'
+              ? 'bg-gold text-ink shadow-lg shadow-gold/20'
+              : 'text-paper/50 hover:text-paper'
+          }`}
+        >
+          Sign In
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode('signup');
+            setError(null);
+          }}
+          className={`flex-1 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all cursor-pointer ${
+            mode === 'signup'
+              ? 'bg-gold text-ink shadow-lg shadow-gold/20'
+              : 'text-paper/50 hover:text-paper'
+          }`}
+        >
+          Create Account
+        </button>
+      </div>
+
+      {/* Editorial Header */}
+      <div>
+        <h3 className="font-serif text-2xl sm:text-3xl font-light text-paper tracking-wide">
+          {mode === 'signin' ? 'Welcome back' : 'Claim your identity'}
+        </h3>
+        <p className="text-xs text-muted/80 mt-1 font-light tracking-wide">
+          {mode === 'signin'
+            ? 'Enter your private lounge and unlock exclusive moments'
+            : 'Join the sanctuary of intimate creator devotion'}
+        </p>
+      </div>
+
+      {/* Form Elements */}
+      <form
+        onSubmit={mode === 'signin' ? onSignIn : onSignUp}
+        className="space-y-4"
+      >
+        {/* Username Input */}
+        <div>
+          <label className="block text-[10px] font-semibold text-muted tracking-widest uppercase mb-1.5">
+            Username
+          </label>
+          <div className="relative">
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gold/60 pointer-events-none text-xs font-serif italic">
+              @
+            </div>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-9 pr-4 py-3 text-base sm:text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors"
+            />
+          </div>
+          {mode === 'signup' && (
+            <p className="text-[10px] text-muted/60 mt-1 pl-1">
+              3–24 characters (letters, numbers, underscores)
+            </p>
+          )}
+        </div>
+
+        {/* Password Input */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[10px] font-semibold text-muted tracking-widest uppercase">
+              Password
+            </label>
+            {mode === 'signin' && (
+              <button
+                type="button"
+                onClick={onForgotPassword}
+                className="text-xs text-gold/80 hover:text-gold transition-colors font-medium cursor-pointer"
+              >
+                Forgot password?
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <Lock
+              size={14}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted/50 pointer-events-none"
+            />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              required
+              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-10 pr-11 py-3 text-base sm:text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-paper transition-colors p-1"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {mode === 'signup' && <PasswordStrength password={password} />}
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="flex items-start gap-2 bg-red-950/30 border border-red-500/20 rounded-xl px-3.5 py-2.5 text-xs text-red-300">
+            <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
+            <p className="leading-snug">{error}</p>
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full py-3.5 rounded-full font-semibold text-xs tracking-widest uppercase transition-all shadow-lg shadow-gold/15 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 bg-gold hover:bg-gold-light text-ink active:scale-[0.98]"
+        >
+          {submitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+              <span>{mode === 'signin' ? 'Entering…' : 'Creating identity…'}</span>
+            </>
+          ) : (
+            <span>{mode === 'signin' ? 'Enter Velour' : 'Join Velour'}</span>
+          )}
+        </button>
+      </form>
+
+      {/* Switcher Footer */}
+      <p className="text-center text-xs text-muted/70 pt-2 font-light">
+        {mode === 'signin' ? (
+          <>
+            Don't have an identity yet?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signup');
+                setError(null);
+              }}
+              className="text-gold hover:underline font-semibold cursor-pointer"
+            >
+              Create an account
+            </button>
+          </>
+        ) : (
+          <>
+            Already a member?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signin');
+                setError(null);
+              }}
+              className="text-gold hover:underline font-semibold cursor-pointer"
+            >
+              Sign in
+            </button>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN PAGE: Login / Auth
+// ─────────────────────────────────────────────────────────────────────────────
 interface LoginProps {
   initialMode?: 'signin' | 'signup';
 }
@@ -213,239 +492,22 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
     );
   }
 
-  // Seductive Editorial Vignette Composition
-  const EditorialShowcase = () => (
-    <div className="relative w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[460px] mx-auto flex items-center justify-center py-4 select-none">
-      {/* Intimate Backlight Ambiance (Candlelight Amber & Velvet Wine) */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(201,169,110,0.16)_0%,rgba(136,19,55,0.12)_45%,transparent_75%)] blur-3xl pointer-events-none" />
-
-      {/* Layered Seductive Cards Fan */}
-      <div className="relative flex items-center justify-center w-full h-[280px] sm:h-[340px] lg:h-[390px]">
-        {EDITORIAL_VIGNETTES.map((vignette) => (
-          <div
-            key={vignette.id}
-            className={`absolute transition-all duration-700 ease-out ${vignette.rotation} ${vignette.translate} ${vignette.scale}`}
-            style={{ zIndex: vignette.zIndex }}
-          >
-            <div
-              className={`${vignette.floatClass} relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient}`}
-              style={{ animationDelay: vignette.delay }}
-            >
-              {/* Texture Image (Silk, liquid gold, candlelit shadows) */}
-              <img
-                src={vignette.img}
-                alt={vignette.title}
-                className="w-full h-full object-cover brightness-[0.78] contrast-[1.12] saturate-[1.05] group-hover:scale-105 transition-transform duration-700"
-              />
-
-              {/* Seductive Velvet Shadow & Candlelight Vignette */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
-              <div className="absolute inset-0 bg-gradient-to-tr from-amber-950/20 via-transparent to-rose-950/20 mix-blend-color pointer-events-none" />
-
-              {/* Delicate Gold Rim Highlight */}
-              <div className="absolute inset-0 rounded-2xl border border-gold/20 pointer-events-none" />
-            </div>
-          </div>
-        ))}
-
-        {/* Floating VELOUR Serif Monogram Overlay */}
-        <div className="absolute -bottom-2 sm:-bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center whitespace-nowrap">
-          <div className="relative">
-            <div className="absolute -inset-4 bg-black/60 rounded-full blur-xl pointer-events-none" />
-            <h1 className="relative font-serif text-3xl sm:text-4xl lg:text-5xl font-light tracking-[0.28em] text-paper drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] uppercase">
-              VELOUR
-            </h1>
-            <p className="font-serif italic text-gold/85 text-xs sm:text-sm tracking-widest mt-0.5 font-light">
-              Where desire meets discretion
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Authentication Form UI
-  const AuthForm = ({ isMobileSheet = false }: { isMobileSheet?: boolean }) => (
-    <div className="w-full max-w-sm mx-auto space-y-6">
-      {/* Segmented Mode Selector (Velvet & Gold) */}
-      <div className="bg-[#121211] p-1 rounded-full border border-white/[0.08] flex items-center">
-        <button
-          type="button"
-          onClick={() => {
-            setMode('signin');
-            setError(null);
-          }}
-          className={`flex-1 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all cursor-pointer ${
-            mode === 'signin'
-              ? 'bg-gold text-ink shadow-lg shadow-gold/20'
-              : 'text-paper/50 hover:text-paper'
-          }`}
-        >
-          Sign In
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode('signup');
-            setError(null);
-          }}
-          className={`flex-1 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all cursor-pointer ${
-            mode === 'signup'
-              ? 'bg-gold text-ink shadow-lg shadow-gold/20'
-              : 'text-paper/50 hover:text-paper'
-          }`}
-        >
-          Create Account
-        </button>
-      </div>
-
-      {/* Editorial Header */}
-      <div>
-        <h3 className="font-serif text-2xl sm:text-3xl font-light text-paper tracking-wide">
-          {mode === 'signin' ? 'Welcome back' : 'Claim your identity'}
-        </h3>
-        <p className="text-xs text-muted/80 mt-1 font-light tracking-wide">
-          {mode === 'signin'
-            ? 'Enter your private lounge and unlock exclusive moments'
-            : 'Join the sanctuary of intimate creator devotion'}
-        </p>
-      </div>
-
-      {/* Form Elements */}
-      <form
-        onSubmit={mode === 'signin' ? handleSignIn : handleSignUp}
-        className="space-y-4"
-      >
-        {/* Username Input */}
-        <div>
-          <label className="block text-[10px] font-semibold text-muted tracking-widest uppercase mb-1.5">
-            Username
-          </label>
-          <div className="relative">
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gold/60 pointer-events-none text-xs font-serif italic">
-              @
-            </div>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="username"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-9 pr-4 py-3 text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors"
-            />
-          </div>
-          {mode === 'signup' && (
-            <p className="text-[10px] text-muted/60 mt-1 pl-1">
-              3–24 characters (letters, numbers, underscores)
-            </p>
-          )}
-        </div>
-
-        {/* Password Input */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-[10px] font-semibold text-muted tracking-widest uppercase">
-              Password
-            </label>
-            {mode === 'signin' && (
-              <button
-                type="button"
-                onClick={() => setShowRecovery(true)}
-                className="text-xs text-gold/80 hover:text-gold transition-colors font-medium cursor-pointer"
-              >
-                Forgot password?
-              </button>
-            )}
-          </div>
-          <div className="relative">
-            <Lock
-              size={14}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted/50 pointer-events-none"
-            />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              required
-              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-10 pr-11 py-3 text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-paper transition-colors"
-              tabIndex={-1}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          {mode === 'signup' && <PasswordStrength password={password} />}
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="flex items-start gap-2 bg-red-950/30 border border-red-500/20 rounded-xl px-3.5 py-2.5 text-xs text-red-300">
-            <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
-            <p className="leading-snug">{error}</p>
-          </div>
-        )}
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3.5 rounded-full font-semibold text-xs tracking-widest uppercase transition-all shadow-lg shadow-gold/15 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 bg-gold hover:bg-gold-light text-ink active:scale-[0.98]"
-        >
-          {submitting ? (
-            <>
-              <div className="w-4 h-4 border-2 border-ink border-t-transparent rounded-full animate-spin" />
-              <span>{mode === 'signin' ? 'Entering…' : 'Creating identity…'}</span>
-            </>
-          ) : (
-            <span>{mode === 'signin' ? 'Enter Velour' : 'Join Velour'}</span>
-          )}
-        </button>
-      </form>
-
-      {/* Switcher Footer */}
-      <p className="text-center text-xs text-muted/70 pt-2 font-light">
-        {mode === 'signin' ? (
-          <>
-            Don't have an identity yet?{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup');
-                setError(null);
-              }}
-              className="text-gold hover:underline font-semibold cursor-pointer"
-            >
-              Create an account
-            </button>
-          </>
-        ) : (
-          <>
-            Already a member?{' '}
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signin');
-                setError(null);
-              }}
-              className="text-gold hover:underline font-semibold cursor-pointer"
-            >
-              Sign in
-            </button>
-          </>
-        )}
-      </p>
-    </div>
-  );
+  const formProps: AuthFormProps = {
+    mode,
+    setMode,
+    username,
+    setUsername,
+    password,
+    setPassword,
+    showPassword,
+    setShowPassword,
+    submitting,
+    error,
+    setError,
+    onForgotPassword: () => setShowRecovery(true),
+    onSignIn: handleSignIn,
+    onSignUp: handleSignUp,
+  };
 
   return (
     <div className="min-h-screen w-full bg-[#070707] text-paper flex flex-col md:flex-row relative overflow-hidden">
@@ -504,7 +566,7 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
             </button>
           </div>
 
-          {/* DESKTOP ONLY: Intimate Devotion Statement (Zero generic badges) */}
+          {/* DESKTOP ONLY: Intimate Devotion Statement */}
           <div className="hidden md:block pt-3 text-left w-full max-w-md mx-auto">
             <div className="border-t border-white/[0.06] pt-4">
               <p className="font-serif italic text-gold/75 text-sm tracking-wide font-light text-center">
@@ -520,12 +582,12 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
       ───────────────────────────────────────────────────────────────────────── */}
       <div className="hidden md:flex md:w-[48%] lg:w-[45%] min-h-screen items-center justify-center p-8 lg:p-14 bg-[#0a0a09]/95 relative">
         <div className="w-full max-w-sm">
-          <AuthForm />
+          <AuthForm {...formProps} />
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────────────
-          MOBILE SLIDE-UP SHEET: Renders when clicking "Create an account" or "Sign in"
+          MOBILE SLIDE-UP SHEET: Stable DOM without unmounting on keystroke
       ───────────────────────────────────────────────────────────────────────── */}
       {mobileSheetOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
@@ -536,7 +598,7 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
           />
 
           {/* Sheet Modal */}
-          <div className="relative bg-[#0d0d0c] border-t border-white/10 rounded-t-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+          <div className="relative bg-[#0d0d0c] border-t border-white/10 rounded-t-3xl p-6 shadow-2xl max-h-[92vh] overflow-y-auto overscroll-contain z-10 pb-10">
             {/* Top Bar with Dismiss and Drag Handle */}
             <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4" />
             <div className="flex items-center justify-between mb-4">
@@ -560,7 +622,7 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
             </div>
 
             {/* Auth Form inside Sheet */}
-            <AuthForm isMobileSheet={true} />
+            <AuthForm {...formProps} />
           </div>
         </div>
       )}
