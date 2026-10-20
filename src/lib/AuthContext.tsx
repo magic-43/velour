@@ -103,23 +103,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSavedAccounts(getSavedAccounts());
   }, []);
 
+  // Handle invalid/expired session cleanup
+  const handleInvalidSession = useCallback(async () => {
+    globalPresenceManager.cleanup();
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (_) {}
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch (_) {}
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+  }, []);
+
   // Update last_seen_at on page focus, heartbeats, and unload
   const lastSeenPingRef = useRef<number>(0);
   const updateLastSeen = useCallback(async () => {
-    if (!user) return;
+    if (!user || !session) return;
     if (getMyLastSeenPrivacy(user.id) === 'nobody') return;
     lastSeenPingRef.current = Date.now();
     try {
-      await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ last_seen_at: new Date().toISOString() })
         .eq('id', user.id);
+
+      if (error) {
+        if (
+          error.code === 'PGRST301' ||
+          (error as any).status === 401 ||
+          error.message?.includes('JWT') ||
+          error.message?.includes('token') ||
+          error.message?.includes('Unauthorized')
+        ) {
+          console.warn('Authentication token invalid on presence update. Clearing stale session.');
+          await handleInvalidSession();
+        }
+      }
     } catch (_) {}
-  }, [user]);
+  }, [user, session, handleInvalidSession]);
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        console.warn('Session refresh/retrieval error:', error.message);
+        if (
+          error.message?.includes('Refresh Token') ||
+          error.message?.includes('grant_type') ||
+          (error as any).status === 400 ||
+          (error as any)?.code === 'invalid_grant'
+        ) {
+          await handleInvalidSession();
+          setLoading(false);
+          return;
+        }
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -140,24 +186,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        globalPresenceManager.initialize(session.user.id);
-        fetchProfile(session.user.id, session);
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (event === 'SIGNED_OUT' || !currentSession) {
         globalPresenceManager.cleanup();
         setProfile(null);
+        setUser(null);
+        setSession(null);
+      } else {
+        setSession(currentSession);
+        setUser(currentSession.user ?? null);
+        if (currentSession.user) {
+          globalPresenceManager.initialize(currentSession.user.id);
+          fetchProfile(currentSession.user.id, currentSession);
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+  }, [fetchProfile, handleInvalidSession]);
 
   // Robust presence lifecycle: periodic heartbeat + visibility + unload
   useEffect(() => {
-    if (!user) return;
+    if (!user || !session) return;
 
     // 1. Initial ping on mount/auth
     updateLastSeen();
@@ -204,7 +254,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     globalPresenceManager.cleanup();
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch (_) {}
     setUser(null);
     setSession(null);
     setProfile(null);
