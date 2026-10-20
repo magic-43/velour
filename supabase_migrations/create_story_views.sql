@@ -16,16 +16,22 @@ CREATE TABLE IF NOT EXISTS public.story_views (
 CREATE INDEX IF NOT EXISTS idx_story_views_viewer ON public.story_views(viewer_id);
 CREATE INDEX IF NOT EXISTS idx_story_views_story ON public.story_views(story_id);
 
+-- Grants: Supabase PostgREST requires table access granted to authenticated & anon roles
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.story_views TO authenticated;
+GRANT SELECT ON public.story_views TO anon;
+
 -- Enable Row Level Security
 ALTER TABLE public.story_views ENABLE ROW LEVEL SECURITY;
 
 -- 1. Viewers can query their own views (used by useStories to mark stories as viewed)
+DROP POLICY IF EXISTS "Users can read own story views" ON public.story_views;
 CREATE POLICY "Users can read own story views"
     ON public.story_views
     FOR SELECT
     USING (auth.uid() = viewer_id);
 
 -- 2. Story creators can inspect who viewed their stories
+DROP POLICY IF EXISTS "Creators can view who watched their stories" ON public.story_views;
 CREATE POLICY "Creators can view who watched their stories"
     ON public.story_views
     FOR SELECT
@@ -38,6 +44,7 @@ CREATE POLICY "Creators can view who watched their stories"
     );
 
 -- 3. Authenticated users can record their view
+DROP POLICY IF EXISTS "Users can insert own story views" ON public.story_views;
 CREATE POLICY "Users can insert own story views"
     ON public.story_views
     FOR INSERT
