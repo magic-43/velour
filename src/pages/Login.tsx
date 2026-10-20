@@ -15,12 +15,14 @@ import RecoveryModal from '../components/auth/RecoveryModal';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
 
-// Curated sensual, editorial portraits capturing intimate moody lighting & velvet aesthetics
+// Curated sensual, textural vignettes capturing intimate moody lighting & velvet aesthetics
+// Pure tactile luxury — silk sheets, liquid gold waves, candlelight shadows — with ZERO human faces
 const EDITORIAL_VIGNETTES = [
   {
     id: '1',
-    title: 'Lady Sonya',
-    img: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+    title: 'Silk & Shadow',
+    img: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
+    fallbackGradient: 'from-rose-950/40 via-[#0a0a09] to-[#070707]',
     rotation: '-rotate-3 sm:-rotate-6',
     translate: '-translate-x-6 sm:-translate-x-12 translate-y-3 sm:translate-y-4',
     zIndex: 10,
@@ -31,8 +33,9 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '2',
-    title: 'Velour Central',
-    img: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&auto=format&fit=crop&q=80',
+    title: 'Liquid Velvet',
+    img: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
+    fallbackGradient: 'from-amber-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-0',
     translate: 'translate-x-0 translate-y-0',
     zIndex: 20,
@@ -43,8 +46,9 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '3',
-    title: 'Elena & Lucas',
-    img: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80',
+    title: 'Candlelit Intimacy',
+    img: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
+    fallbackGradient: 'from-yellow-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-4 sm:rotate-6',
     translate: 'translate-x-6 sm:translate-x-12 translate-y-2 sm:translate-y-3',
     zIndex: 10,
@@ -224,14 +228,14 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
             style={{ zIndex: vignette.zIndex }}
           >
             <div
-              className={`${vignette.floatClass} relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] group`}
+              className={`${vignette.floatClass} relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient}`}
               style={{ animationDelay: vignette.delay }}
             >
-              {/* Image */}
+              {/* Texture Image (Silk, liquid gold, candlelit shadows) */}
               <img
                 src={vignette.img}
                 alt={vignette.title}
-                className="w-full h-full object-cover brightness-[0.82] contrast-[1.08] saturate-[0.9] group-hover:scale-105 transition-transform duration-700"
+                className="w-full h-full object-cover brightness-[0.78] contrast-[1.12] saturate-[1.05] group-hover:scale-105 transition-transform duration-700"
               />
 
               {/* Seductive Velvet Shadow & Candlelight Vignette */}
