@@ -15,14 +15,13 @@ import RecoveryModal from '../components/auth/RecoveryModal';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
 
-// Curated sensual, textural vignettes capturing intimate moody lighting & velvet aesthetics
-// Pure tactile luxury — silk sheets, liquid gold waves, candlelight shadows — with ZERO human faces
+// Curated editorial vignettes featuring people with majestic horses and dogs
 const EDITORIAL_VIGNETTES = [
   {
     id: '1',
-    title: 'Silk & Shadow',
-    img: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
-    fallbackGradient: 'from-rose-950/40 via-[#0a0a09] to-[#070707]',
+    title: 'Equestrian Elegance',
+    img: 'https://images.unsplash.com/photo-1661264265529-5c77d8674d2f?w=600&auto=format&fit=crop&q=80',
+    fallbackGradient: 'from-amber-950/40 via-[#0a0a09] to-[#070707]',
     rotation: '-rotate-3 sm:-rotate-6',
     translate: '-translate-x-6 sm:-translate-x-12 translate-y-3 sm:translate-y-4',
     zIndex: 10,
@@ -33,9 +32,9 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '2',
-    title: 'Liquid Velvet',
-    img: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-    fallbackGradient: 'from-amber-950/40 via-[#0a0a09] to-[#070707]',
+    title: 'Intimate Devotion',
+    img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=80',
+    fallbackGradient: 'from-rose-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-0',
     translate: 'translate-x-0 translate-y-0',
     zIndex: 20,
@@ -46,8 +45,8 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '3',
-    title: 'Candlelit Intimacy',
-    img: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
+    title: 'The Bond',
+    img: 'https://images.unsplash.com/photo-1770576907030-8fb71c24dc94?w=600&auto=format&fit=crop&q=80',
     fallbackGradient: 'from-yellow-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-4 sm:rotate-6',
     translate: 'translate-x-6 sm:translate-x-12 translate-y-2 sm:translate-y-3',
