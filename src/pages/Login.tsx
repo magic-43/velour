@@ -80,43 +80,95 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CARD SLOTS FOR SMOOTH ROTATING LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+const CARD_SLOTS = [
+  // Slot 0: Center (Hero)
+  {
+    rotation: 'rotate-0',
+    translate: 'translate-x-0 translate-y-0',
+    zIndex: 25,
+    scale: 'scale-100 sm:scale-105',
+    opacity: 'opacity-100',
+    brightness: 'brightness-[0.9]',
+    border: 'border-gold/40',
+  },
+  // Slot 1: Right (Behind)
+  {
+    rotation: 'rotate-4 sm:rotate-6',
+    translate: 'translate-x-6 sm:translate-x-12 translate-y-2 sm:translate-y-3',
+    zIndex: 10,
+    scale: 'scale-90 sm:scale-95',
+    opacity: 'opacity-85',
+    brightness: 'brightness-[0.72]',
+    border: 'border-white/10',
+  },
+  // Slot 2: Left (Behind)
+  {
+    rotation: '-rotate-3 sm:-rotate-6',
+    translate: '-translate-x-6 sm:-translate-x-12 translate-y-3 sm:translate-y-4',
+    zIndex: 10,
+    scale: 'scale-90 sm:scale-95',
+    opacity: 'opacity-85',
+    brightness: 'brightness-[0.72]',
+    border: 'border-white/10',
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TOP-LEVEL COMPONENT: Seductive Editorial Vignette Composition
-// Defined outside Login so React never unmounts or recreates DOM nodes
+// Auto-rotates card positions in a continuous, luxurious loop
 // ─────────────────────────────────────────────────────────────────────────────
 function EditorialShowcase() {
+  const [activeSlotOffset, setActiveSlotOffset] = useState(0);
+
+  // Auto-rotate every 3.5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveSlotOffset((prev) => (prev + 1) % 3);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="relative w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[460px] mx-auto flex items-center justify-center py-4 select-none">
       {/* Intimate Backlight Ambiance (Candlelight Amber & Velvet Wine) */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(201,169,110,0.16)_0%,rgba(136,19,55,0.12)_45%,transparent_75%)] blur-3xl pointer-events-none" />
 
-      {/* Layered Seductive Cards Fan */}
+      {/* Layered Seductive Cards Fan with Smooth Looping Rotation */}
       <div className="relative flex items-center justify-center w-full h-[280px] sm:h-[340px] lg:h-[390px]">
-        {EDITORIAL_VIGNETTES.map((vignette) => (
-          <div
-            key={vignette.id}
-            className={`absolute transition-all duration-700 ease-out ${vignette.rotation} ${vignette.translate} ${vignette.scale}`}
-            style={{ zIndex: vignette.zIndex }}
-          >
+        {EDITORIAL_VIGNETTES.map((vignette, idx) => {
+          // Dynamic slot calculation: cycles positions continuously
+          const slotIndex = (idx + activeSlotOffset) % 3;
+          const slot = CARD_SLOTS[slotIndex];
+
+          return (
             <div
-              className={`${vignette.floatClass} relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient}`}
-              style={{ animationDelay: vignette.delay }}
+              key={vignette.id}
+              onClick={() => setActiveSlotOffset((3 - idx) % 3)}
+              className={`absolute transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${slot.rotation} ${slot.translate} ${slot.scale} ${slot.opacity} cursor-pointer`}
+              style={{ zIndex: slot.zIndex }}
             >
-              {/* Texture Image (Silk, liquid gold, candlelit shadows) */}
-              <img
-                src={vignette.img}
-                alt={vignette.title}
-                className="w-full h-full object-cover brightness-[0.78] contrast-[1.12] saturate-[1.05] group-hover:scale-105 transition-transform duration-700"
-              />
+              <div
+                className={`relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border ${slot.border} shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient} transition-colors duration-700`}
+              >
+                {/* Image */}
+                <img
+                  src={vignette.img}
+                  alt={vignette.title}
+                  className={`w-full h-full object-cover contrast-[1.1] saturate-[1.05] group-hover:scale-105 transition-all duration-700 ${slot.brightness}`}
+                />
 
-              {/* Seductive Velvet Shadow & Candlelight Vignette */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
-              <div className="absolute inset-0 bg-gradient-to-tr from-amber-950/20 via-transparent to-rose-950/20 mix-blend-color pointer-events-none" />
+                {/* Seductive Velvet Shadow & Candlelight Vignette */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-amber-950/20 via-transparent to-rose-950/20 mix-blend-color pointer-events-none" />
 
-              {/* Delicate Gold Rim Highlight */}
-              <div className="absolute inset-0 rounded-2xl border border-gold/20 pointer-events-none" />
+                {/* Delicate Gold Rim Highlight */}
+                <div className="absolute inset-0 rounded-2xl border border-gold/20 pointer-events-none" />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Floating VELOUR Serif Monogram Overlay */}
         <div className="absolute -bottom-2 sm:-bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center whitespace-nowrap">
@@ -126,7 +178,7 @@ function EditorialShowcase() {
               VELOUR
             </h1>
             <p className="font-serif italic text-gold/85 text-xs sm:text-sm tracking-widest mt-0.5 font-light">
-              Where desire meets discretion
+              House of Desire
             </p>
           </div>
         </div>
