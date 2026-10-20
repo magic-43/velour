@@ -54,7 +54,6 @@ export default function Settings() {
   const [recoveryCooldown, setRecoveryCooldown] = useState(0);
   const [recoverySuccess, setRecoverySuccess] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
-  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
 
   // Cooldown countdown effect
   useEffect(() => {
@@ -285,7 +284,6 @@ export default function Settings() {
     setIsSendingRecoveryOtp(true);
     setRecoveryError(null);
     setRecoverySuccess(null);
-    setDevOtpCode(null);
 
     try {
       const res = await requestRecoveryEmailVerification(emailTrimmed, profile.username);
@@ -296,9 +294,6 @@ export default function Settings() {
       setRecoveryStep('verify');
       setRecoveryCooldown(60);
       setRecoverySuccess(`A 6-digit confirmation code was sent to ${emailTrimmed}.`);
-      if (res.code) {
-        setDevOtpCode(res.code);
-      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to request verification code.';
       setRecoveryError(msg);
@@ -330,7 +325,6 @@ export default function Settings() {
       if (refreshProfile) await refreshProfile();
       setRecoveryStep('input');
       setRecoveryOtpCode('');
-      setDevOtpCode(null);
       setRecoverySuccess('Recovery email verified and updated successfully!');
       setTimeout(() => setRecoverySuccess(null), 4000);
     } catch (err: unknown) {
@@ -1170,19 +1164,6 @@ export default function Settings() {
                     </button>
                   </div>
                 </div>
-
-                {devOtpCode && (
-                  <div className="p-2.5 rounded-xl bg-teal-950/30 border border-teal-500/20 text-teal-300 text-[11px] flex items-center justify-between">
-                    <span>Dev/Test Code: <strong className="font-mono text-xs">{devOtpCode}</strong></span>
-                    <button
-                      type="button"
-                      onClick={() => setRecoveryOtpCode(devOtpCode)}
-                      className="text-[10px] uppercase font-bold text-teal-400 hover:underline"
-                    >
-                      Fill
-                    </button>
-                  </div>
-                )}
 
                 {recoveryError && (
                   <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">

@@ -4,7 +4,6 @@ export interface OtpRequestResult {
   success: boolean;
   message?: string;
   email?: string;
-  code?: string;
 }
 
 export interface OtpVerifyResult {
@@ -29,7 +28,6 @@ export async function requestRecoveryEmailVerification(
     });
 
     if (error) {
-      // Check if function does not exist yet in DB
       if (error.code === '42883' || error.message?.includes('function public.request_recovery_email_otp')) {
         throw new Error('Database migration pending. Please run create_recovery_email_verifications.sql in Supabase SQL Editor.');
       }
@@ -43,7 +41,7 @@ export async function requestRecoveryEmailVerification(
 
     const generatedCode = payload.code;
 
-    // 2. Dispatch email via Supabase Edge Function
+    // 2. Attempt email dispatch via Edge Function if deployed
     if (generatedCode) {
       try {
         const { error: fnError } = await supabase.functions.invoke('send-recovery-otp', {
@@ -55,17 +53,16 @@ export async function requestRecoveryEmailVerification(
         });
 
         if (fnError) {
-          console.warn('Edge function email dispatch warning (may be dev mode):', fnError);
+          console.warn('Email dispatch warning (Edge Function not deployed to Supabase):', fnError.message);
         }
       } catch (fnErr) {
-        console.warn('Could not invoke send-recovery-otp Edge Function:', fnErr);
+        console.warn('Could not reach send-recovery-otp Edge Function:', fnErr);
       }
     }
 
     return {
       success: true,
       email: cleanEmail,
-      code: generatedCode, // Available for development/fallback display if needed
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to send verification code.';
