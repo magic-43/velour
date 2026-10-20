@@ -15,12 +15,12 @@ import RecoveryModal from '../components/auth/RecoveryModal';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
 
-// Curated editorial vignettes featuring people with majestic horses and dogs
+// Curated editorial vignettes from public/images in order of their names
 const EDITORIAL_VIGNETTES = [
   {
     id: '1',
-    title: 'Equestrian Elegance',
-    img: 'https://images.unsplash.com/photo-1661264265529-5c77d8674d2f?w=600&auto=format&fit=crop&q=80',
+    title: 'Velour I',
+    img: '/images/1.jpeg',
     fallbackGradient: 'from-amber-950/40 via-[#0a0a09] to-[#070707]',
     rotation: '-rotate-3 sm:-rotate-6',
     translate: '-translate-x-6 sm:-translate-x-12 translate-y-3 sm:translate-y-4',
@@ -32,8 +32,8 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '2',
-    title: 'Intimate Devotion',
-    img: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=80',
+    title: 'Velour II',
+    img: '/images/2.jpeg',
     fallbackGradient: 'from-rose-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-0',
     translate: 'translate-x-0 translate-y-0',
@@ -45,8 +45,8 @@ const EDITORIAL_VIGNETTES = [
   },
   {
     id: '3',
-    title: 'The Bond',
-    img: 'https://images.unsplash.com/photo-1770576907030-8fb71c24dc94?w=600&auto=format&fit=crop&q=80',
+    title: 'Velour III',
+    img: '/images/3.jpeg',
     fallbackGradient: 'from-yellow-950/40 via-[#0a0a09] to-[#070707]',
     rotation: 'rotate-4 sm:rotate-6',
     translate: 'translate-x-6 sm:translate-x-12 translate-y-2 sm:translate-y-3',
