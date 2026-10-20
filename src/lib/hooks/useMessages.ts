@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
 import type { Message, Profile } from '../../types';
-import { showNewMessageNotification } from '../notificationService';
+import { showNewMessageNotification, getNotificationPreferences } from '../notificationService';
+import { triggerNotificationFeedback } from '../soundNotification';
+import { getCleanMessagePreview } from '../messageUtils';
 import {
   getCachedMessages,
   saveCachedMessages,
@@ -822,6 +824,24 @@ export function useMessages(conversationId: string | null) {
             appendCachedMessage(confirmedMsg).catch(() => {});
 
             if (confirmedMsg.sender_id !== user.id) {
+              // Play incoming audio chime / haptic if enabled
+              const prefs = getNotificationPreferences(user.id);
+              if (prefs.inAppSounds || prefs.soundAndHaptics) {
+                triggerNotificationFeedback().catch(() => {});
+              }
+
+              // If window is unfocused or tab is backgrounded, dispatch OS notification
+              if (typeof document !== 'undefined' && (!document.hasFocus() || document.hidden)) {
+                const clean = getCleanMessagePreview(confirmedMsg.content, confirmedMsg.message_type);
+                showNewMessageNotification({
+                  conversationId,
+                  senderName: confirmedMsg.sender?.display_name || confirmedMsg.sender?.username || 'New Message',
+                  body: clean.text || 'Sent you a message',
+                  userId: user.id,
+                  isForegroundActive: false,
+                }).catch(() => {});
+              }
+
               markRead();
               await supabase.rpc('mark_all_delivered', { p_conversation_id: conversationId });
             }

@@ -727,35 +727,18 @@ export default function MediaLightbox({
                         </div>
                       )}
 
-                      {/* Center Big Play / Pause Button for current video — ONLY visible when controlsVisible is true */}
-                      {isCurrent && !isBuffering && controlsVisible && (
-                        <>
-                          {!isPlaying && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-150">
-                              <button
-                                type="button"
-                                onClick={handlePlayVideo}
-                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/65 hover:bg-black/85 border border-gold/40 backdrop-blur-md flex items-center justify-center text-gold shadow-[0_0_24px_rgba(212,175,55,0.4)] pointer-events-auto cursor-pointer hover:scale-105 active:scale-95 transition-all"
-                                title="Play Video"
-                              >
-                                <Play size={30} fill="currentColor" className="ml-1 text-gold" />
-                              </button>
-                            </div>
-                          )}
-
-                          {isPlaying && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-200">
-                              <button
-                                type="button"
-                                onClick={handlePauseVideo}
-                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/65 hover:bg-black/85 border border-gold/40 backdrop-blur-md flex items-center justify-center text-gold shadow-[0_0_24px_rgba(212,175,55,0.4)] pointer-events-auto cursor-pointer hover:scale-105 active:scale-95 transition-all"
-                                title="Pause Video"
-                              >
-                                <Pause size={28} fill="currentColor" className="text-gold" />
-                              </button>
-                            </div>
-                          )}
-                        </>
+                      {/* Center Big Play Button for current video — ONLY visible when paused AND controlsVisible is true */}
+                      {isCurrent && !isBuffering && controlsVisible && !isPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-150">
+                          <button
+                            type="button"
+                            onClick={handlePlayVideo}
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/65 hover:bg-black/85 border border-gold/40 backdrop-blur-md flex items-center justify-center text-gold shadow-[0_0_24px_rgba(212,175,55,0.4)] pointer-events-auto cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                            title="Play Video"
+                          >
+                            <Play size={30} fill="currentColor" className="ml-1 text-gold" />
+                          </button>
+                        </div>
                       )}
 
                       {/* Preview Play Badge for adjacent video slides */}
@@ -862,7 +845,21 @@ export default function MediaLightbox({
 
           {/* Video Scrubber Strip (Directly below Header, attached seamlessly) */}
           {isVideo && (
-            <div className="w-full bg-[#2a2b30]/95 backdrop-blur-xl border-b border-white/10 px-4 py-2 sm:py-2.5 flex items-center gap-3 text-white shadow-lg">
+            <div className="w-full bg-[#2a2b30]/95 backdrop-blur-xl border-b border-white/10 px-4 py-2 sm:py-2.5 flex items-center gap-2.5 sm:gap-3 text-white shadow-lg">
+              {/* Play / Pause Toggle Button */}
+              <button
+                type="button"
+                onClick={isPlaying ? handlePauseVideo : handlePlayVideo}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? (
+                  <Pause size={15} fill="currentColor" />
+                ) : (
+                  <Play size={15} fill="currentColor" className="ml-0.5" />
+                )}
+              </button>
+
               {/* Current Time */}
               <span className="text-white text-sm font-medium tracking-tight select-none shrink-0 min-w-[36px]">
                 {formatDuration(currentTime)}

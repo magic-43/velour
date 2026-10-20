@@ -52,17 +52,16 @@ export default function NetworkStatusBar() {
   }
 
   return (
-    <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-2">
+    <div className="fixed top-1.5 sm:top-2 left-1/2 -translate-x-1/2 z-[70] pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-1">
       {!isOnline ? (
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1c140a]/95 border border-amber-500/40 text-amber-300 shadow-xl backdrop-blur-md text-[11px] font-medium tracking-wide">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <WifiOff size={13} className="text-amber-400" />
-          <span>Waiting for network · Showing offline data</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#161618]/95 border border-white/10 text-neutral-300 shadow-xl backdrop-blur-md text-[11px] font-medium tracking-wide">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+          <span>Waiting for network...</span>
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0a1c12]/95 border border-emerald-500/40 text-emerald-300 shadow-xl backdrop-blur-md text-[11px] font-medium tracking-wide">
-          <Check size={13} className="text-emerald-400" />
-          <span>Connected · Syncing messages</span>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#161618]/95 border border-emerald-500/30 text-emerald-300 shadow-xl backdrop-blur-md text-[11px] font-medium tracking-wide">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+          <span>Connected</span>
         </div>
       )}
     </div>

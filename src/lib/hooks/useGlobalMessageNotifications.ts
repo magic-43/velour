@@ -152,11 +152,12 @@ export function useGlobalMessageNotifications() {
   }) => {
     if (!user || senderId === user.id) return;
 
-    // Suppress if user is currently looking at this exact chat thread in foreground
+    // Suppress if user is currently looking at this exact chat thread in foreground and window is focused
     if (
       conversationId === activeConvRef.current &&
       typeof document !== 'undefined' &&
-      !document.hidden
+      !document.hidden &&
+      document.hasFocus()
     ) {
       return;
     }

@@ -352,15 +352,16 @@ export default function Profile() {
 
   // ── MAIN TELEGRAM-STYLE FAN PROFILE VIEW ────────────────────────────────────
   return (
-    <PullToRefresh onRefresh={handleRefresh} className="h-full overflow-y-auto">
-      <div className="px-4 sm:px-5 pt-4 pb-24 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handlePhotoUpload}
-        accept="image/*"
-        className="hidden"
-      />
+    <div className="h-full w-full flex flex-col overflow-hidden bg-ink">
+      <PullToRefresh onRefresh={handleRefresh} className="flex-1 overflow-y-auto overscroll-y-contain">
+        <div className="px-4 sm:px-5 pt-4 pb-28 md:pb-8 max-w-[600px] w-full mx-auto md:mx-0">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handlePhotoUpload}
+            accept="image/*"
+            className="hidden"
+          />
 
       {/* ── Sticky Top Bar with Title and Edit Button ─────────────────── */}
       <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 -mt-4 mb-4 flex items-center justify-between px-4 sm:px-5 py-3.5 bg-ink/95 backdrop-blur-md border-b border-border-subtle">
@@ -490,7 +491,7 @@ export default function Profile() {
         <TelegramRow
           iconBg="bg-gradient-to-br from-rose-500 to-rose-700 text-white"
           icon={<Bell size={15} />}
-          label="Notifications"
+          label={isCreator ? 'Creator Notifications' : 'Notifications'}
           onClick={() => navigate('/settings/notifications')}
         />
         <div className="h-px bg-white/[0.04] ml-13" />
@@ -538,8 +539,9 @@ export default function Profile() {
           onClose={() => setSwitcherOpen(false)}
         />
       )}
-      </div>
-    </PullToRefresh>
+        </div>
+      </PullToRefresh>
+    </div>
   );
 }
 

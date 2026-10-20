@@ -145,7 +145,7 @@ export const PullToRefresh = forwardRef<HTMLDivElement, PullToRefreshProps>(func
   const opacity = pullDistance > 6 ? Math.min(1, pullDistance / 28) : 0;
 
   return (
-    <div className="relative flex-1 min-h-0 w-full overflow-hidden flex flex-col">
+    <div className="relative flex-1 min-h-0 w-full h-full overflow-hidden flex flex-col">
       {/* Floating Luxury Pull Indicator */}
       <div
         className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none"
@@ -193,7 +193,7 @@ export const PullToRefresh = forwardRef<HTMLDivElement, PullToRefreshProps>(func
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
-        className={className}
+        className={`w-full flex-1 min-h-0 ${className || ''}`}
         style={{
           transform:
             pullDistance > 0

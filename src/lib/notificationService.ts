@@ -4,16 +4,48 @@ import { triggerNotificationFeedback } from './soundNotification';
 
 export interface NotificationPreferences {
   directMessages: boolean;
-  creatorStories: boolean;
-  storyReactions: boolean;
-  inAppSounds: boolean;
+  soundAndHaptics: boolean;
+  inAppSounds?: boolean; // alias for soundAndHaptics
   emailDigest: boolean;
+  // Creator specific
+  giftsAndTips?: boolean;
+  unlockRequests?: boolean;
+  storyReactions?: boolean;
+  newFollowers?: boolean;
+  // Fan specific
+  creatorStories?: boolean;
+  unlockConfirmations?: boolean;
 }
 
-const DEFAULT_PREFERENCES: NotificationPreferences = {
+export const DEFAULT_CREATOR_NOTIFICATIONS: NotificationPreferences = {
+  directMessages: true,
+  giftsAndTips: true,
+  unlockRequests: true,
+  storyReactions: true,
+  newFollowers: true,
+  soundAndHaptics: true,
+  inAppSounds: true,
+  emailDigest: true,
+};
+
+export const DEFAULT_FAN_NOTIFICATIONS: NotificationPreferences = {
   directMessages: true,
   creatorStories: true,
+  unlockConfirmations: true,
+  soundAndHaptics: true,
+  inAppSounds: true,
+  emailDigest: false,
+};
+
+export const DEFAULT_PREFERENCES: NotificationPreferences = {
+  directMessages: true,
+  creatorStories: true,
+  giftsAndTips: true,
+  unlockRequests: true,
   storyReactions: true,
+  newFollowers: true,
+  unlockConfirmations: true,
+  soundAndHaptics: true,
   inAppSounds: true,
   emailDigest: false,
 };
@@ -23,19 +55,26 @@ let isChannelConfigured = false;
 let isListenerConfigured = false;
 
 /**
- * Retrieve saved notification preferences for a user, or defaults.
+ * Retrieve saved notification preferences for a user, or defaults based on role.
  */
-export function getNotificationPreferences(userId?: string): NotificationPreferences {
+export function getNotificationPreferences(userId?: string, isCreator?: boolean): NotificationPreferences {
+  const baseDefaults = isCreator ? DEFAULT_CREATOR_NOTIFICATIONS : DEFAULT_FAN_NOTIFICATIONS;
   try {
     const key = userId ? `velour_notifications_${userId}` : 'velour_notifications_default';
     const raw = localStorage.getItem(key);
     if (raw) {
-      return { ...DEFAULT_PREFERENCES, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      if (parsed.soundAndHaptics !== undefined && parsed.inAppSounds === undefined) {
+        parsed.inAppSounds = parsed.soundAndHaptics;
+      } else if (parsed.inAppSounds !== undefined && parsed.soundAndHaptics === undefined) {
+        parsed.soundAndHaptics = parsed.inAppSounds;
+      }
+      return { ...baseDefaults, ...parsed };
     }
   } catch (err) {
     console.warn('Failed reading notification preferences:', err);
   }
-  return DEFAULT_PREFERENCES;
+  return baseDefaults;
 }
 
 /**
@@ -47,7 +86,12 @@ export function saveNotificationPreferences(
 ): void {
   try {
     const key = userId ? `velour_notifications_${userId}` : 'velour_notifications_default';
-    localStorage.setItem(key, JSON.stringify(prefs));
+    const toSave = {
+      ...prefs,
+      inAppSounds: prefs.soundAndHaptics ?? prefs.inAppSounds ?? true,
+      soundAndHaptics: prefs.soundAndHaptics ?? prefs.inAppSounds ?? true,
+    };
+    localStorage.setItem(key, JSON.stringify(toSave));
   } catch (err) {
     console.error('Failed saving notification preferences:', err);
   }
@@ -206,7 +250,7 @@ export async function showNewMessageNotification({
   const prefs = getNotificationPreferences(userId);
 
   // 1. Play in-app sound & haptic feedback if enabled
-  if (prefs.inAppSounds) {
+  if (prefs.inAppSounds || prefs.soundAndHaptics) {
     triggerNotificationFeedback().catch(() => {});
   }
 
@@ -215,8 +259,8 @@ export async function showNewMessageNotification({
     return;
   }
 
-  // 3. If user is actively reading this exact conversation in foreground, suppress system banner
-  if (isForegroundActive && typeof document !== 'undefined' && !document.hidden) {
+  // 3. If user is actively reading this exact conversation in foreground with window focus, suppress system banner
+  if (isForegroundActive && typeof document !== 'undefined' && !document.hidden && document.hasFocus()) {
     return;
   }
 
@@ -249,24 +293,50 @@ export async function showNewMessageNotification({
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
       try {
-        const notif = new Notification(senderName || 'New Message', {
-          body: body || 'You received a new message',
-          icon: senderAvatarUrl || '/favicon.ico',
-          badge: '/favicon.ico',
-          tag: `velour-msg-${conversationId}`,
-        });
+        const iconUrl = '/favicon.ico';
+        let swShown = false;
 
-        notif.onclick = () => {
+        // 5a. Prefer ServiceWorker registration showNotification (100% reliable across all Chromium states)
+        if ('serviceWorker' in navigator) {
           try {
-            window.focus();
-          } catch (_) {}
-          if (navigationHandler) {
-            navigationHandler(`/messages/${conversationId}`);
-          } else {
-            window.location.href = `/messages/${conversationId}`;
+            const reg = await navigator.serviceWorker.ready;
+            if (reg && typeof reg.showNotification === 'function') {
+              await reg.showNotification(senderName || 'New Message', {
+                body: body || 'You received a new message',
+                icon: iconUrl,
+                badge: iconUrl,
+                tag: `velour-msg-${conversationId}`,
+                data: { conversationId },
+                silent: true,
+              });
+              swShown = true;
+            }
+          } catch (swErr) {
+            console.warn('ServiceWorker showNotification failed, trying window Notification:', swErr);
           }
-          notif.close();
-        };
+        }
+
+        // 5b. Fallback to classic window Notification constructor
+        if (!swShown) {
+          const notif = new Notification(senderName || 'New Message', {
+            body: body || 'You received a new message',
+            icon: iconUrl,
+            badge: iconUrl,
+            tag: `velour-msg-${conversationId}`,
+          });
+
+          notif.onclick = () => {
+            try {
+              window.focus();
+            } catch (_) {}
+            if (navigationHandler) {
+              navigationHandler(`/messages/${conversationId}`);
+            } else {
+              window.location.href = `/messages/${conversationId}`;
+            }
+            notif.close();
+          };
+        }
       } catch (err) {
         console.warn('Web Notification display error:', err);
       }

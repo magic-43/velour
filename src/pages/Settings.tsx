@@ -13,25 +13,11 @@ import {
   saveNotificationPreferences,
   getNotificationPermissionState,
   sendTestDesktopNotification,
+  getNotificationPreferences,
+  type NotificationPreferences,
 } from '../lib/notificationService';
 import { triggerNotificationFeedback } from '../lib/soundNotification';
 import { getMyLastSeenPrivacy, setMyLastSeenPrivacy, type LastSeenPrivacy } from '../lib/utils/presenceUtils';
-
-interface NotificationPreferences {
-  directMessages: boolean;
-  creatorStories: boolean;
-  storyReactions: boolean;
-  inAppSounds: boolean;
-  emailDigest: boolean;
-}
-
-const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
-  directMessages: true,
-  creatorStories: true,
-  storyReactions: true,
-  inAppSounds: true,
-  emailDigest: false,
-};
 
 export default function Settings() {
   const { section } = useParams<{ section?: string }>();
@@ -62,13 +48,7 @@ export default function Settings() {
 
   // ── Notification State ───────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState<NotificationPreferences>(() => {
-    if (!profile) return DEFAULT_NOTIFICATIONS;
-    try {
-      const saved = localStorage.getItem(`velour_notifications_${profile.id}`);
-      return saved ? { ...DEFAULT_NOTIFICATIONS, ...JSON.parse(saved) } : DEFAULT_NOTIFICATIONS;
-    } catch {
-      return DEFAULT_NOTIFICATIONS;
-    }
+    return getNotificationPreferences(profile?.id, isCreator);
   });
   const [notificationToast, setNotificationToast] = useState(false);
   const [desktopNotifState, setDesktopNotifState] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(() => {
@@ -356,11 +336,16 @@ export default function Settings() {
     }
 
     // If enabling Sound & Haptics, trigger sound and haptic preview
-    if (key === 'inAppSounds' && nextVal) {
+    if ((key === 'soundAndHaptics' || key === 'inAppSounds') && nextVal) {
       triggerNotificationFeedback().catch(() => {});
     }
 
-    const updated = { ...notifications, [key]: nextVal };
+    const updated = {
+      ...notifications,
+      [key]: nextVal,
+      ...(key === 'soundAndHaptics' ? { inAppSounds: nextVal } : {}),
+      ...(key === 'inAppSounds' ? { soundAndHaptics: nextVal } : {}),
+    };
     setNotifications(updated);
     saveNotificationPreferences(updated, profile.id);
     setNotificationToast(true);
@@ -401,7 +386,7 @@ export default function Settings() {
 
   const sectionTitles: Record<string, string> = {
     account: 'Account',
-    notifications: 'Notifications',
+    notifications: isCreator ? 'Creator Notifications' : 'Notifications',
     security: 'Privacy & Security',
     'recovery-email': 'Recovery Email',
   };
@@ -716,38 +701,119 @@ export default function Settings() {
               </div>
             )}
 
-            <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
-              <NotificationToggleRow
-                title="Direct Messages"
-                description="Instant alerts when you receive a new chat message"
-                checked={notifications.directMessages}
-                onChange={() => toggleNotification('directMessages')}
-              />
-              <NotificationToggleRow
-                title="Creator Stories"
-                description="Notifications when creators you follow post new moments"
-                checked={notifications.creatorStories}
-                onChange={() => toggleNotification('creatorStories')}
-              />
-              <NotificationToggleRow
-                title="Reactions & Saves"
-                description="Notifies when someone loves or saves your moments"
-                checked={notifications.storyReactions}
-                onChange={() => toggleNotification('storyReactions')}
-              />
-              <NotificationToggleRow
-                title="Sound & Haptics"
-                description="Play in-app audio feedback and haptic vibration"
-                checked={notifications.inAppSounds}
-                onChange={() => toggleNotification('inAppSounds')}
-              />
-              <NotificationToggleRow
-                title="Email Highlights"
-                description="Weekly digest of trending stories and exclusive creator drops"
-                checked={notifications.emailDigest}
-                onChange={() => toggleNotification('emailDigest')}
-              />
-            </div>
+            {isCreator ? (
+              <>
+                {/* ── Creator Monetization & Fan Alerts ── */}
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted px-1">
+                    Monetization & Fan Alerts
+                  </p>
+                  <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
+                    <NotificationToggleRow
+                      title="Direct Messages"
+                      description="Instant alerts when fans send you messages or inquiries"
+                      checked={notifications.directMessages}
+                      onChange={() => toggleNotification('directMessages')}
+                    />
+                    <NotificationToggleRow
+                      title="Gifts & Tips"
+                      description="Instant alerts when a fan sends you a Telegram gift or custom tip"
+                      checked={notifications.giftsAndTips ?? true}
+                      onChange={() => toggleNotification('giftsAndTips')}
+                    />
+                    <NotificationToggleRow
+                      title="Unlock Requests"
+                      description="Alerts when fans pay or request to unlock paywalled vault media"
+                      checked={notifications.unlockRequests ?? true}
+                      onChange={() => toggleNotification('unlockRequests')}
+                    />
+                    <NotificationToggleRow
+                      title="New Followers & Subscribers"
+                      description="Notifies when fans follow or subscribe to your creator profile"
+                      checked={notifications.newFollowers ?? true}
+                      onChange={() => toggleNotification('newFollowers')}
+                    />
+                    <NotificationToggleRow
+                      title="Story Reactions & Comments"
+                      description="Notifies when fans love, react to, or reply to your stories"
+                      checked={notifications.storyReactions ?? true}
+                      onChange={() => toggleNotification('storyReactions')}
+                    />
+                  </div>
+                </div>
+
+                {/* ── Creator Audio & Digest Preferences ── */}
+                <div className="space-y-1.5 pt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted px-1">
+                    Audio & Reports
+                  </p>
+                  <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
+                    <NotificationToggleRow
+                      title="Sound & Haptics"
+                      description="Play luxury audio chimes and vibrations for incoming events"
+                      checked={notifications.soundAndHaptics ?? notifications.inAppSounds ?? true}
+                      onChange={() => toggleNotification('soundAndHaptics')}
+                    />
+                    <NotificationToggleRow
+                      title="Weekly Earnings Digest"
+                      description="Weekly email report of earnings, unlocks, and subscriber growth"
+                      checked={notifications.emailDigest}
+                      onChange={() => toggleNotification('emailDigest')}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* ── Fan Activity & Messages ── */}
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted px-1">
+                    Activity & Messages
+                  </p>
+                  <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
+                    <NotificationToggleRow
+                      title="Direct Messages"
+                      description="Instant alerts when creators or friends send you a message"
+                      checked={notifications.directMessages}
+                      onChange={() => toggleNotification('directMessages')}
+                    />
+                    <NotificationToggleRow
+                      title="Creator Stories & Drops"
+                      description="Notifications when creators you follow post new moments or drops"
+                      checked={notifications.creatorStories ?? true}
+                      onChange={() => toggleNotification('creatorStories')}
+                    />
+                    <NotificationToggleRow
+                      title="Unlock & Gift Confirmations"
+                      description="Receipt notifications when your gifts or content unlocks are delivered"
+                      checked={notifications.unlockConfirmations ?? true}
+                      onChange={() => toggleNotification('unlockConfirmations')}
+                    />
+                  </div>
+                </div>
+
+                {/* ── Fan Audio & Highlights Preferences ── */}
+                <div className="space-y-1.5 pt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted px-1">
+                    Audio & Highlights
+                  </p>
+                  <div className="bg-[#101010] rounded-2xl overflow-hidden border border-white/[0.04] divide-y divide-white/[0.04]">
+                    <NotificationToggleRow
+                      title="Sound & Haptics"
+                      description="Play in-app audio feedback and haptic vibration"
+                      checked={notifications.soundAndHaptics ?? notifications.inAppSounds ?? true}
+                      onChange={() => toggleNotification('soundAndHaptics')}
+                    />
+                    <NotificationToggleRow
+                      title="Weekly Highlights"
+                      description="Weekly email digest of trending creators and exclusive moments"
+                      checked={notifications.emailDigest}
+                      onChange={() => toggleNotification('emailDigest')}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {notificationToast && (
               <p className="text-center text-xs text-emerald-400 animate-in fade-in flex items-center justify-center gap-1">
@@ -1035,8 +1101,8 @@ export default function Settings() {
               <SettingsMenuLink
                 icon={<Bell size={16} />}
                 iconBg="bg-gradient-to-br from-rose-500 to-rose-700 text-white"
-                label="Notifications"
-                sublabel="Push alerts, in-app sounds, stories"
+                label={isCreator ? 'Creator Notifications' : 'Notifications'}
+                sublabel={isCreator ? 'Fan alerts, tips, unlock requests, sound' : 'Push alerts, creator drops, sound'}
                 onClick={() => navigate('/settings/notifications')}
               />
               <div className="h-px bg-white/[0.04] ml-14" />

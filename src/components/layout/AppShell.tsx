@@ -101,8 +101,8 @@ export default function AppShell() {
   // Match v1 mainShellClass per route (fixed layout routes have pinned sticky header)
   const isFixedLayoutRoute = isDiscover || isHome || isSettings || isWallet || isProfile;
   const mainShellClass = isFixedLayoutRoute
-    ? 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-0 relative h-[calc(100dvh-68px)] md:h-screen min-h-0 overflow-hidden'
-    : 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-20 md:pb-0 relative min-h-screen h-screen overflow-y-auto overflow-x-hidden';
+    ? 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-0 relative h-[calc(100dvh-68px)] md:h-screen min-h-0 overflow-hidden flex flex-col'
+    : 'flex-1 max-w-[600px] w-full mx-auto md:mx-0 md:border-r border-border-subtle pb-20 md:pb-0 relative min-h-screen h-screen overflow-y-auto overflow-x-hidden flex flex-col';
 
   return (
     <div className="h-[100dvh] md:h-screen bg-ink text-paper font-sans flex justify-center overflow-hidden overscroll-none relative">

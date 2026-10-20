@@ -18,9 +18,10 @@ import {
 import type { MessageWithSender } from '../../lib/hooks/useMessages';
 import { parseStoryReply, type StoryReplyMetadata } from '../../lib/storyReplies';
 import { parseVaultMediaMessage } from '../../lib/creatorVault';
-import { getCleanMessagePreview } from '../../lib/messageUtils';
+import { getCleanMessagePreview, parseGiftMessage, stripHiddenComments } from '../../lib/messageUtils';
 import StoryStatusIcon from './StoryStatusIcon';
 import WhatsAppMediaGrid from './WhatsAppMediaGrid';
+import GiftReceiptCard from './GiftReceiptCard';
 import { IOS_EMOJIS, getAppleEmojiUrl } from '../../data/iosEmojis';
 import { triggerHaptic } from '../../lib/haptics';
 
@@ -132,6 +133,7 @@ export default function MessageContextMenu({
   const isVoiceNote = message.message_type === 'voice_note';
   const storyReply = parseStoryReply(message.content);
   const vaultMedia = parseVaultMediaMessage(message.content);
+  const giftData = parseGiftMessage(message.content);
   const preview = getCleanMessagePreview(message.content, message.message_type, isDeleted);
 
   // Check current user's reaction
@@ -184,7 +186,10 @@ export default function MessageContextMenu({
   const handleCopy = async () => {
     if (!message.content) return;
     try {
-      await navigator.clipboard.writeText(preview.text || message.content);
+      const textToCopy = giftData.isGift
+        ? (giftData.gift ? `Sent ${giftData.gift.emoji || '🎁'} ${giftData.gift.name} ($${giftData.gift.amount})` : 'Sent a gift')
+        : (preview.text || stripHiddenComments(message.content));
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
@@ -415,7 +420,9 @@ export default function MessageContextMenu({
           <div className="w-full flex flex-col">
             <div
               className={`rounded-2xl break-words transition-all shadow-2xl ${
-                vaultMedia.isVaultMedia && vaultMedia.media
+                giftData.isGift
+                  ? 'p-0 overflow-hidden bg-transparent border-0 shadow-none'
+                  : vaultMedia.isVaultMedia && vaultMedia.media
                   ? `p-1 overflow-hidden max-w-[320px] ${
                       isMine
                         ? 'bg-[#18181b] border border-gold/40 text-paper rounded-br-sm shadow-gold/10 ring-1 ring-gold/20'
@@ -519,26 +526,37 @@ export default function MessageContextMenu({
                   )}
                   {vaultMedia.text && <p className="whitespace-pre-wrap text-paper text-sm px-1 py-0.5">{vaultMedia.text}</p>}
                 </div>
+              ) : giftData.isGift ? (
+                <GiftReceiptCard
+                  gift={giftData.gift}
+                  rawContent={message.content}
+                  isMine={isMine}
+                  isCreator={isCreator}
+                  senderName={isMine ? 'You' : (message.sender?.display_name || message.sender?.username || 'User')}
+                  timestamp={message.created_at ? new Date(message.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : undefined}
+                />
               ) : (
-                <span className="whitespace-pre-wrap">{message.content}</span>
+                <span className="whitespace-pre-wrap">{stripHiddenComments(message.content)}</span>
               )}
             </div>
 
-            {/* Timestamp & read receipts */}
-            <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMine ? 'flex-row-reverse' : ''}`}>
-              <span className="text-[0.6rem] text-muted">{formatTime(message.created_at)}</span>
-              {isMine && (
-                message.status === 'sending' ? (
-                  <Clock size={11} className="text-muted shrink-0" />
-                ) : message.status === 'read' ? (
-                  <CheckCheck size={13} className="text-gold shrink-0" />
-                ) : message.status === 'delivered' ? (
-                  <CheckCheck size={13} className="text-muted shrink-0" />
-                ) : (
-                  <Check size={12} className="text-muted shrink-0" />
-                )
-              )}
-            </div>
+            {/* Timestamp & read receipts (only for non-gift messages) */}
+            {!giftData.isGift && (
+              <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMine ? 'flex-row-reverse' : ''}`}>
+                <span className="text-[0.6rem] text-muted">{formatTime(message.created_at)}</span>
+                {isMine && (
+                  message.status === 'sending' ? (
+                    <Clock size={11} className="text-muted shrink-0" />
+                  ) : message.status === 'read' ? (
+                    <CheckCheck size={13} className="text-gold shrink-0" />
+                  ) : message.status === 'delivered' ? (
+                    <CheckCheck size={13} className="text-muted shrink-0" />
+                  ) : (
+                    <Check size={12} className="text-muted shrink-0" />
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
 
