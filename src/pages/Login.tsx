@@ -90,13 +90,13 @@ const CARD_SLOTS = [
     zIndex: 25,
     scale: 'scale-100 sm:scale-105',
     opacity: 'opacity-100',
-    brightness: 'brightness-[0.9]',
-    border: 'border-gold/40',
+    brightness: 'brightness-[0.92]',
+    border: 'border-gold/50',
   },
   // Slot 1: Right (Behind)
   {
     rotation: 'rotate-4 sm:rotate-6',
-    translate: 'translate-x-6 sm:translate-x-12 translate-y-2 sm:translate-y-3',
+    translate: 'translate-x-8 sm:translate-x-14 translate-y-2 sm:translate-y-3',
     zIndex: 10,
     scale: 'scale-90 sm:scale-95',
     opacity: 'opacity-85',
@@ -105,8 +105,8 @@ const CARD_SLOTS = [
   },
   // Slot 2: Left (Behind)
   {
-    rotation: '-rotate-3 sm:-rotate-6',
-    translate: '-translate-x-6 sm:-translate-x-12 translate-y-3 sm:translate-y-4',
+    rotation: '-rotate-4 sm:-rotate-6',
+    translate: '-translate-x-8 sm:-translate-x-14 translate-y-3 sm:translate-y-4',
     zIndex: 10,
     scale: 'scale-90 sm:scale-95',
     opacity: 'opacity-85',
@@ -131,12 +131,12 @@ function EditorialShowcase() {
   }, []);
 
   return (
-    <div className="relative w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[460px] mx-auto flex items-center justify-center py-4 select-none">
+    <div className="relative w-full max-w-[390px] sm:max-w-[440px] lg:max-w-[480px] mx-auto flex items-center justify-center py-2 sm:py-4 select-none">
       {/* Intimate Backlight Ambiance (Candlelight Amber & Velvet Wine) */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(201,169,110,0.16)_0%,rgba(136,19,55,0.12)_45%,transparent_75%)] blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(201,169,110,0.18)_0%,rgba(136,19,55,0.14)_45%,transparent_75%)] blur-3xl pointer-events-none" />
 
       {/* Layered Seductive Cards Fan with Smooth Looping Rotation */}
-      <div className="relative flex items-center justify-center w-full h-[280px] sm:h-[340px] lg:h-[390px]">
+      <div className="relative flex items-center justify-center w-full h-[330px] sm:h-[370px] lg:h-[410px]">
         {EDITORIAL_VIGNETTES.map((vignette, idx) => {
           // Dynamic slot calculation: cycles positions continuously
           const slotIndex = (idx + activeSlotOffset) % 3;
@@ -150,7 +150,7 @@ function EditorialShowcase() {
               style={{ zIndex: slot.zIndex }}
             >
               <div
-                className={`relative w-[160px] sm:w-[200px] lg:w-[230px] ${vignette.aspect} rounded-2xl overflow-hidden border ${slot.border} shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient} transition-colors duration-700`}
+                className={`relative w-[205px] sm:w-[230px] lg:w-[250px] ${vignette.aspect} rounded-2xl overflow-hidden border ${slot.border} shadow-[0_20px_50px_rgba(0,0,0,0.85)] group bg-gradient-to-b ${vignette.fallbackGradient} transition-colors duration-700`}
               >
                 {/* Image */}
                 <img
@@ -174,10 +174,10 @@ function EditorialShowcase() {
         <div className="absolute -bottom-2 sm:-bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center whitespace-nowrap">
           <div className="relative">
             <div className="absolute -inset-4 bg-black/60 rounded-full blur-xl pointer-events-none" />
-            <h1 className="relative font-serif text-3xl sm:text-4xl lg:text-5xl font-light tracking-[0.28em] text-paper drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] uppercase">
+            <h1 className="relative font-serif text-4xl sm:text-5xl lg:text-6xl font-light tracking-[0.28em] text-paper drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] uppercase">
               VELOUR
             </h1>
-            <p className="font-serif italic text-gold/85 text-xs sm:text-sm tracking-widest mt-0.5 font-light">
+            <p className="font-serif italic text-gold/90 text-sm sm:text-base tracking-widest mt-1 font-light">
               House of Desire
             </p>
           </div>
@@ -592,7 +592,7 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
           </p>
 
           {/* MOBILE ONLY: Two luxury pill buttons */}
-          <div className="w-full max-w-xs space-y-3 md:hidden">
+          <div className="w-full max-w-sm px-2 space-y-3 md:hidden">
             <button
               type="button"
               onClick={() => {
