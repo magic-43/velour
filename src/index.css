@@ -134,3 +134,41 @@ aside.EmojiPickerReact {
   --epr-bg-color: transparent !important;
 }
 
+/* Orbital Constellation Animations */
+@keyframes orbitalFloatA {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes orbitalFloatB {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(6px); }
+}
+
+@keyframes velourCorePulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+
+@keyframes rayShimmer {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.7; }
+}
+
+.animate-float-a {
+  animation: orbitalFloatA 4.5s ease-in-out infinite;
+}
+
+.animate-float-b {
+  animation: orbitalFloatB 5.5s ease-in-out infinite;
+}
+
+.animate-core-pulse {
+  animation: velourCorePulse 4s ease-in-out infinite;
+}
+
+.animate-ray-shimmer {
+  animation: rayShimmer 5s ease-in-out infinite;
+}
+
+
