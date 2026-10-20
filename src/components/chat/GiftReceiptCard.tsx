@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Gift,
   Sparkles,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { GiftAttachment } from '../../lib/messageUtils';
 import AppleEmoji from '../common/AppleEmoji';
+import { useBackHandler } from '../../lib/backButtonRegistry';
 
 interface GiftReceiptCardProps {
   gift: GiftAttachment | null;
@@ -169,6 +171,19 @@ export default function GiftReceiptCard({
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showProofLightbox, setShowProofLightbox] = useState(false);
 
+  // Hardware back button support for modals
+  useBackHandler(() => {
+    if (showProofLightbox) {
+      setShowProofLightbox(false);
+      return true;
+    }
+    if (showDetailsModal) {
+      setShowDetailsModal(false);
+      return true;
+    }
+    return false;
+  }, showDetailsModal || showProofLightbox, 120);
+
   // Fallback extraction if gift object wasn't fully parsed
   const amount = gift?.amount ?? (() => {
     const match = rawContent?.match(/\$(\d+(\.\d+)?)/);
@@ -247,125 +262,135 @@ export default function GiftReceiptCard({
         </div>
       </div>
 
-      {/* ── Full Details Modal (When tapping "View Details") ── */}
-      {showDetailsModal && (
-        <div
-          className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
-          onClick={() => setShowDetailsModal(false)}
-        >
+      {/* ── Full Details Modal (Bottom Sheet on Mobile, Centralized Pop-up on Desktop) ── */}
+      {showDetailsModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="relative w-full max-w-sm rounded-3xl bg-[#14151a] border border-white/15 p-6 shadow-2xl flex flex-col animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-150 select-none"
+            onClick={() => setShowDetailsModal(false)}
           >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setShowDetailsModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            <div
+              className="relative w-full md:max-w-sm rounded-t-[32px] md:rounded-3xl bg-[#14151a] border-t md:border border-white/15 p-6 pb-8 md:pb-6 shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-200 md:animate-in md:zoom-in-95 md:duration-150 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X size={16} />
-            </button>
+              {/* Mobile Drag Indicator Bar */}
+              <div className="w-12 h-1 rounded-full bg-white/20 mx-auto mb-3 md:hidden shrink-0" />
 
-            {/* Header with Gift Emoji */}
-            <div className="flex flex-col items-center text-center pb-4 border-b border-white/10">
-              <div
-                className="w-20 h-20 rounded-2xl flex items-center justify-center mb-3 shadow-lg"
-                style={{ background: theme.gradient, border: `1px solid ${theme.border}` }}
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowDetailsModal(false)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
               >
-                <AppleEmoji emoji={emoji} size={54} />
-              </div>
-              <h3 className="text-xl font-bold text-white tracking-tight">{name}</h3>
-              <div className="inline-flex items-center gap-1 mt-1.5 px-3 py-0.5 rounded-full bg-gold/15 border border-gold/40 text-gold font-extrabold text-sm">
-                <span>${amount} USD</span>
-              </div>
-            </div>
+                <X size={16} />
+              </button>
 
-            {/* Transaction Breakdown */}
-            <div className="py-4 space-y-2.5 text-xs">
-              <div className="flex items-center justify-between text-white/60">
-                <span>Payment Method</span>
-                <span className="text-white font-medium">{method}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-white/60">
-                <span>Sender</span>
-                <span className="text-white font-medium">{senderName}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-white/60">
-                <span>Status</span>
-                <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                  <CheckCircle2 size={12} />
-                  <span>Delivered &amp; Verified</span>
-                </span>
-              </div>
-
-              {note && (
-                <div className="pt-2 border-t border-white/10">
-                  <span className="text-white/50 block mb-1">Fan Note:</span>
-                  <p className="text-white/90 italic bg-white/5 p-2.5 rounded-xl border border-white/5">
-                    "{note}"
-                  </p>
+              {/* Header with Gift Emoji */}
+              <div className="flex flex-col items-center text-center pb-4 border-b border-white/10">
+                <div
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center mb-3 shadow-lg"
+                  style={{ background: theme.gradient, border: `1px solid ${theme.border}` }}
+                >
+                  <AppleEmoji emoji={emoji} size={54} />
                 </div>
-              )}
+                <h3 className="text-xl font-bold text-white tracking-tight">{name}</h3>
+                <div className="inline-flex items-center gap-1 mt-1.5 px-3 py-0.5 rounded-full bg-gold/15 border border-gold/40 text-gold font-extrabold text-sm">
+                  <span>${amount} USD</span>
+                </div>
+              </div>
 
-              {/* Payment Proof Screenshot Preview if Attached */}
-              {proofUrl && (
-                <div className="pt-2 border-t border-white/10">
-                  <span className="text-white/50 block mb-1.5">Payment Screenshot Proof:</span>
-                  <div
-                    onClick={() => setShowProofLightbox(true)}
-                    className="relative rounded-xl overflow-hidden border border-white/15 bg-black cursor-pointer group aspect-video max-h-36 flex items-center justify-center"
-                  >
-                    <img
-                      src={proofUrl}
-                      alt="Proof"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-semibold">
-                      <ZoomIn size={14} />
-                      <span>Tap to zoom</span>
+              {/* Transaction Breakdown */}
+              <div className="py-4 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between text-white/60">
+                  <span>Payment Method</span>
+                  <span className="text-white font-medium">{method}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-white/60">
+                  <span>Sender</span>
+                  <span className="text-white font-medium">{senderName}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-white/60">
+                  <span>Status</span>
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 size={12} />
+                    <span>Delivered &amp; Verified</span>
+                  </span>
+                </div>
+
+                {note && (
+                  <div className="pt-2 border-t border-white/10">
+                    <span className="text-white/50 block mb-1">Fan Note:</span>
+                    <p className="text-white/90 italic bg-white/5 p-2.5 rounded-xl border border-white/5">
+                      "{note}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Payment Proof Screenshot Preview if Attached */}
+                {proofUrl && (
+                  <div className="pt-2 border-t border-white/10">
+                    <span className="text-white/50 block mb-1.5">Payment Screenshot Proof:</span>
+                    <div
+                      onClick={() => setShowProofLightbox(true)}
+                      className="relative rounded-xl overflow-hidden border border-white/15 bg-black cursor-pointer group aspect-video max-h-36 flex items-center justify-center"
+                    >
+                      <img
+                        src={proofUrl}
+                        alt="Proof"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-semibold">
+                        <ZoomIn size={14} />
+                        <span>Tap to zoom</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* Dismiss Button */}
-            <button
-              type="button"
-              onClick={() => setShowDetailsModal(false)}
-              className="mt-2 w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+              {/* Dismiss Button */}
+              <button
+                type="button"
+                onClick={() => setShowDetailsModal(false)}
+                className="mt-2 w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* ── Zoomable Lightbox for Screenshot Proof ── */}
-      {showProofLightbox && proofUrl && (
-        <div
-          className="fixed inset-0 z-[100000] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
-          onClick={() => setShowProofLightbox(false)}
-        >
-          <div className="relative max-w-lg w-full max-h-[85vh] flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => setShowProofLightbox(false)}
-              className="absolute -top-12 right-0 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <X size={18} />
-            </button>
-            <img
-              src={proofUrl}
-              alt="Payment proof full"
-              className="max-h-[80vh] w-auto max-w-full rounded-2xl border border-white/20 shadow-2xl object-contain bg-black"
-            />
-            <p className="text-xs text-white/60 mt-3">Payment screenshot proof submitted by {senderName}</p>
-          </div>
-        </div>
-      )}
+      {showProofLightbox &&
+        proofUrl &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100000] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+            onClick={() => setShowProofLightbox(false)}
+          >
+            <div className="relative max-w-lg w-full max-h-[85vh] flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => setShowProofLightbox(false)}
+                className="absolute -top-12 right-0 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+              <img
+                src={proofUrl}
+                alt="Payment proof full"
+                className="max-h-[80vh] w-auto max-w-full rounded-2xl border border-white/20 shadow-2xl object-contain bg-black"
+              />
+              <p className="text-xs text-white/60 mt-3">Payment screenshot proof submitted by {senderName}</p>
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }

@@ -21,7 +21,6 @@ import { useAuth } from '../../lib/AuthContext';
 import { useBackHandler } from '../../lib/backButtonRegistry';
 import { supabase } from '../../lib/supabase';
 import { uploadPublicFile } from '../../lib/r2';
-import { triggerNotificationFeedback } from '../../lib/soundNotification';
 import AppleEmoji from '../common/AppleEmoji';
 
 export interface GiftOption {
@@ -250,19 +249,7 @@ export default function SendGiftModal({
       // 4. Send into chat
       onSendGift(messageContent);
 
-      // 5. Trigger celebration feedback sound and event
-      triggerNotificationFeedback().catch(() => {});
-      window.dispatchEvent(
-        new CustomEvent('velour:gift_received', {
-          detail: {
-            conversationId,
-            giftName,
-            amount: effectiveAmount,
-            recipientId,
-          },
-        })
-      );
-
+      // 5. In-modal visual confirmation (no audio chime for sender)
       setStep('success');
       setTimeout(() => {
         onClose();
