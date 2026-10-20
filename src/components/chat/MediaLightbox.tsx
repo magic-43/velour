@@ -126,7 +126,7 @@ export default function MediaLightbox({
     setShowDeleteConfirm(false);
   }, [initialIndex, isOpen]);
 
-  // Reset video & controls when index changes
+  // Reset video & controls ONLY when currentIndex changes (swiping or picking another slide)
   useEffect(() => {
     // Stop and pause ALL non-current videos in the carousel immediately
     videoElementsRef.current.forEach((el, idx) => {
@@ -155,10 +155,10 @@ export default function MediaLightbox({
     isDraggingSwipe.current = false;
     setShowEmojiPicker(false);
     setShowDeleteConfirm(false);
+  }, [currentIndex]);
 
-    // Scroll active thumbnail inside filmstrip container ONLY
-    // Crucial: NEVER call native scrollIntoView on off-screen elements because it
-    // scrolls window / parent containers and breaks viewport centering when controls are hidden!
+  // Scroll active thumbnail inside filmstrip container ONLY when visible
+  useEffect(() => {
     if (controlsVisible && filmstripContainerRef.current) {
       const activeEl = thumbnailRefs.current[currentIndex];
       const container = filmstripContainerRef.current;

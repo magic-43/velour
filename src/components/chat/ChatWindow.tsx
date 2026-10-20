@@ -726,9 +726,6 @@ export default function ChatWindow({ conversationId, other, onBack }: Props) {
                 </span>
               )}
             </div>
-            {online && !isOtherHidden && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-ink shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-            )}
           </div>
 
           {/* Name + status */}

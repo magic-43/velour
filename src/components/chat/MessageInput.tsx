@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Send, Mic, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, Gift, X, Loader2, ChevronLeft } from 'lucide-react';
+import { Send, Smile, Plus, Grid3x3, Film, Upload, Image as ImageIcon, Camera, FileText, Lock, Gift, X, Loader2, ChevronLeft } from 'lucide-react';
 import type { EmojiClickData } from 'emoji-picker-react';
 import EmojiKeyboardDrawer from './EmojiKeyboardDrawer';
 import VaultMediaPickerModal from './VaultMediaPickerModal';
@@ -433,18 +433,8 @@ export default function MessageInput({
             className="flex-1 bg-transparent text-white text-sm sm:text-base placeholder:text-neutral-400 focus:outline-none resize-none overflow-y-auto no-scrollbar leading-snug py-2 max-h-[140px]"
           />
 
-          {/* Right Action Icons: Mic, and Plus/Send (pinned to bottom right when multiline) */}
+          {/* Right Action Icons: Plus/Send (pinned to bottom right when multiline) */}
           <div className="flex items-center gap-1.5 shrink-0 self-end pb-1">
-            {/* Voice / Mic button */}
-            <button
-              type="button"
-              className="text-neutral-400 hover:text-white transition-colors cursor-pointer p-1"
-              title="Voice message"
-              disabled={disabled}
-            >
-              <Mic size={20} />
-            </button>
-
             {/* Plus / Send button */}
             {hasText ? (
               <button
