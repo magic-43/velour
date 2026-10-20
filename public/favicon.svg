@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'Cormorant Garamond';
+        font-style: normal;
+        font-weight: 600;
+        src: url(data:font/woff;base64,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) format('woff');
+      }
+      .monogram-v {
+        font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+        font-size: 380px;
+        font-weight: 600;
+        text-anchor: middle;
+        dominant-baseline: central;
+      }
+    </style>
+    <linearGradient id="velourGold" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#faeed7" />
+      <stop offset="30%" stop-color="#e4c38d" />
+      <stop offset="65%" stop-color="#c9a96e" />
+      <stop offset="100%" stop-color="#8e682e" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141312" />
+      <stop offset="50%" stop-color="#090909" />
+      <stop offset="100%" stop-color="#040404" />
+    </linearGradient>
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#faeed7" stop-opacity="0.5" />
+      <stop offset="35%" stop-color="#c9a96e" stop-opacity="0.35" />
+      <stop offset="70%" stop-color="#881337" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#c9a96e" stop-opacity="0.15" />
+    </linearGradient>
+    <radialGradient id="ambientWine" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#881337" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="ambientGold" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#c9a96e" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <filter id="subtleShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.75" />
+    </filter>
+  </defs>
+
+  <!-- Luxury Velvet Rounded Base -->
+  <rect width="512" height="512" rx="116" fill="url(#bgGrad)" />
+
+  <!-- Ambient Seductive Glow -->
+  <circle cx="256" cy="256" r="230" fill="url(#ambientWine)" />
+  <circle cx="256" cy="256" r="170" fill="url(#ambientGold)" />
+
+  <!-- Fine Satin Gold Rim -->
+  <rect x="5" y="5" width="502" height="502" rx="112" fill="none" stroke="url(#rimGrad)" stroke-width="3" />
+
+  <!-- Center Haute Monogram 'V' -->
+  <text x="256" y="272" class="monogram-v" fill="url(#velourGold)" filter="url(#subtleShadow)">V</text>
+</svg>
