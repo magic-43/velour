@@ -58,27 +58,49 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
       // 1. Fetch from attachment_unlocks (strictly status = 'verified')
       const { data: rawUnlocks, error } = await supabase
         .from('attachment_unlocks')
-        .select(`
-          id,
-          amount_usd,
-          unlocked_at,
-          status,
-          media_url,
-          attachment:message_attachments!attachment_id(
-            id,
-            public_url,
-            thumbnail_url,
-            mime_type,
-            file_name,
-            sender:profiles!sender_id(display_name, username, avatar_url)
-          )
-        `)
+        .select('id, attachment_id, amount_usd, unlocked_at, status, media_url')
         .eq('fan_id', profile.id)
         .eq('status', 'verified')
         .order('unlocked_at', { ascending: false });
 
       if (!error && rawUnlocks) {
-        unlocks = rawUnlocks;
+        // Collect attachment IDs to safely fetch attachment metadata without requiring FK constraints
+        const attIds = rawUnlocks.map((u: any) => u.attachment_id).filter(Boolean);
+        const attMap = new Map<string, any>();
+        if (attIds.length > 0) {
+          try {
+            const { data: attList } = await supabase
+              .from('message_attachments')
+              .select('id, public_url, thumbnail_url, mime_type, file_name, sender_id')
+              .in('id', attIds);
+
+            if (attList) {
+              const senderIds = attList.map((a: any) => a.sender_id).filter(Boolean);
+              const senderMap = new Map<string, any>();
+              if (senderIds.length > 0) {
+                const { data: senderProfiles } = await supabase
+                  .from('profiles')
+                  .select('id, display_name, username, avatar_url')
+                  .in('id', senderIds);
+                (senderProfiles || []).forEach((p: any) => senderMap.set(p.id, p));
+              }
+
+              attList.forEach((att: any) => {
+                attMap.set(att.id, {
+                  ...att,
+                  sender: senderMap.get(att.sender_id) || null,
+                });
+              });
+            }
+          } catch (e) {
+            console.warn('Error fetching attachment details:', e);
+          }
+        }
+
+        unlocks = rawUnlocks.map((u: any) => ({
+          ...u,
+          attachment: u.attachment_id ? attMap.get(u.attachment_id) || null : null,
+        }));
       }
 
       const parsedDbItems: UnlockedVaultItem[] = [];
@@ -111,21 +133,29 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
       try {
         const { data: rawTxs } = await supabase
           .from('transactions_ledger')
-          .select(`
-            id,
-            amount_usd,
-            created_at,
-            media_url,
-            attachment_id,
-            description,
-            creator:profiles!creator_id(display_name, username, avatar_url)
-          `)
+          .select('id, amount_usd, created_at, media_url, attachment_id, description, creator_id')
           .eq('user_id', profile.id)
           .eq('type', 'attachment_unlock')
           .eq('status', 'verified');
 
-        if (rawTxs) {
-          verifiedTxs = rawTxs;
+        if (rawTxs && rawTxs.length > 0) {
+          const creatorIds = rawTxs.map((t: any) => t.creator_id).filter(Boolean);
+          const creatorMap = new Map<string, any>();
+          if (creatorIds.length > 0) {
+            try {
+              const { data: cProfiles } = await supabase
+                .from('profiles')
+                .select('id, display_name, username, avatar_url')
+                .in('id', creatorIds);
+              (cProfiles || []).forEach((cp: any) => creatorMap.set(cp.id, cp));
+            } catch {}
+          }
+
+          verifiedTxs = rawTxs.map((t: any) => ({
+            ...t,
+            creator: t.creator_id ? creatorMap.get(t.creator_id) || null : null,
+          }));
+
           for (const tx of verifiedTxs) {
             if (
               tx.media_url &&
@@ -138,10 +168,8 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
                 thumbnailUrl: tx.media_url,
                 mediaType: isVid ? 'video' : 'image',
                 title: tx.description || 'Exclusive Media',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                creatorName: (tx.creator as any)?.display_name || (tx.creator as any)?.username || 'Creator',
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                creatorAvatar: (tx.creator as any)?.avatar_url || null,
+                creatorName: tx.creator?.display_name || tx.creator?.username || 'Creator',
+                creatorAvatar: tx.creator?.avatar_url || null,
                 unlockedAt: tx.created_at,
                 amountUsd: tx.amount_usd,
               });
@@ -250,8 +278,8 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
             creator:creator_profiles!creator_profile_id(
               id,
               display_name,
-              username,
-              avatar_url
+              avatar_url,
+              owner:profiles!owner_id(display_name, username, avatar_url)
             )
           `)
           .eq('fan_id', profile.id);
@@ -472,9 +500,9 @@ export default function FanVaultView({ onBack, onCountChange }: FanVaultViewProp
                   mediaType: isVideo ? 'video' : 'image',
                   title: it.title || (itemsToExtract.length > 1 ? `${media.title || 'Exclusive Media'} (${idx + 1}/${itemsToExtract.length})` : (media.title || 'Exclusive Media')),
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  creatorName: (creator as any)?.display_name || (creator as any)?.username || 'Creator',
+                  creatorName: (creator as any)?.display_name || (creator as any)?.owner?.display_name || (creator as any)?.owner?.username || (creator as any)?.username || 'Creator',
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  creatorAvatar: (creator as any)?.avatar_url || null,
+                  creatorAvatar: (creator as any)?.avatar_url || (creator as any)?.owner?.avatar_url || null,
                   unlockedAt,
                   amountUsd: media.price || null,
                 });
