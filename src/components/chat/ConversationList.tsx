@@ -8,6 +8,7 @@ import { mediaUploadManager } from '../../lib/mediaUploadManager';
 import { parseConversationPreview } from '../../lib/messageUtils';
 import {
   getNotificationPermissionState,
+  checkNotificationPermission,
   requestNotificationPermission,
   sendTestDesktopNotification,
 } from '../../lib/notificationService';
@@ -55,16 +56,25 @@ export default function ConversationList() {
   });
 
   useEffect(() => {
-    const handleSync = () => {
-      setNotifState(getNotificationPermissionState());
+    let mounted = true;
+    const handleSync = async () => {
+      const state = await checkNotificationPermission();
+      if (mounted) {
+        setNotifState(state);
+      }
     };
+    handleSync();
     window.addEventListener('focus', handleSync);
-    return () => window.removeEventListener('focus', handleSync);
+    return () => {
+      mounted = false;
+      window.removeEventListener('focus', handleSync);
+    };
   }, []);
 
   const handleEnableNotifications = async () => {
     const granted = await requestNotificationPermission();
-    setNotifState(getNotificationPermissionState());
+    const updatedState = await checkNotificationPermission();
+    setNotifState(updatedState);
     if (granted) {
       await sendTestDesktopNotification();
     }
@@ -170,9 +180,9 @@ export default function ConversationList() {
                 <Bell size={16} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-paper text-xs">Turn on desktop notifications</p>
+                <p className="font-semibold text-paper text-xs">Turn on notifications</p>
                 <p className="text-muted text-[11px] leading-tight mt-0.5">
-                  Get notified of new messages even when Velour is minimized.
+                  Never miss private messages or exclusive drops from your circle.
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <button
@@ -208,16 +218,19 @@ export default function ConversationList() {
                 <BellOff size={16} />
               </div>
               <div className="flex-1 min-w-0 pr-4">
-                <p className="font-semibold text-paper text-xs">Notifications blocked in browser</p>
+                <p className="font-semibold text-paper text-xs">Notifications are muted</p>
                 <p className="text-muted text-[11px] leading-tight mt-0.5">
-                  Click the lock 🔒 icon in the address bar to allow notifications.
+                  Enable notifications in your device or browser settings to receive message alerts.
                 </p>
                 <button
                   type="button"
-                  onClick={() => setNotifState(getNotificationPermissionState())}
+                  onClick={async () => {
+                    const s = await checkNotificationPermission();
+                    setNotifState(s);
+                  }}
                   className="mt-1.5 text-gold hover:underline text-[11px] font-medium block cursor-pointer"
                 >
-                  Check permission again
+                  Check status again
                 </button>
               </div>
               <button

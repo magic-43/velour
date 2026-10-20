@@ -10,10 +10,12 @@ import {
   requestNotificationPermission,
   canPromptDesktopNotifications,
   sendTestDesktopNotification,
+  shouldShowInitialNotificationPrompt,
 } from '../../lib/notificationService';
 import { initOutboxSync } from '../../lib/offline/outboxSync';
 import InAppMessageToast from '../chat/InAppMessageToast';
 import NetworkStatusBar from '../common/NetworkStatusBar';
+import NotificationPermissionModal from '../common/NotificationPermissionModal';
 
 // ─── Nav Configurations ──────────────────────────────────────────────────────
 
@@ -55,6 +57,18 @@ export default function AppShell() {
   useEffect(() => {
     const cleanup = initOutboxSync();
     return cleanup;
+  }, []);
+
+  // Option A: Initial Sign-in In-App Notification Pre-Prompt Modal
+  const [showInitialPrompt, setShowInitialPrompt] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (shouldShowInitialNotificationPrompt()) {
+        setShowInitialPrompt(true);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
   }, []);
 
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(() => {
@@ -329,6 +343,16 @@ export default function AppShell() {
           </button>
         </div>
       )}
+      {/* ── First Sign-in In-App Notification Pre-Prompt Modal ───────────── */}
+      <NotificationPermissionModal
+        isOpen={showInitialPrompt}
+        onClose={(granted) => {
+          setShowInitialPrompt(false);
+          if (granted) {
+            setShowDesktopPrompt(false);
+          }
+        }}
+      />
     </div>
   );
 }

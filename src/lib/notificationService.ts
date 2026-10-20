@@ -126,6 +126,10 @@ export async function requestNotificationPermission(): Promise<boolean> {
     try {
       const status = await LocalNotifications.requestPermissions();
       const granted = status.display === 'granted';
+      try {
+        localStorage.setItem('velour_notif_status', granted ? 'granted' : 'denied');
+        localStorage.setItem('velour_notif_prompt_viewed', 'true');
+      } catch (_) {}
       if (granted) {
         await ensureAndroidChannel();
       }
@@ -148,7 +152,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
           Notification.requestPermission(resolve);
         });
       }
-      return permission === 'granted';
+      const granted = permission === 'granted';
+      try {
+        localStorage.setItem('velour_notif_status', granted ? 'granted' : 'denied');
+        localStorage.setItem('velour_notif_prompt_viewed', 'true');
+      } catch (_) {}
+      return granted;
     } catch (err) {
       console.error('Failed requesting Web Notification permission:', err);
       return false;
@@ -159,7 +168,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Fires a test notification and sound to confirm desktop notifications work.
+ * Fires a test notification and sound to confirm notifications work.
  */
 export async function sendTestDesktopNotification(): Promise<boolean> {
   triggerNotificationFeedback().catch(() => {});
@@ -168,7 +177,7 @@ export async function sendTestDesktopNotification(): Promise<boolean> {
     if (Notification.permission === 'granted') {
       try {
         const notif = new Notification('Velour Messages', {
-          body: 'Desktop notifications are active! You will receive instant alerts for incoming messages.',
+          body: 'Notifications are active! You will receive instant alerts for incoming messages.',
           icon: '/favicon.ico',
           badge: '/favicon.ico',
           tag: 'velour-test-alert',
@@ -210,6 +219,78 @@ export function registerNotificationNavigation(onNavigate: (path: string) => voi
   };
 }
 
+/**
+ * Check if the browser or OS supports notifications and what the current status is.
+ */
+export function getNotificationPermissionState(): 'granted' | 'denied' | 'default' | 'unsupported' {
+  if (typeof window === 'undefined') return 'unsupported';
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const cached = localStorage.getItem('velour_notif_status');
+      if (cached === 'granted') return 'granted';
+      if (cached === 'denied') return 'denied';
+    } catch (_) {}
+    return 'default';
+  }
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+
+/**
+ * Async query for real OS/browser notification permission.
+ */
+export async function checkNotificationPermission(): Promise<'granted' | 'denied' | 'default' | 'unsupported'> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await LocalNotifications.checkPermissions();
+      const state = res.display === 'granted' ? 'granted' : res.display === 'denied' ? 'denied' : 'default';
+      try {
+        localStorage.setItem('velour_notif_status', state);
+      } catch (_) {}
+      return state;
+    } catch {
+      return 'unsupported';
+    }
+  }
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  const state = Notification.permission;
+  try {
+    localStorage.setItem('velour_notif_status', state);
+  } catch (_) {}
+  return state;
+}
+
+/**
+ * Returns true if we should show the initial sign-in notification prompt (Option A).
+ */
+export function shouldShowInitialNotificationPrompt(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const viewed = localStorage.getItem('velour_notif_prompt_viewed');
+    if (viewed) return false;
+    const currentState = getNotificationPermissionState();
+    return currentState === 'default';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark that the initial notification prompt was answered or dismissed.
+ */
+export function markInitialNotificationPromptViewed(): void {
+  try {
+    localStorage.setItem('velour_notif_prompt_viewed', 'true');
+  } catch (_) {}
+}
+
+/**
+ * Returns true if we can prompt the user to allow notifications.
+ */
+export function canPromptDesktopNotifications(): boolean {
+  return getNotificationPermissionState() === 'default';
+}
+
 export interface ShowNotificationOptions {
   conversationId: string;
   senderName: string;
@@ -217,23 +298,6 @@ export interface ShowNotificationOptions {
   senderAvatarUrl?: string | null;
   userId?: string;
   isForegroundActive?: boolean;
-}
-
-/**
- * Check if the browser or OS supports notifications and what the current status is.
- */
-export function getNotificationPermissionState(): 'granted' | 'denied' | 'default' | 'unsupported' {
-  if (typeof window === 'undefined') return 'unsupported';
-  if (Capacitor.isNativePlatform()) return 'granted';
-  if (!('Notification' in window)) return 'unsupported';
-  return Notification.permission;
-}
-
-/**
- * Returns true if we can prompt the desktop user to allow notifications.
- */
-export function canPromptDesktopNotifications(): boolean {
-  return getNotificationPermissionState() === 'default';
 }
 
 /**
