@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
   ArrowRight,
   ArrowLeft,
   Check,
-  Lock,
   UserCheck,
   UserPlus,
-  Sparkles,
+  Lock,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -16,96 +15,77 @@ import { uploadPublicFile } from '../lib/r2';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import { triggerHaptic } from '../lib/haptics';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface CreatorSuggestion {
   id: string;
   name: string;
-  handle: string;
   avatar: string | null;
   category: string;
 }
 
-const DESIRE_PILLS = [
-  { id: 'chat', label: 'Intimate Chat' },
-  { id: 'editorial', label: 'Editorial Art' },
-  { id: 'video', label: 'Cinematic Drops' },
-  { id: 'vip', label: 'Custom VIP' },
-  { id: 'moments', label: 'Daily Stories' },
-  { id: 'vaults', label: 'Locked Vaults' },
-];
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
-const PRESET_CRESTS = [
-  { id: 'gold', label: 'Gold', bg: 'bg-[#2a2315]', text: 'text-gold', border: 'border-gold/60' },
-  { id: 'wine', label: 'Wine', bg: 'bg-[#2b0d16]', text: 'text-rose-300', border: 'border-rose-400/60' },
-  { id: 'noir', label: 'Noir', bg: 'bg-[#18181b]', text: 'text-paper', border: 'border-white/40' },
-  { id: 'amber', label: 'Amber', bg: 'bg-[#2e1b0b]', text: 'text-amber-300', border: 'border-amber-400/60' },
+const DESIRE_OPTIONS = [
+  { id: 'chat',     label: 'Intimate Chat' },
+  { id: 'editorial',label: 'Editorial Art' },
+  { id: 'video',    label: 'Cinematic Drops' },
+  { id: 'vip',      label: 'Custom VIP' },
+  { id: 'moments',  label: 'Daily Stories' },
+  { id: 'vaults',   label: 'Locked Vaults' },
 ];
 
 const FALLBACK_CREATORS: CreatorSuggestion[] = [
-  {
-    id: 'fallback-1',
-    name: 'Elena Rostova',
-    handle: '@elena.velour',
-    avatar: '/images/1.jpeg',
-    category: 'Editorial',
-  },
-  {
-    id: 'fallback-2',
-    name: 'Valeria Vance',
-    handle: '@valeria.intime',
-    avatar: '/images/2.jpeg',
-    category: 'Cinema & Drops',
-  },
-  {
-    id: 'fallback-3',
-    name: 'Camille Noir',
-    handle: '@camille.noir',
-    avatar: '/images/3.jpeg',
-    category: 'Haute Seduction',
-  },
+  { id: 'fallback-1', name: 'Elena Rostova',  avatar: '/images/1.jpeg', category: 'Editorial' },
+  { id: 'fallback-2', name: 'Valeria Vance',  avatar: '/images/2.jpeg', category: 'Cinema' },
+  { id: 'fallback-3', name: 'Camille Noir',   avatar: '/images/3.jpeg', category: 'Seduction' },
 ];
+
+// ─── Step titles / subtitles ──────────────────────────────────────────────────
+
+const STEPS = [
+  {
+    title:    'Your Alias',
+    subtitle: 'Choose a private name for your identity inside the House.',
+  },
+  {
+    title:    'Your Desires',
+    subtitle: 'Select what you want to explore. You can change this anytime.',
+  },
+  {
+    title:    'Who to Follow',
+    subtitle: 'Start your circle. Follow at least one creator to ignite your feed.',
+  },
+] as const;
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Onboarding() {
   const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
-  // 1: Persona, 2: Desires, 3: Circle
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<0 | 1 | 2>(0); // 0-indexed: 0=alias 1=desires 2=circle
 
-  // Step 1: Persona
-  const [displayName, setDisplayName] = useState('');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  // Step 0
+  const [displayName, setDisplayName]   = useState('');
+  const [avatarFile, setAvatarFile]     = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<string | null>('gold');
 
-  // Step 2: Desires
-  const [selectedDesires, setSelectedDesires] = useState<string[]>([
-    'chat',
-    'editorial',
-    'moments',
-  ]);
+  // Step 1 — nothing pre-selected
+  const [selectedDesires, setSelectedDesires] = useState<string[]>([]);
 
-  // Step 3: Circle
-  const [creators, setCreators] = useState<CreatorSuggestion[]>([]);
-  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  // Step 2
+  const [creators, setCreators]         = useState<CreatorSuggestion[]>([]);
+  const [followedIds, setFollowedIds]   = useState<Set<string>>(new Set());
   const [loadingCreators, setLoadingCreators] = useState(false);
 
-  // Status
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading]         = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
   const [readyToRedirect, setReadyToRedirect] = useState(false);
 
-  // Hardware Back Button on Android
-  useBackHandler(() => {
-    if (step === 3) {
-      setStep(2);
-      return true;
-    }
-    if (step === 2) {
-      setStep(1);
-      return true;
-    }
-    return false;
-  }, step > 1, 100);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Guards ──────────────────────────────────────────────────────────────────
 
   // Redirect if already onboarded
   useEffect(() => {
@@ -114,38 +94,35 @@ export default function Onboarding() {
     }
   }, [user, navigate]);
 
-  // Redirect after completion sync
+  // Redirect after completion
   useEffect(() => {
     if (!readyToRedirect) return;
-    const confirmed =
-      user?.user_metadata?.onboarding_completed === true ||
-      Boolean(profile?.display_name);
-
-    if (confirmed) {
+    if (user?.user_metadata?.onboarding_completed === true || Boolean(profile?.display_name)) {
       navigate('/', { replace: true });
     }
   }, [readyToRedirect, user, profile, navigate]);
 
-  // Fetch verified creators for Step 3
+  // ── Data fetch ──────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    const fetchTopCreators = async () => {
+    (async () => {
       setLoadingCreators(true);
       try {
-        const { data, error: fetchErr } = await supabase
+        const { data, error: e } = await supabase
           .from('creator_profiles')
-          .select('id, display_name, avatar_url, category, owner:profiles!owner_id(username)')
+          .select('id, display_name, avatar_url, category')
           .eq('is_active', true)
-          .limit(3);
+          .limit(4);
 
-        if (!fetchErr && data && data.length > 0) {
-          const mapped: CreatorSuggestion[] = data.map((c: any) => ({
-            id: c.id,
-            name: c.display_name || 'Creator',
-            handle: c.owner?.username ? `@${c.owner.username}` : '@velour',
-            avatar: c.avatar_url || null,
-            category: c.category || 'Featured Creator',
-          }));
-          setCreators(mapped);
+        if (!e && data && data.length > 0) {
+          setCreators(
+            data.map((c: any) => ({
+              id:       c.id,
+              name:     c.display_name || 'Creator',
+              avatar:   c.avatar_url || null,
+              category: c.category || 'Featured',
+            }))
+          );
         } else {
           setCreators(FALLBACK_CREATORS);
         }
@@ -154,37 +131,32 @@ export default function Onboarding() {
       } finally {
         setLoadingCreators(false);
       }
-    };
-
-    fetchTopCreators();
+    })();
   }, []);
+
+  // ── Android back ────────────────────────────────────────────────────────────
+
+  useBackHandler(() => {
+    if (step > 0) { setStep((s) => (s - 1) as 0 | 1 | 2); return true; }
+    return false;
+  }, step > 0, 100);
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be under 5 MB.');
-      return;
-    }
+    if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB.'); return; }
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
-    setSelectedPreset(null);
     setError(null);
     triggerHaptic('light');
-  };
-
-  const handleSelectPreset = (presetId: string) => {
-    setSelectedPreset(presetId);
-    setAvatarFile(null);
-    setAvatarPreview(null);
-    setError(null);
-    triggerHaptic('selection');
   };
 
   const toggleDesire = (id: string) => {
     triggerHaptic('selection');
     setSelectedDesires((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
@@ -192,67 +164,54 @@ export default function Onboarding() {
     triggerHaptic('light');
     setFollowedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(creatorId)) {
-        next.delete(creatorId);
-      } else {
-        next.add(creatorId);
-      }
+      next.has(creatorId) ? next.delete(creatorId) : next.add(creatorId);
       return next;
     });
 
     if (user?.id && !creatorId.startsWith('fallback-')) {
       try {
         if (followedIds.has(creatorId)) {
-          await supabase
-            .from('follows')
-            .delete()
-            .eq('fan_id', user.id)
-            .eq('creator_profile_id', creatorId);
+          await supabase.from('follows').delete()
+            .eq('fan_id', user.id).eq('creator_profile_id', creatorId);
         } else {
-          await supabase
-            .from('follows')
-            .upsert(
-              { fan_id: user.id, creator_profile_id: creatorId },
-              { onConflict: 'fan_id,creator_profile_id' }
-            );
+          await supabase.from('follows').upsert(
+            { fan_id: user.id, creator_profile_id: creatorId },
+            { onConflict: 'fan_id,creator_profile_id' }
+          );
         }
       } catch (err) {
-        console.warn('Optimistic follow toggle in onboarding:', err);
+        console.warn('Follow toggle error:', err);
       }
     }
   };
 
-  const handleStep1Submit = () => {
-    if (!displayName.trim()) {
-      setError('Please choose a private alias.');
-      return;
+  const goNext = () => {
+    setError(null);
+    if (step === 0) {
+      if (!displayName.trim()) { setError('Please enter an alias to continue.'); return; }
     }
-    setError(null);
     triggerHaptic('medium');
-    setStep(2);
+    setStep((s) => (s + 1) as 0 | 1 | 2);
   };
 
-  const handleStep2Submit = () => {
-    setError(null);
-    triggerHaptic('medium');
-    setStep(3);
+  const goBack = () => {
+    triggerHaptic('light');
+    setStep((s) => (s - 1) as 0 | 1 | 2);
   };
 
-  const handleFinalFinish = async () => {
+  const handleFinish = async () => {
     if (!user) return;
     setUploading(true);
     setError(null);
     triggerHaptic('medium');
 
     let finalAvatarUrl = avatarPreview;
-
     if (avatarFile) {
       try {
         const ext = avatarFile.name.split('.').pop();
-        const key = `avatars/${user.id}/avatar.${ext}`;
-        finalAvatarUrl = await uploadPublicFile(avatarFile, key);
+        finalAvatarUrl = await uploadPublicFile(avatarFile, `avatars/${user.id}/avatar.${ext}`);
       } catch (err) {
-        console.warn('Avatar upload failed, continuing with default:', err);
+        console.warn('Avatar upload failed:', err);
       }
     }
 
@@ -261,27 +220,19 @@ export default function Onboarding() {
       display_name: displayName.trim(),
       username: user.user_metadata?.username ?? '',
     };
-    if (finalAvatarUrl) {
-      upsertData.avatar_url = finalAvatarUrl;
-    }
+    if (finalAvatarUrl) upsertData.avatar_url = finalAvatarUrl;
 
     const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert(upsertData, { onConflict: 'id' });
+      .from('profiles').upsert(upsertData, { onConflict: 'id' });
 
     if (profileError) {
-      console.error('Profile upsert error:', profileError);
-      setError(`Failed to save profile: ${profileError.message}`);
+      setError(`Could not save profile: ${profileError.message}`);
       setUploading(false);
       return;
     }
 
     await supabase.auth.updateUser({
-      data: {
-        onboarding_completed: true,
-        desires: selectedDesires,
-        avatar_preset: selectedPreset,
-      },
+      data: { onboarding_completed: true, desires: selectedDesires },
     });
 
     try {
@@ -294,307 +245,309 @@ export default function Onboarding() {
     setUploading(false);
   };
 
+  // ── Derived ─────────────────────────────────────────────────────────────────
+
+  const stepInfo  = STEPS[step];
+  const isLast    = step === 2;
+  const canGoNext = step === 0 ? displayName.trim().length > 0 : true;
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#070707] text-paper flex flex-col justify-between overflow-hidden select-none relative">
-      {/* Discreet Ambient Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-gold/[0.04] rounded-full blur-3xl pointer-events-none" />
+    /*
+     * Mobile: full-screen flex column with fixed footer (no scroll on content)
+     * Desktop (md+): centered card with max-width, normal document flow, scrollable if needed
+     */
+    <div className="min-h-screen bg-[#070707] text-paper flex flex-col md:items-center md:justify-center">
 
-      {/* ── TOP ZONE: Brand & Progress ────────────────────────────────────── */}
-      <header className="shrink-0 pt-5 sm:pt-7 px-6 max-w-md mx-auto w-full z-10">
-        <div className="flex items-center justify-between text-[11px] font-mono tracking-widest text-muted/60 mb-2.5">
-          <span className="tracking-[0.28em] uppercase text-gold/80 font-serif text-xs">Velour</span>
-          <span>0{step} / 03</span>
-        </div>
+      {/* ── Ambient decoration ───────────────────────────────────────────── */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(201,169,110,0.06)_0%,transparent_70%)]"
+      />
 
-        {/* Hairline 3-Step Progress Indicator */}
-        <div className="flex gap-1.5 w-full mb-4">
-          {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`h-[1.5px] flex-1 rounded-full transition-all duration-300 ${
-                s <= step ? 'bg-gold' : 'bg-white/10'
-              }`}
-            />
-          ))}
-        </div>
+      {/*
+       * INNER WRAPPER
+       * Mobile:  takes full viewport height, flex-col, no overflow
+       * Desktop: a comfortable centered card with generous padding
+       */}
+      <div className="
+        relative z-10
+        flex flex-col
+        w-full flex-1
+        md:max-w-lg md:w-full
+        md:my-10 md:rounded-2xl
+        md:border md:border-white/[0.07]
+        md:bg-[#0d0c0b]
+        md:shadow-2xl
+        /* Mobile: stretch full height */
+        h-[100dvh] md:h-auto
+      ">
 
-        <h1 className="font-serif text-2xl sm:text-3xl font-light text-paper tracking-wide">
-          {step === 1 && 'Private Persona'}
-          {step === 2 && 'Curate Desires'}
-          {step === 3 && 'Initial Circle'}
-        </h1>
-        <p className="text-muted text-xs font-light mt-0.5">
-          {step === 1 && 'Establish your confidential moniker inside the House.'}
-          {step === 2 && 'Select the experiences you wish to explore.'}
-          {step === 3 && 'Follow creators to awaken your personal feed.'}
-        </p>
-      </header>
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        <header className="shrink-0 px-7 pt-10 pb-6 md:px-10 md:pt-10">
+          {/* Brand */}
+          <p className="text-[10px] tracking-[0.3em] uppercase font-mono text-gold/60 mb-5">
+            Velour · House of Desire
+          </p>
 
-      {/* ── CENTER ZONE: Minimal Content (Zero-Scroll Guaranteed) ─────────── */}
-      <main className="flex-1 min-h-0 flex flex-col justify-center px-6 max-w-md mx-auto w-full z-10">
-        {/* ── STEP 1: PERSONA ─────────────────────────────────────────────── */}
-        {step === 1 && (
-          <div className="w-full flex flex-col items-center animate-in fade-in duration-200">
-            {/* Avatar Crest / Photo */}
-            <div className="relative mb-3">
-              <label className="cursor-pointer group block">
-                <div className="w-20 h-20 rounded-full border border-gold/40 p-[2px] bg-ink group-hover:border-gold transition-colors overflow-hidden flex items-center justify-center shadow-lg">
-                  {avatarPreview ? (
-                    <img
-                      src={avatarPreview}
-                      alt="Avatar"
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : selectedPreset ? (
-                    <div
-                      className={`w-full h-full rounded-full ${
-                        PRESET_CRESTS.find((p) => p.id === selectedPreset)?.bg
-                      } flex items-center justify-center font-serif text-2xl font-light ${
-                        PRESET_CRESTS.find((p) => p.id === selectedPreset)?.text
-                      }`}
-                    >
-                      {displayName.trim() ? displayName.trim().charAt(0).toUpperCase() : 'V'}
-                    </div>
-                  ) : (
-                    <Camera size={22} className="text-muted group-hover:text-gold transition-colors" />
-                  )}
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-gold text-ink rounded-full flex items-center justify-center shadow-md">
-                  <Camera size={12} />
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={handleAvatarChange}
-                />
-              </label>
-            </div>
-
-            {/* Monogram Crest Swatches */}
-            <div className="flex items-center justify-center gap-3 mb-6">
-              {PRESET_CRESTS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handleSelectPreset(preset.id)}
-                  className={`w-6 h-6 rounded-full ${preset.bg} border ${preset.border} flex items-center justify-center font-serif text-[10px] font-medium ${preset.text} cursor-pointer transition-transform ${
-                    selectedPreset === preset.id && !avatarPreview
-                      ? 'scale-125 ring-1 ring-gold ring-offset-2 ring-offset-black'
-                      : 'opacity-50 hover:opacity-100'
-                  }`}
-                  title={preset.label}
-                >
-                  V
-                </button>
-              ))}
-            </div>
-
-            {/* Display Alias Underline Input */}
-            <div className="w-full mb-4">
-              <label className="block text-[10px] uppercase tracking-[0.2em] text-muted font-mono mb-1.5">
-                Private Display Alias
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => {
-                  setDisplayName(e.target.value);
-                  setError(null);
-                }}
-                placeholder="Choose an alias..."
-                maxLength={30}
-                autoFocus
-                className="w-full bg-transparent border-b border-white/20 focus:border-gold py-2 text-paper placeholder-muted/30 focus:outline-none transition-colors text-base font-serif"
+          {/* Step progress dots */}
+          <div className="flex gap-1.5 mb-6">
+            {[0, 1, 2].map((s) => (
+              <div
+                key={s}
+                className={`
+                  h-[1px] flex-1 rounded-full transition-all duration-300
+                  ${s <= step ? 'bg-gold' : 'bg-white/10'}
+                `}
               />
-            </div>
-
-            {/* Quiet Discretion Whisper */}
-            <div className="flex items-center gap-1.5 text-[11px] text-muted/70 font-light">
-              <Lock size={11} className="text-gold/70 shrink-0" />
-              <span>100% confidential. Your legal name is never visible.</span>
-            </div>
-
-            {error && (
-              <p className="text-xs text-rose-300 mt-3 font-light">
-                {error}
-              </p>
-            )}
+            ))}
           </div>
-        )}
 
-        {/* ── STEP 2: DESIRES ─────────────────────────────────────────────── */}
-        {step === 2 && (
-          <div className="w-full animate-in fade-in duration-200">
-            {/* Minimal Chip Grid */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {DESIRE_PILLS.map((opt) => {
-                const selected = selectedDesires.includes(opt.id);
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => toggleDesire(opt.id)}
-                    className={`h-14 px-3.5 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
-                      selected
-                        ? 'border-gold/60 bg-gold/[0.08] text-paper shadow-sm'
-                        : 'border-white/[0.08] bg-white/[0.02] text-muted hover:text-paper/90 hover:border-white/20'
-                    }`}
-                  >
-                    <span className={`text-xs tracking-wide ${selected ? 'font-medium text-paper' : 'font-light'}`}>
-                      {opt.label}
-                    </span>
-                    <span
-                      className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
-                        selected
-                          ? 'border-gold bg-gold text-ink'
-                          : 'border-white/20 text-transparent'
-                      }`}
+          {/* Title */}
+          <h1 className="font-serif text-[28px] sm:text-3xl font-light text-paper tracking-wide leading-snug">
+            {stepInfo.title}
+          </h1>
+          <p className="text-muted text-sm font-light mt-1.5 leading-relaxed">
+            {stepInfo.subtitle}
+          </p>
+        </header>
+
+        {/* ── Content (scrollable on desktop, flex-1 on mobile so footer stays pinned) ── */}
+        <main className="flex-1 min-h-0 overflow-y-auto px-7 md:px-10 pb-4 md:pb-8">
+
+          {/* ── STEP 0: Alias + optional photo ─────────────────────────── */}
+          {step === 0 && (
+            <div className="animate-in fade-in duration-200 space-y-7">
+              {/* Avatar */}
+              <div className="flex flex-col items-center gap-3">
+                <label className="cursor-pointer group">
+                  <div className="
+                    w-[88px] h-[88px] rounded-full
+                    border border-white/10 group-hover:border-gold/60
+                    transition-colors overflow-hidden
+                    bg-[#141312] flex items-center justify-center
+                    shadow-lg
+                  ">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera size={24} className="text-white/20 group-hover:text-gold/50 transition-colors" />
+                    )}
+                  </div>
+                  <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarChange} />
+                </label>
+                <p className="text-[11px] text-muted/50 font-light">
+                  Optional photo
+                </p>
+              </div>
+
+              {/* Alias input */}
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.18em] font-mono text-muted mb-2">
+                  Display alias
+                </label>
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => { setDisplayName(e.target.value); setError(null); }}
+                  placeholder="e.g. Julian, Noir, Alexandre…"
+                  maxLength={30}
+                  autoFocus
+                  className="
+                    w-full bg-transparent
+                    border-b border-white/15 focus:border-gold/70
+                    py-2.5 text-paper text-base font-serif
+                    placeholder-white/20
+                    focus:outline-none transition-colors
+                  "
+                />
+                {error && (
+                  <p className="text-rose-400 text-xs mt-2">{error}</p>
+                )}
+              </div>
+
+              {/* Privacy note */}
+              <div className="flex items-start gap-2.5 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                <Lock size={13} className="text-gold/60 mt-0.5 shrink-0" />
+                <p className="text-[12px] text-muted/70 leading-relaxed font-light">
+                  Your real name, email, and payment details are never shown to creators or other members.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 1: Desires ─────────────────────────────────────────── */}
+          {step === 1 && (
+            <div className="animate-in fade-in duration-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {DESIRE_OPTIONS.map((opt) => {
+                  const on = selectedDesires.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleDesire(opt.id)}
+                      className={`
+                        group relative flex items-center justify-between
+                        px-4 py-3.5 rounded-xl text-left
+                        border transition-all cursor-pointer
+                        ${on
+                          ? 'border-gold/50 bg-gold/[0.07] text-paper'
+                          : 'border-white/[0.08] bg-transparent text-muted/80 hover:border-white/20 hover:text-paper/90'
+                        }
+                      `}
                     >
-                      <Check size={10} strokeWidth={3} />
-                    </span>
-                  </button>
-                );
-              })}
+                      <span className={`text-sm font-light ${on ? 'text-paper' : ''}`}>
+                        {opt.label}
+                      </span>
+                      <span className={`
+                        ml-2 w-4 h-4 rounded-full border shrink-0 flex items-center justify-center transition-all
+                        ${on ? 'border-gold bg-gold text-ink' : 'border-white/15'}
+                      `}>
+                        {on && <Check size={9} strokeWidth={3} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted/40 font-light mt-5">
+                Nothing selected? That's fine — your feed adapts over time.
+              </p>
             </div>
+          )}
 
-            <p className="text-[11px] text-muted/60 text-center mt-4 font-light">
-              Tap to curate or refine anytime in your profile.
-            </p>
-          </div>
-        )}
-
-        {/* ── STEP 3: CIRCLE ──────────────────────────────────────────────── */}
-        {step === 3 && (
-          <div className="w-full animate-in fade-in duration-200">
-            <div className="space-y-2.5">
+          {/* ── STEP 2: Follow creators ─────────────────────────────────── */}
+          {step === 2 && (
+            <div className="animate-in fade-in duration-200">
               {loadingCreators ? (
-                <div className="flex items-center justify-center py-6">
+                <div className="flex justify-center py-10">
                   <div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : (
-                creators.map((c) => {
-                  const isFollowed = followedIds.has(c.id);
-                  return (
-                    <div
-                      key={c.id}
-                      className="py-2.5 flex items-center justify-between gap-3 border-b border-white/[0.06] last:border-b-0"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full border border-gold/40 p-[1.5px] bg-ink shrink-0 overflow-hidden">
-                          {c.avatar ? (
-                            <img src={c.avatar} alt={c.name} className="w-full h-full rounded-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full rounded-full bg-gold/15 text-gold font-serif font-bold text-xs flex items-center justify-center">
-                              {c.name.charAt(0)}
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-paper truncate">{c.name}</p>
-                          <p className="text-[11px] text-muted/80 truncate font-light">{c.category}</p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleFollow(c.id)}
-                        className={`px-3 py-1.5 rounded-full text-[11px] tracking-wider uppercase transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                          isFollowed
-                            ? 'border border-gold/50 text-gold bg-gold/10 font-medium'
-                            : 'border border-white/20 text-paper/90 hover:border-gold/50 font-light'
-                        }`}
+                <div className="divide-y divide-white/[0.06]">
+                  {creators.map((c) => {
+                    const following = followedIds.has(c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between py-4 gap-3"
                       >
-                        {isFollowed ? (
-                          <>
-                            <UserCheck size={12} />
-                            <span>Following</span>
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus size={12} />
-                            <span>Follow</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })
+                        {/* Avatar */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-[#141312] shrink-0">
+                            {c.avatar ? (
+                              <img src={c.avatar} alt={c.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center font-serif text-gold text-sm">
+                                {c.name.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm text-paper font-light truncate">{c.name}</p>
+                            <p className="text-[11px] text-muted/60 font-light truncate">{c.category}</p>
+                          </div>
+                        </div>
+
+                        {/* Follow toggle */}
+                        <button
+                          type="button"
+                          onClick={() => toggleFollow(c.id)}
+                          className={`
+                            shrink-0 px-4 py-1.5 rounded-full text-xs font-light
+                            border transition-all cursor-pointer flex items-center gap-1.5
+                            ${following
+                              ? 'border-gold/40 text-gold bg-gold/[0.08]'
+                              : 'border-white/15 text-paper/70 hover:border-gold/40 hover:text-paper'
+                            }
+                          `}
+                        >
+                          {following ? (
+                            <><UserCheck size={12} /><span>Following</span></>
+                          ) : (
+                            <><UserPlus size={12} /><span>Follow</span></>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {error && (
+                <p className="text-rose-400 text-xs mt-3 text-center">{error}</p>
               )}
             </div>
+          )}
 
-            {error && (
-              <p className="text-xs text-rose-300 mt-2 font-light text-center">
-                {error}
-              </p>
+        </main>
+
+        {/* ── Fixed footer (pinned on mobile, normal flow on desktop) ────── */}
+        <footer className="
+          shrink-0
+          px-7 pt-4 pb-8 md:px-10 md:pb-10
+          /* stick to bottom on mobile */
+          sticky bottom-0
+          bg-gradient-to-t from-[#070707] via-[#070707]/95 to-transparent
+          md:static md:bg-transparent
+        ">
+          <div className="flex items-center gap-3">
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={uploading}
+                className="
+                  shrink-0 flex items-center gap-1.5
+                  px-4 py-3 rounded-full
+                  border border-white/10 hover:border-white/20
+                  text-muted hover:text-paper
+                  text-xs uppercase tracking-wider font-light
+                  transition-colors cursor-pointer
+                  disabled:opacity-40
+                "
+              >
+                <ArrowLeft size={13} />
+                <span>Back</span>
+              </button>
             )}
-          </div>
-        )}
-      </main>
 
-      {/* ── FIXED BOTTOM ZONE: Continue / Back Controls ───────────────────── */}
-      <footer className="shrink-0 p-5 sm:p-6 pb-8 md:pb-6 max-w-md mx-auto w-full z-20">
-        <div className="flex items-center gap-3">
-          {step > 1 && (
             <button
               type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                setStep((prev) => (prev === 3 ? 2 : 1));
-              }}
-              disabled={uploading}
-              className="px-4 py-3 rounded-full border border-white/10 hover:border-white/25 text-muted hover:text-paper text-xs uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-40"
-            >
-              <ArrowLeft size={13} />
-              <span>Back</span>
-            </button>
-          )}
-
-          {step === 1 && (
-            <button
-              type="button"
-              onClick={handleStep1Submit}
-              disabled={!displayName.trim()}
-              className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-[#faeed7] via-[#c9a96e] to-[#9e7638] text-ink font-semibold text-xs tracking-[0.18em] uppercase shadow-md hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40"
-            >
-              <span>Continue</span>
-              <ArrowRight size={15} />
-            </button>
-          )}
-
-          {step === 2 && (
-            <button
-              type="button"
-              onClick={handleStep2Submit}
-              className="flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#faeed7] via-[#c9a96e] to-[#9e7638] text-ink font-semibold text-xs tracking-[0.18em] uppercase shadow-md hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Continue</span>
-              <ArrowRight size={15} />
-            </button>
-          )}
-
-          {step === 3 && (
-            <button
-              type="button"
-              onClick={handleFinalFinish}
-              disabled={uploading}
-              className="flex-1 py-3.5 px-6 rounded-full bg-gradient-to-r from-[#faeed7] via-[#c9a96e] to-[#9e7638] text-ink font-semibold text-xs tracking-[0.18em] uppercase shadow-md hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40"
+              onClick={isLast ? handleFinish : goNext}
+              disabled={uploading || (!canGoNext && !isLast)}
+              className="
+                flex-1 flex items-center justify-center gap-2
+                py-3.5 px-6 rounded-full
+                bg-gradient-to-r from-[#f5e6c8] via-[#c9a96e] to-[#9e7638]
+                text-ink font-semibold text-xs tracking-[0.15em] uppercase
+                shadow-md hover:brightness-110 active:scale-[0.98]
+                transition-all cursor-pointer
+                disabled:opacity-40 disabled:cursor-not-allowed
+              "
             >
               {uploading ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
-                  <span>Entering House...</span>
+                  <span>Entering…</span>
+                </>
+              ) : isLast ? (
+                <>
+                  <span>Enter the House</span>
+                  <ArrowRight size={14} />
                 </>
               ) : (
                 <>
-                  <span>Enter the House</span>
-                  <ArrowRight size={15} />
+                  <span>Continue</span>
+                  <ArrowRight size={14} />
                 </>
               )}
             </button>
-          )}
-        </div>
-      </footer>
+          </div>
+        </footer>
+
+      </div>
     </div>
   );
 }

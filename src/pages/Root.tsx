@@ -12,7 +12,7 @@ import Feed from './Feed';
  * a false redirect to /welcome immediately after onboarding finishes.
  */
 export default function Root() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, role } = useAuth();
 
   // Wait for auth to settle before making redirect decisions
   if (loading) return (
@@ -21,7 +21,11 @@ export default function Root() {
     </div>
   );
 
+  // Admins and creators never need fan onboarding — send them straight to feed
+  const isFanRole = role === 'fan';
+
   const onboardingDone =
+    !isFanRole || // admins + creators skip onboarding entirely
     user?.user_metadata?.onboarding_completed === true ||
     !!profile?.display_name;
 
