@@ -19,11 +19,14 @@ import {
 } from '../lib/notificationService';
 import { triggerNotificationFeedback } from '../lib/soundNotification';
 import { getMyLastSeenPrivacy, setMyLastSeenPrivacy, type LastSeenPrivacy } from '../lib/utils/presenceUtils';
+import HouseGuideStoryModal from '../components/stories/HouseGuideStoryModal';
 
 export default function Settings() {
   const { section } = useParams<{ section?: string }>();
   const navigate = useNavigate();
   const { profile, user, refreshProfile, signOut, isCreator } = useAuth();
+
+  const [houseGuideOpen, setHouseGuideOpen] = useState(false);
 
   // ── Account State ────────────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
@@ -1199,6 +1202,14 @@ export default function Settings() {
                 sublabel={profile?.email || 'Set a recovery email for your account'}
                 onClick={() => navigate('/settings/recovery-email')}
               />
+              <div className="h-px bg-white/[0.04] ml-14" />
+              <SettingsMenuLink
+                icon={<Sparkles size={16} />}
+                iconBg="bg-gradient-to-br from-amber-400 via-gold to-yellow-600 text-ink"
+                label="House Guide & Tour"
+                sublabel="Replay the official Velour member walkthrough"
+                onClick={() => setHouseGuideOpen(true)}
+              />
             </div>
 
             {/* Sign Out */}
@@ -1225,6 +1236,12 @@ export default function Settings() {
         )}
         </div>
       </div>
+
+      {/* Velour Official House Guide Story Reel */}
+      <HouseGuideStoryModal
+        isOpen={houseGuideOpen}
+        onClose={() => setHouseGuideOpen(false)}
+      />
     </div>
   );
 }

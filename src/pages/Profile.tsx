@@ -4,7 +4,7 @@ import {
   Key, Wallet, Bookmark, Compass,
   Bell, Shield, Mail, LogOut, ChevronRight,
   ArrowLeft, Check, Pencil, ChevronDown,
-  Archive, Users, Film
+  Archive, Users, Film, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -17,6 +17,7 @@ import FanVaultView from '../components/profile/FanVaultView';
 import FanSavedStoriesView from '../components/profile/FanSavedStoriesView';
 import FanFollowingView from '../components/profile/FanFollowingView';
 import CreatorStudioProfile from '../components/profile/CreatorStudioProfile';
+import HouseGuideStoryModal from '../components/stories/HouseGuideStoryModal';
 import { getVaultItems } from '../lib/creatorVault';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
@@ -55,6 +56,7 @@ export default function Profile() {
   const [totalViews, setTotalViews] = useState<number>(0);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [switcherOpen, setSwitcherOpen] = useState<boolean>(false);
+  const [houseGuideOpen, setHouseGuideOpen] = useState<boolean>(false);
 
   // Android hardware back button handlers for Profile subviews and modals
   useBackHandler(() => {
@@ -513,6 +515,14 @@ export default function Profile() {
           ) : 'Not set'}
           onClick={() => navigate('/settings/recovery-email')}
         />
+        <div className="h-px bg-white/[0.04] ml-13" />
+        <TelegramRow
+          iconBg="bg-gradient-to-br from-amber-400 via-gold to-yellow-600 text-ink"
+          icon={<Sparkles size={15} />}
+          label="House Guide & Tour"
+          badge={<span className="text-xs text-gold/90 font-medium">Replay</span>}
+          onClick={() => setHouseGuideOpen(true)}
+        />
       </div>
 
       {/* ── Grouped Section 4: Sign Out ───────────────────────────────── */}
@@ -539,6 +549,12 @@ export default function Profile() {
           onClose={() => setSwitcherOpen(false)}
         />
       )}
+
+      {/* Velour Official House Guide Story Reel */}
+      <HouseGuideStoryModal
+        isOpen={houseGuideOpen}
+        onClose={() => setHouseGuideOpen(false)}
+      />
         </div>
       </PullToRefresh>
     </div>

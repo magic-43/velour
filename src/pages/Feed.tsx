@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RotateCcw } from 'lucide-react';
+import { Plus, RotateCcw, Sparkles } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useCreatorProfiles } from '../lib/hooks/useCreatorProfiles';
 import { useStories } from '../lib/hooks/useStories';
@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import HomeStoryFeed from '../components/stories/HomeStoryFeed';
 import CreateStoryModal from '../components/stories/CreateStoryModal';
 import MyStatusView from '../components/stories/MyStatusView';
+import HouseGuideStoryModal from '../components/stories/HouseGuideStoryModal';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
 
@@ -21,6 +22,18 @@ export default function Feed() {
   const [activeHomeSlideIndex, setActiveHomeSlideIndex] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [viewingMyStatus, setViewingMyStatus] = useState(false);
+  const [houseGuideOpen, setHouseGuideOpen] = useState(false);
+
+  // Auto-launch House Guide if requested (e.g. from newly completed fan onboarding)
+  useEffect(() => {
+    try {
+      const shouldAutoOpen = localStorage.getItem('velour_house_guide_auto_open');
+      if (shouldAutoOpen === 'true') {
+        localStorage.removeItem('velour_house_guide_auto_open');
+        setHouseGuideOpen(true);
+      }
+    } catch {}
+  }, []);
 
   // Android hardware back button handlers for in-feed overlays
   useBackHandler(() => {
@@ -146,16 +159,27 @@ export default function Feed() {
           {/* Header */}
           <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
             <h3 className="font-serif text-lg font-semibold text-paper tracking-wider uppercase">Stories</h3>
-            {isCreator && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
+                onClick={() => setHouseGuideOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold text-xs font-medium tracking-wide transition-colors cursor-pointer"
+                title="Watch Velour House Guide"
               >
-                <Plus size={16} strokeWidth={2.5} />
-                <span>Post Story</span>
+                <Sparkles size={13} className="text-gold" />
+                <span>House Guide</span>
               </button>
-            )}
+              {isCreator && (
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
+                >
+                  <Plus size={16} strokeWidth={2.5} />
+                  <span>Post Story</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Stories Grid */}
@@ -164,10 +188,27 @@ export default function Feed() {
               <div className="w-6 h-6 border-2 border-gold border-t-transparent rounded-full animate-spin" />
             </div>
           ) : sessions.length === 0 && !isCreator ? (
-            <div className="h-[60vh] flex items-center justify-center text-center px-6">
-              <div>
-                <p className="font-serif text-2xl text-paper mb-2">No stories</p>
-                <p className="text-sm text-muted">Story sessions will appear here when creators post.</p>
+            <div className="py-10 px-4 flex flex-col items-center justify-center text-center">
+              <div className="max-w-sm w-full bg-gradient-to-b from-[#181615] to-[#0f0e11] border border-gold/30 rounded-2xl p-6 text-center shadow-xl relative overflow-hidden">
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-gold/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#2a2415] to-[#070707] border border-gold/60 flex items-center justify-center font-serif text-gold font-bold text-2xl mx-auto mb-3 shadow-[0_0_20px_rgba(201,169,110,0.25)]">
+                  V
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gold/15 border border-gold/30 text-gold text-[10px] font-semibold uppercase tracking-wider mb-2">
+                  Official Tour
+                </div>
+                <h4 className="font-serif text-xl text-paper font-light mb-1.5">Welcome to Velour</h4>
+                <p className="text-xs text-muted mb-5 leading-relaxed">
+                  Discover how 24h intimate stories, locked vaults, VIP direct access, and discreet banking work inside the House of Desire.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setHouseGuideOpen(true)}
+                  className="w-full py-3 px-4 rounded-full bg-gradient-to-r from-[#faeed7] via-[#c9a96e] to-[#9e7638] text-ink font-semibold text-xs tracking-wider uppercase shadow-md hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Sparkles size={14} />
+                  <span>Watch the House Guide</span>
+                </button>
               </div>
             </div>
           ) : (
@@ -374,6 +415,12 @@ export default function Feed() {
           onPostBatch={postStoryBatch}
         />
       )}
+
+      {/* Velour Official House Guide Story Reel */}
+      <HouseGuideStoryModal
+        isOpen={houseGuideOpen}
+        onClose={() => setHouseGuideOpen(false)}
+      />
     </div>
   );
 }
