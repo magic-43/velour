@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RotateCcw, Sparkles } from 'lucide-react';
+import { Plus, RotateCcw } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useCreatorProfiles } from '../lib/hooks/useCreatorProfiles';
 import { useStories } from '../lib/hooks/useStories';
@@ -8,7 +8,6 @@ import { supabase } from '../lib/supabase';
 import HomeStoryFeed from '../components/stories/HomeStoryFeed';
 import CreateStoryModal from '../components/stories/CreateStoryModal';
 import MyStatusView from '../components/stories/MyStatusView';
-import HouseGuideStoryModal from '../components/stories/HouseGuideStoryModal';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import PullToRefresh from '../components/common/PullToRefresh';
 
@@ -22,18 +21,20 @@ export default function Feed() {
   const [activeHomeSlideIndex, setActiveHomeSlideIndex] = useState(0);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [viewingMyStatus, setViewingMyStatus] = useState(false);
-  const [houseGuideOpen, setHouseGuideOpen] = useState(false);
 
-  // Auto-launch House Guide if requested (e.g. from newly completed fan onboarding)
+  // Auto-launch Velour House story if requested (e.g. from newly completed fan onboarding)
   useEffect(() => {
     try {
-      const shouldAutoOpen = localStorage.getItem('velour_house_guide_auto_open');
-      if (shouldAutoOpen === 'true') {
-        localStorage.removeItem('velour_house_guide_auto_open');
-        setHouseGuideOpen(true);
+      const shouldAutoOpen = localStorage.getItem('velour_house_story_auto_open');
+      if (shouldAutoOpen === 'true' && sessions.length > 0) {
+        localStorage.removeItem('velour_house_story_auto_open');
+        const vhIndex = sessions.findIndex((s) => s.creator.display_name === 'Velour House');
+        if (vhIndex >= 0) {
+          openHomeSession(vhIndex);
+        }
       }
     } catch {}
-  }, []);
+  }, [sessions]);
 
   // Android hardware back button handlers for in-feed overlays
   useBackHandler(() => {
@@ -159,27 +160,16 @@ export default function Feed() {
           {/* Header */}
           <div className="sticky top-0 z-30 -mx-4 sm:-mx-5 mb-4 flex items-center justify-between gap-3 bg-ink/95 px-4 py-3.5 backdrop-blur-md sm:px-5 border-b border-border-subtle">
             <h3 className="font-serif text-lg font-semibold text-paper tracking-wider uppercase">Stories</h3>
-            <div className="flex items-center gap-2">
+            {isCreator && (
               <button
                 type="button"
-                onClick={() => setHouseGuideOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold text-xs font-medium tracking-wide transition-colors cursor-pointer"
-                title="Watch Velour House Guide"
+                onClick={() => setCreateModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
               >
-                <Sparkles size={13} className="text-gold" />
-                <span>House Guide</span>
+                <Plus size={16} strokeWidth={2.5} />
+                <span>Post Story</span>
               </button>
-              {isCreator && (
-                <button
-                  type="button"
-                  onClick={() => setCreateModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold hover:bg-gold-light text-ink text-sm font-semibold tracking-wide transition-colors shadow-sm cursor-pointer"
-                >
-                  <Plus size={16} strokeWidth={2.5} />
-                  <span>Post Story</span>
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Stories Grid */}
@@ -188,28 +178,14 @@ export default function Feed() {
               <div className="w-6 h-6 border-2 border-gold border-t-transparent rounded-full animate-spin" />
             </div>
           ) : sessions.length === 0 && !isCreator ? (
-            <div className="py-10 px-4 flex flex-col items-center justify-center text-center">
-              <div className="max-w-sm w-full bg-gradient-to-b from-[#181615] to-[#0f0e11] border border-gold/30 rounded-2xl p-6 text-center shadow-xl relative overflow-hidden">
-                <div className="absolute -top-12 -right-12 w-32 h-32 bg-gold/10 rounded-full blur-2xl pointer-events-none" />
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#2a2415] to-[#070707] border border-gold/60 flex items-center justify-center font-serif text-gold font-bold text-2xl mx-auto mb-3 shadow-[0_0_20px_rgba(201,169,110,0.25)]">
-                  V
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gold/15 border border-gold/30 text-gold text-[10px] font-semibold uppercase tracking-wider mb-2">
-                  Official Tour
-                </div>
-                <h4 className="font-serif text-xl text-paper font-light mb-1.5">Welcome to Velour</h4>
-                <p className="text-xs text-muted mb-5 leading-relaxed">
-                  Discover how 24h intimate stories, locked vaults, VIP direct access, and discreet banking work inside the House of Desire.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setHouseGuideOpen(true)}
-                  className="w-full py-3 px-4 rounded-full bg-gradient-to-r from-[#faeed7] via-[#c9a96e] to-[#9e7638] text-ink font-semibold text-xs tracking-wider uppercase shadow-md hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Sparkles size={14} />
-                  <span>Watch the House Guide</span>
-                </button>
+            <div className="py-16 px-4 flex flex-col items-center justify-center text-center">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#2a2415] to-[#070707] border border-gold/60 flex items-center justify-center font-serif text-gold font-bold text-2xl mx-auto mb-3 shadow-[0_0_20px_rgba(201,169,110,0.25)]">
+                V
               </div>
+              <h4 className="font-serif text-xl text-paper font-light mb-1.5">No Live Stories</h4>
+              <p className="text-xs text-muted max-w-xs leading-relaxed">
+                Stories are ephemeral and disappear after 24 hours. Check back soon for fresh drops from creators and Velour House.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -270,6 +246,7 @@ export default function Feed() {
                 const isMyCard =
                   Boolean(activeCreatorProfile && session.creator.id === activeCreatorProfile.id) ||
                   Boolean(user && session.creator.owner_id === user.id);
+                const isVelourHouse = session.creator.display_name === 'Velour House';
 
                 const previewStory =
                   session.stories[session.stories.length - 1] ||
@@ -304,6 +281,8 @@ export default function Feed() {
                     className={`w-full text-left relative aspect-[9/12] rounded-xl overflow-hidden group cursor-pointer shadow-sm transition-transform hover:scale-[1.02] select-none ${
                       isMyCard
                         ? 'border-2 border-gold shadow-lg shadow-gold/15 ring-2 ring-gold/40 ring-offset-2 ring-offset-black'
+                        : isVelourHouse
+                        ? 'border-2 border-gold shadow-lg shadow-gold/25 ring-2 ring-gold/40'
                         : !session.isAllViewed
                         ? 'border-2 border-gold shadow-md shadow-gold/10'
                         : 'border border-[#262626] hover:border-white/25'
@@ -333,23 +312,27 @@ export default function Feed() {
                       </div>
                     )}
 
-                    {/* Avatar Ring without badge */}
+                    {/* Avatar Ring */}
                     <div className="absolute top-2.5 left-2.5 z-[3]">
                       <div
                         className={`w-10 h-10 rounded-full border-[2px] ${
-                          isMyCard || !session.isAllViewed
+                          isMyCard || isVelourHouse || !session.isAllViewed
                             ? 'border-gold ring-1 ring-gold/30'
                             : 'border-white/30'
                         } p-[2px] shadow-lg`}
                       >
-                        <div className="w-full h-full rounded-full overflow-hidden bg-ink">
-                          {session.creator.avatar_url && (
+                        <div className="w-full h-full rounded-full overflow-hidden bg-ink flex items-center justify-center">
+                          {session.creator.avatar_url ? (
                             <img
                               src={session.creator.avatar_url}
                               alt={session.creator.display_name}
                               className="w-full h-full object-cover"
                               referrerPolicy="no-referrer"
                             />
+                          ) : (
+                            <span className="font-serif font-bold text-gold text-sm">
+                              {session.creator.display_name.charAt(0)}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -374,17 +357,29 @@ export default function Feed() {
 
                     {/* Card Footer */}
                     <div className="absolute bottom-0 left-0 right-0 p-3 z-[3]">
-                      <p className="text-paper font-serif font-medium text-[15px] leading-tight drop-shadow-md truncate flex items-center gap-1.5">
-                        <span>{isMyCard ? 'You' : session.creator.display_name}</span>
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-paper font-serif font-medium text-[15px] leading-tight drop-shadow-md truncate">
+                          {isMyCard ? 'You' : session.creator.display_name}
+                        </span>
                         {isMyCard && (
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold animate-pulse shrink-0" />
                         )}
-                      </p>
+                        {isVelourHouse && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-gold text-ink">
+                            Official
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs uppercase tracking-wider font-semibold mt-1">
                         {isMyCard ? (
                           <span className="text-gold">
                             {session.stories.length} {session.stories.length === 1 ? 'story' : 'stories'}
                             <span className="text-muted lowercase ml-1">• your story</span>
+                          </span>
+                        ) : isVelourHouse ? (
+                          <span className="text-gold">
+                            {(session.unviewedCount || 0) > 0 ? `${session.unviewedCount} new` : `${session.stories.length} total`}
+                            <span className="text-muted lowercase ml-1">• House Story (24h)</span>
                           </span>
                         ) : !session.isAllViewed ? (
                           <>
@@ -415,12 +410,6 @@ export default function Feed() {
           onPostBatch={postStoryBatch}
         />
       )}
-
-      {/* Velour Official House Guide Story Reel */}
-      <HouseGuideStoryModal
-        isOpen={houseGuideOpen}
-        onClose={() => setHouseGuideOpen(false)}
-      />
     </div>
   );
 }

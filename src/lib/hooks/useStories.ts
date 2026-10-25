@@ -198,9 +198,20 @@ export function useStories(): UseStoriesReturn {
 
       const creatorMap = new Map<string, { creator: CreatorProfile; allStories: Story[] }>();
 
+      const nowTime = Date.now();
+
       for (const row of (data ?? []) as any[]) {
         const creatorRaw = row.creator_profile;
         if (!creatorRaw || !creatorRaw.is_active) continue;
+
+        // 24-HOUR EXPIRATION FILTER:
+        // Ephemeral stories disappear strictly after 24 hours.
+        if (row.expires_at) {
+          if (new Date(row.expires_at).getTime() <= nowTime) continue;
+        } else if (row.published_at) {
+          const age = nowTime - new Date(row.published_at).getTime();
+          if (age >= 24 * 60 * 60 * 1000) continue;
+        }
 
         const creator: CreatorProfile = {
           ...creatorRaw,
@@ -288,6 +299,12 @@ export function useStories(): UseStoriesReturn {
         if (isMeA && !isMeB) return -1;
         if (!isMeA && isMeB) return 1;
 
+        // Pinned Velour House official stories right after creator's own card
+        const isVelourA = a.creator.display_name === 'Velour House';
+        const isVelourB = b.creator.display_name === 'Velour House';
+        if (isVelourA && !isVelourB) return -1;
+        if (!isVelourA && isVelourB) return 1;
+
         if (!a.isAllViewed && b.isAllViewed) return -1;
         if (a.isAllViewed && !b.isAllViewed) return 1;
 
@@ -325,6 +342,12 @@ export function useStories(): UseStoriesReturn {
         const isMeB = (myCreatorId && b.creator.id === myCreatorId) || (myUserId && b.creator.owner_id === myUserId);
         if (isMeA && !isMeB) return -1;
         if (!isMeA && isMeB) return 1;
+
+        // Pinned Velour House official stories
+        const isVelourA = a.creator.display_name === 'Velour House';
+        const isVelourB = b.creator.display_name === 'Velour House';
+        if (isVelourA && !isVelourB) return -1;
+        if (!isVelourA && isVelourB) return 1;
 
         if (!a.isAllViewed && b.isAllViewed) return -1;
         if (a.isAllViewed && !b.isAllViewed) return 1;
@@ -414,7 +437,7 @@ export function useStories(): UseStoriesReturn {
         }
 
         const now = new Date();
-        const expiresAt = null;
+        const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const insertPayload: Record<string, any> = {

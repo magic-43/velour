@@ -26,13 +26,19 @@ interface CreatorSuggestion {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const DESIRE_OPTIONS = [
-  { id: 'chat',     label: 'Intimate Chat' },
-  { id: 'editorial',label: 'Editorial Art' },
-  { id: 'video',    label: 'Cinematic Drops' },
-  { id: 'vip',      label: 'Custom VIP' },
-  { id: 'moments',  label: 'Daily Stories' },
-  { id: 'vaults',   label: 'Locked Vaults' },
+const FETISH_OPTIONS = [
+  { id: 'dom_sub',     label: 'Dominance & Submission' },
+  { id: 'shibari',     label: 'Bondage & Shibari' },
+  { id: 'feet',        label: 'Foot & Ankle Worship' },
+  { id: 'latex',       label: 'Leather, Latex & Silk' },
+  { id: 'roleplay',    label: 'Roleplay & Fantasies' },
+  { id: 'voyeurism',   label: 'Voyeurism & Exhibition' },
+  { id: 'femdom',      label: 'Femdom & Goddess Worship' },
+  { id: 'tease',       label: 'Tease & Denial' },
+  { id: 'lingerie',    label: 'Lingerie & Stockings' },
+  { id: 'audio',       label: 'Sensual ASMR & Voice' },
+  { id: 'praise',      label: 'Praise & Humiliation' },
+  { id: 'taboo',       label: 'Taboo Fantasies' },
 ];
 
 const FALLBACK_CREATORS: CreatorSuggestion[] = [
@@ -49,8 +55,8 @@ const STEPS = [
     subtitle: 'Choose a private name for your identity inside the House.',
   },
   {
-    title:    'Your Desires',
-    subtitle: 'Select what you want to explore. You can change this anytime.',
+    title:    'Your Fetishes',
+    subtitle: 'Select what entices you. Your feed curates to your private curiosities.',
   },
   {
     title:    'Who to Follow',
@@ -72,7 +78,7 @@ export default function Onboarding() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   // Step 1 — nothing pre-selected
-  const [selectedDesires, setSelectedDesires] = useState<string[]>([]);
+  const [selectedFetishes, setSelectedFetishes] = useState<string[]>([]);
 
   // Step 2
   const [creators, setCreators]         = useState<CreatorSuggestion[]>([]);
@@ -153,9 +159,9 @@ export default function Onboarding() {
     triggerHaptic('light');
   };
 
-  const toggleDesire = (id: string) => {
+  const toggleFetish = (id: string) => {
     triggerHaptic('selection');
-    setSelectedDesires((prev) =>
+    setSelectedFetishes((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
@@ -232,12 +238,17 @@ export default function Onboarding() {
     }
 
     await supabase.auth.updateUser({
-      data: { onboarding_completed: true, desires: selectedDesires },
+      data: {
+        onboarding_completed: true,
+        fetishes: selectedFetishes,
+        desires: selectedFetishes,
+      },
     });
 
     try {
-      localStorage.setItem(`velour_fan_desires_${user.id}`, JSON.stringify(selectedDesires));
-      localStorage.setItem('velour_house_guide_auto_open', 'true');
+      localStorage.setItem(`velour_fan_fetishes_${user.id}`, JSON.stringify(selectedFetishes));
+      localStorage.setItem(`velour_fan_desires_${user.id}`, JSON.stringify(selectedFetishes));
+      localStorage.setItem('velour_house_story_auto_open', 'true');
     } catch (_) {}
 
     await refreshProfile();
@@ -378,20 +389,20 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* ── STEP 1: Desires ─────────────────────────────────────────── */}
+          {/* ── STEP 1: Fetishes ─────────────────────────────────────────── */}
           {step === 1 && (
             <div className="animate-in fade-in duration-200">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {DESIRE_OPTIONS.map((opt) => {
-                  const on = selectedDesires.includes(opt.id);
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                {FETISH_OPTIONS.map((opt) => {
+                  const on = selectedFetishes.includes(opt.id);
                   return (
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => toggleDesire(opt.id)}
+                      onClick={() => toggleFetish(opt.id)}
                       className={`
                         group relative flex items-center justify-between
-                        px-4 py-3.5 rounded-xl text-left
+                        px-3.5 py-3 rounded-xl text-left
                         border transition-all cursor-pointer
                         ${on
                           ? 'border-gold/50 bg-gold/[0.07] text-paper'
@@ -399,11 +410,11 @@ export default function Onboarding() {
                         }
                       `}
                     >
-                      <span className={`text-sm font-light ${on ? 'text-paper' : ''}`}>
+                      <span className={`text-[12px] sm:text-sm font-light leading-snug ${on ? 'text-paper' : ''}`}>
                         {opt.label}
                       </span>
                       <span className={`
-                        ml-2 w-4 h-4 rounded-full border shrink-0 flex items-center justify-center transition-all
+                        ml-1.5 w-4 h-4 rounded-full border shrink-0 flex items-center justify-center transition-all
                         ${on ? 'border-gold bg-gold text-ink' : 'border-white/15'}
                       `}>
                         {on && <Check size={9} strokeWidth={3} />}
@@ -412,8 +423,8 @@ export default function Onboarding() {
                   );
                 })}
               </div>
-              <p className="text-[11px] text-muted/40 font-light mt-5">
-                Nothing selected? That's fine — your feed adapts over time.
+              <p className="text-[11px] text-muted/40 font-light mt-4">
+                Nothing selected? That's fine — your sanctuary adapts as you explore.
               </p>
             </div>
           )}

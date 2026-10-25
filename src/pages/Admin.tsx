@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -22,17 +22,26 @@ import {
   Users,
   Loader2,
   RefreshCw,
+  Sparkles,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
-import type { Profile } from '../types';
+import type { Profile, Story } from '../types';
 import { useBackHandler } from '../lib/backButtonRegistry';
 import { parseUnlockRequestMessage, updateUnlockRequestContentStatus } from '../lib/unlockRequests';
+import {
+  fetchVelourHouseStories,
+  uploadVelourHouseStory,
+  deleteVelourHouseStory,
+  seedOfficialHouseGuide,
+} from '../lib/velourHouse';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FilterRole = 'all' | 'fan' | 'creator' | 'admin';
-type AdminSection = 'users' | 'transactions';
+type AdminSection = 'users' | 'transactions' | 'stories';
 type TxFilterStatus = 'all' | 'pending' | 'verified' | 'rejected';
 
 interface AdminTxItem {
@@ -204,6 +213,18 @@ export default function Admin() {
   const [txProcessingId, setTxProcessingId] = useState<string | null>(null);
   const [inspectedTx, setInspectedTx] = useState<AdminTxItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Velour House Stories State
+  const [houseStories, setHouseStories] = useState<Story[]>([]);
+  const [storiesFetching, setStoriesFetching] = useState(false);
+  const [storyUploading, setStoryUploading] = useState(false);
+  const [seedingGuide, setSeedingGuide] = useState(false);
+  const [selectedStoryFile, setSelectedStoryFile] = useState<File | null>(null);
+  const [storyPreviewUrl, setStoryPreviewUrl] = useState<string | null>(null);
+  const [storyMediaType, setStoryMediaType] = useState<'image' | 'video'>('image');
+  const [storyCaption, setStoryCaption] = useState('');
+  const [storyError, setStoryError] = useState<string | null>(null);
+  const storyFileInputRef = useRef<HTMLInputElement>(null);
 
   useBackHandler(() => {
     setInspectedTx(null);
@@ -381,9 +402,22 @@ export default function Admin() {
     }
   }, []);
 
+  const loadHouseStories = useCallback(async () => {
+    setStoriesFetching(true);
+    try {
+      const list = await fetchVelourHouseStories();
+      setHouseStories(list);
+    } catch (e: any) {
+      console.warn('Error fetching house stories:', e);
+    } finally {
+      setStoriesFetching(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchUsers();
     fetchTransactions();
+    loadHouseStories();
 
     const channel = supabase
       .channel('admin_transactions_realtime')
@@ -400,10 +434,94 @@ export default function Admin() {
       )
       .subscribe();
 
+    const storiesChannel = supabase
+      .channel('admin_stories_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stories',
+        },
+        () => {
+          loadHouseStories();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(storiesChannel);
     };
-  }, [fetchUsers, fetchTransactions]);
+  }, [fetchUsers, fetchTransactions, loadHouseStories]);
+
+  const handleSelectStoryFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStoryError(null);
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    if (!isVideo && !isImage) {
+      setStoryError('Please select an image or video file.');
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      setStoryError('File is too large (max 100 MB).');
+      return;
+    }
+    setSelectedStoryFile(file);
+    setStoryMediaType(isVideo ? 'video' : 'image');
+    setStoryPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handlePublishHouseStory = async () => {
+    if (!selectedStoryFile || !profile?.id) return;
+    setStoryUploading(true);
+    setStoryError(null);
+    try {
+      await uploadVelourHouseStory({
+        file: selectedStoryFile,
+        mediaType: storyMediaType,
+        caption: storyCaption,
+        ownerId: profile.id,
+      });
+      setSelectedStoryFile(null);
+      setStoryPreviewUrl(null);
+      setStoryCaption('');
+      if (storyFileInputRef.current) storyFileInputRef.current.value = '';
+      await loadHouseStories();
+      showToast('Velour House story published (expires in 24h) ✓');
+    } catch (err: any) {
+      setStoryError(err.message || 'Failed to upload story');
+      showToast(err.message || 'Upload failed', false);
+    } finally {
+      setStoryUploading(false);
+    }
+  };
+
+  const handleDeleteHouseStory = async (storyId: string) => {
+    try {
+      await deleteVelourHouseStory(storyId);
+      setHouseStories((prev) => prev.filter((s) => s.id !== storyId));
+      showToast('Story removed ✓');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete story', false);
+    }
+  };
+
+  const handleSeedHouseGuide = async () => {
+    if (!profile?.id) return;
+    setSeedingGuide(true);
+    try {
+      await seedOfficialHouseGuide(profile.id);
+      await loadHouseStories();
+      showToast('Official House Guide published as 24h story reel ✓');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to publish house guide', false);
+    } finally {
+      setSeedingGuide(false);
+    }
+  };
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -799,6 +917,28 @@ export default function Admin() {
               </span>
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setSection('stories')}
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              section === 'stories'
+                ? 'bg-gold text-ink shadow-md font-bold'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            <Sparkles size={15} />
+            <span>House Stories</span>
+            {houseStories.length > 0 && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  section === 'stories' ? 'bg-ink text-gold' : 'bg-gold text-ink'
+                }`}
+              >
+                {houseStories.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* ── SECTION: USERS ───────────────────────────────────────────────── */}
@@ -884,6 +1024,224 @@ export default function Admin() {
             <p className="text-center text-xs text-zinc-700">
               {filteredUsers.length} of {users.length} users
             </p>
+          </div>
+        )}
+
+        {/* ── SECTION: VELOUR HOUSE STORIES ──────────────────────────────── */}
+        {section === 'stories' && (
+          <div className="space-y-6">
+            {/* Header & Banner */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-[#171410] via-[#1c1813] to-[#0f0e0d] border border-gold/30 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gold/15 border border-gold/30 text-gold text-[10px] font-bold uppercase tracking-wider mb-2">
+                  <Sparkles size={11} />
+                  <span>Official Velour Stories</span>
+                </div>
+                <h3 className="font-serif text-xl sm:text-2xl text-paper font-light">
+                  Velour House Story Broadcast
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 max-w-lg leading-relaxed">
+                  Stories uploaded here appear under <span className="text-gold font-medium">Velour House</span> directly in fans' stories feed. All stories automatically expire and disappear after 24 hours.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSeedHouseGuide}
+                disabled={seedingGuide}
+                className="shrink-0 px-4 py-2.5 rounded-xl bg-gold/15 hover:bg-gold/25 border border-gold/40 text-gold text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-40 shadow-sm"
+              >
+                {seedingGuide ? (
+                  <Loader2 size={14} className="animate-spin text-gold" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+                <span>Publish House Guide (24h)</span>
+              </button>
+            </div>
+
+            {/* Story Upload Box */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-[#121214] border border-white/10 shadow-lg space-y-4">
+              <h4 className="text-sm font-semibold text-paper flex items-center gap-2">
+                <Upload size={15} className="text-gold" />
+                <span>Post New Story as Velour House</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Media Selector & Preview */}
+                <div>
+                  <label className="block text-xs font-medium text-white/60 mb-2">Media File (Photo or Video)</label>
+                  <div
+                    onClick={() => storyFileInputRef.current?.click()}
+                    className="w-full aspect-[9/12] max-h-72 rounded-xl border-2 border-dashed border-white/20 hover:border-gold/50 bg-black/40 flex flex-col items-center justify-center p-4 cursor-pointer transition-colors relative overflow-hidden group"
+                  >
+                    {storyPreviewUrl ? (
+                      storyMediaType === 'video' ? (
+                        <video src={storyPreviewUrl} className="w-full h-full object-cover rounded-lg" controls />
+                      ) : (
+                        <img src={storyPreviewUrl} alt="Preview" className="w-full h-full object-cover rounded-lg" />
+                      )
+                    ) : (
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-gold group-hover:border-gold/40 mx-auto transition-colors">
+                          <Upload size={20} />
+                        </div>
+                        <p className="text-xs text-white/80 font-medium">Click to choose image or video</p>
+                        <p className="text-[10px] text-white/40">MP4, MOV, WebM, JPG, PNG, WebP (max 100MB)</p>
+                      </div>
+                    )}
+                    <input
+                      ref={storyFileInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      className="sr-only"
+                      onChange={handleSelectStoryFile}
+                    />
+                  </div>
+                  {selectedStoryFile && (
+                    <p className="text-[11px] text-gold/80 mt-1.5 truncate">
+                      Selected: {selectedStoryFile.name} ({(selectedStoryFile.size / (1024 * 1024)).toFixed(1)} MB)
+                    </p>
+                  )}
+                </div>
+
+                {/* Caption & Controls */}
+                <div className="flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-white/60 mb-1.5">Caption (Optional)</label>
+                      <textarea
+                        value={storyCaption}
+                        onChange={(e) => setStoryCaption(e.target.value)}
+                        placeholder="Write an announcement or house whisper..."
+                        rows={4}
+                        maxLength={300}
+                        className="w-full bg-[#18181b] border border-white/10 rounded-xl p-3 text-sm text-paper placeholder-white/30 focus:outline-none focus:border-gold/60 transition-colors resize-none"
+                      />
+                      <p className="text-[10px] text-white/40 text-right mt-1">
+                        {storyCaption.length}/300
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-gold/[0.04] border border-gold/20 flex items-start gap-2.5">
+                      <Clock size={14} className="text-gold shrink-0 mt-0.5" />
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        Story expires automatically <span className="text-gold font-medium">24 hours</span> after publishing and will automatically vanish from all users' devices.
+                      </p>
+                    </div>
+
+                    {storyError && (
+                      <p className="text-xs text-rose-400">{storyError}</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePublishHouseStory}
+                    disabled={!selectedStoryFile || storyUploading}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gold hover:bg-gold-light text-ink font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {storyUploading ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin text-ink" />
+                        <span>Uploading to Velour House...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} />
+                        <span>Publish to Velour House (24h)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Stories List */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-paper flex items-center gap-2">
+                  <span>Active Velour House Stories</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/10 text-white/60">
+                    {houseStories.length} live
+                  </span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={loadHouseStories}
+                  disabled={storiesFetching}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-white/80 transition-colors cursor-pointer"
+                >
+                  <RefreshCw size={12} className={storiesFetching ? 'animate-spin' : ''} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+
+              {storiesFetching && houseStories.length === 0 ? (
+                <div className="py-12 flex justify-center">
+                  <div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : houseStories.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/10">
+                  <Sparkles size={24} className="text-zinc-600 mx-auto mb-2" />
+                  <p className="text-zinc-400 text-sm">No live Velour House stories.</p>
+                  <p className="text-xs text-zinc-600 mt-1">Upload a story above or click "Publish House Guide (24h)".</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {houseStories.map((story) => {
+                    const expTime = story.expires_at ? new Date(story.expires_at).getTime() : new Date(story.published_at).getTime() + 24 * 60 * 60 * 1000;
+                    const remainingMs = Math.max(0, expTime - Date.now());
+                    const hoursLeft = Math.floor(remainingMs / (1000 * 60 * 60));
+                    const minsLeft = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+                    return (
+                      <div
+                        key={story.id}
+                        className="p-3 rounded-xl bg-[#141416] border border-white/10 flex flex-col justify-between gap-3 shadow-md"
+                      >
+                        <div className="flex gap-3 items-start">
+                          <div className="w-16 h-20 rounded-lg overflow-hidden bg-black shrink-0 border border-white/10">
+                            {story.media_type === 'video' ? (
+                              <video src={story.media_url} className="w-full h-full object-cover" />
+                            ) : (
+                              <img src={story.thumbnail_url || story.media_url} alt="" className="w-full h-full object-cover" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-gold text-ink">
+                                Live 24h
+                              </span>
+                              <span className="text-[11px] text-amber-400 font-mono">
+                                {hoursLeft}h {minsLeft}m left
+                              </span>
+                            </div>
+                            <p className="text-xs text-paper/90 line-clamp-2">
+                              {story.caption || 'No caption'}
+                            </p>
+                            <p className="text-[10px] text-white/40 mt-1">
+                              {story.view_count || 0} views
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2 border-t border-white/5">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteHouseStory(story.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={12} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
