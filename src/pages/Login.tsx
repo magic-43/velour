@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Lock,
@@ -6,12 +6,14 @@ import {
   EyeOff,
   AlertCircle,
   CheckCircle2,
-  ArrowLeft,
-  X,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import RecoveryModal from '../components/auth/RecoveryModal';
+import { useBackHandler } from '../lib/backButtonRegistry';
+import { triggerHaptic } from '../lib/haptics';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
 
@@ -332,13 +334,17 @@ function AuthForm({
               placeholder="••••••••"
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               required
-              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-10 pr-11 py-3 text-base sm:text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors"
+              className="w-full bg-[#111110] border border-white/10 rounded-xl pl-10 pr-11 py-3 text-base sm:text-sm text-paper placeholder-muted/30 focus:outline-none focus:border-gold/60 transition-colors [::-ms-reveal]:hidden [::-ms-clear]:hidden"
             />
             <button
               type="button"
-              onClick={() => setShowPassword((v) => !v)}
+              onClick={() => {
+                triggerHaptic('selection');
+                setShowPassword((v) => !v);
+              }}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-paper transition-colors p-1"
               tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -428,8 +434,119 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
     return initialMode;
   });
 
-  // Mobile bottom sheet open state
+  // Mobile bottom sheet open state & draggable height
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialMode === 'signup');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
+
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(0);
+  const lastYRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const velocityRef = useRef(0);
+
+  const getViewportHeight = () => (typeof window !== 'undefined' ? window.innerHeight : 800);
+  const getInitialHeight = () => Math.round(getViewportHeight() * (mode === 'signup' ? 0.72 : 0.65));
+  const getMaxHeight = () => Math.round(getViewportHeight() * 0.94);
+  const getMinHeight = () => Math.round(getViewportHeight() * 0.38);
+
+  // Sync sheet height when opening or mode changes
+  useEffect(() => {
+    if (mobileSheetOpen && !isExpanded && !isDragging) {
+      setSheetHeight(getInitialHeight());
+    }
+  }, [mobileSheetOpen, mode]);
+
+  // Android hardware back handler: collapse first if expanded, then dismiss
+  useBackHandler(() => {
+    if (mobileSheetOpen) {
+      if (isExpanded) {
+        setSheetHeight(getInitialHeight());
+        setIsExpanded(false);
+        triggerHaptic('light');
+        return true;
+      }
+      setMobileSheetOpen(false);
+      triggerHaptic('light');
+      return true;
+    }
+    return false;
+  }, mobileSheetOpen, 100);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    startYRef.current = touch.clientY;
+    startHeightRef.current = sheetHeight || getInitialHeight();
+    lastYRef.current = touch.clientY;
+    lastTimeRef.current = Date.now();
+    velocityRef.current = 0;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    // Dragging UP decreases touch.clientY -> deltaY is positive
+    const deltaY = startYRef.current - touch.clientY;
+    const minH = getMinHeight();
+    const maxH = getMaxHeight();
+    const newH = Math.max(minH - 30, Math.min(maxH + 15, startHeightRef.current + deltaY));
+
+    const now = Date.now();
+    const dt = now - lastTimeRef.current;
+    if (dt > 0) {
+      velocityRef.current = (lastYRef.current - touch.clientY) / dt; // positive if moving up
+      lastYRef.current = touch.clientY;
+      lastTimeRef.current = now;
+    }
+
+    setSheetHeight(newH);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const initialH = getInitialHeight();
+    const maxH = getMaxHeight();
+    const minH = getMinHeight();
+    const current = sheetHeight || initialH;
+    const velocity = velocityRef.current;
+
+    // Strong downward flick or dragged very low -> close sheet
+    if (velocity < -0.45 || current < minH + 30) {
+      triggerHaptic('light');
+      setMobileSheetOpen(false);
+      setSheetHeight(initialH);
+      setIsExpanded(false);
+      return;
+    }
+
+    // Upward velocity or dragged past threshold -> snap to expanded
+    const midPoint = (initialH + maxH) / 2;
+    if (velocity > 0.35 || current > midPoint) {
+      triggerHaptic('selection');
+      setSheetHeight(maxH);
+      setIsExpanded(true);
+    } else {
+      // Snap to default mid
+      triggerHaptic('light');
+      setSheetHeight(initialH);
+      setIsExpanded(false);
+    }
+  };
+
+  const toggleExpand = () => {
+    triggerHaptic('light');
+    if (isExpanded) {
+      setSheetHeight(getInitialHeight());
+      setIsExpanded(false);
+    } else {
+      setSheetHeight(getMaxHeight());
+      setIsExpanded(true);
+    }
+  };
 
   // Common form fields
   const [username, setUsername] = useState('');
@@ -638,42 +755,51 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────────────
-          MOBILE SLIDE-UP SHEET: Stable DOM without unmounting on keystroke
+          MOBILE SLIDE-UP SHEET: Draggable height & drag-down to close (No X or Back)
       ───────────────────────────────────────────────────────────────────────── */}
       {mobileSheetOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity"
-            onClick={() => setMobileSheetOpen(false)}
+            onClick={() => {
+              triggerHaptic('light');
+              setMobileSheetOpen(false);
+            }}
           />
 
           {/* Sheet Modal */}
-          <div className="relative bg-[#0d0d0c] border-t border-white/10 rounded-t-3xl p-6 shadow-2xl max-h-[92vh] overflow-y-auto overscroll-contain z-10 pb-10">
-            {/* Top Bar with Dismiss and Drag Handle */}
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() => setMobileSheetOpen(false)}
-                className="p-1.5 -ml-1 text-white/70 hover:text-white rounded-lg cursor-pointer"
-              >
-                <ArrowLeft size={18} />
-              </button>
-              <span className="font-serif text-xs uppercase tracking-widest text-gold/80 font-light">
-                {mode === 'signin' ? 'Sign In' : 'Create Account'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setMobileSheetOpen(false)}
-                className="p-1.5 -mr-1 text-white/70 hover:text-white rounded-lg cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+          <div
+            className="relative bg-[#0d0d0c] border-t border-white/10 rounded-t-3xl shadow-2xl z-10 flex flex-col overflow-hidden will-change-[height]"
+            style={{
+              height: sheetHeight ? `${sheetHeight}px` : (mode === 'signup' ? '72vh' : '65vh'),
+              maxHeight: '95vh',
+              transition: isDragging ? 'none' : 'height 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            {/* Top Drag Handle Header (Drag UP to expand, Drag DOWN to close) */}
+            <div
+              className="w-full pt-3 pb-3 px-6 flex flex-col items-center cursor-grab active:cursor-grabbing touch-none select-none shrink-0 group border-b border-white/[0.04]"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onClick={toggleExpand}
+            >
+              <div className="w-12 h-1.5 bg-white/30 rounded-full group-hover:bg-gold/60 transition-colors mb-2" />
+              <div className="flex items-center gap-2">
+                <span className="font-serif text-xs uppercase tracking-[0.22em] text-gold/80 font-light">
+                  {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                </span>
+                <span className="text-[10px] text-white/35 font-mono">
+                  {isExpanded ? '• Drag down to close' : '• Drag up to expand'}
+                </span>
+              </div>
             </div>
 
-            {/* Auth Form inside Sheet */}
-            <AuthForm {...formProps} />
+            {/* Auth Form inside Sheet (Scrollable) */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 pb-12 overscroll-contain">
+              <AuthForm {...formProps} />
+            </div>
           </div>
         </div>
       )}
