@@ -6,8 +6,6 @@ import {
   EyeOff,
   AlertCircle,
   CheckCircle2,
-  ChevronUp,
-  ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
@@ -777,23 +775,15 @@ export default function Login({ initialMode = 'signin' }: LoginProps) {
               transition: isDragging ? 'none' : 'height 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
-            {/* Top Drag Handle Header (Drag UP to expand, Drag DOWN to close) */}
+            {/* Draggable Handle (Drag UP to expand, Drag DOWN to close) */}
             <div
-              className="w-full pt-3 pb-3 px-6 flex flex-col items-center cursor-grab active:cursor-grabbing touch-none select-none shrink-0 group border-b border-white/[0.04]"
+              className="w-full pt-3 pb-2 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none select-none shrink-0"
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               onClick={toggleExpand}
             >
-              <div className="w-12 h-1.5 bg-white/30 rounded-full group-hover:bg-gold/60 transition-colors mb-2" />
-              <div className="flex items-center gap-2">
-                <span className="font-serif text-xs uppercase tracking-[0.22em] text-gold/80 font-light">
-                  {mode === 'signin' ? 'Sign In' : 'Create Account'}
-                </span>
-                <span className="text-[10px] text-white/35 font-mono">
-                  {isExpanded ? '• Drag down to close' : '• Drag up to expand'}
-                </span>
-              </div>
+              <div className="w-12 h-1.5 bg-white/25 rounded-full" />
             </div>
 
             {/* Auth Form inside Sheet (Scrollable) */}
